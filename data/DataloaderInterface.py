@@ -4,9 +4,11 @@ import math
 
 
 class BaseDataLoader(ABC):
-    def __init__(self, batch_size: int, shuffle: bool = False):
+    def __init__(self, batch_size: int, num_wavelengths: int, num_layers: int, shuffle: bool = False):
         self.batch_size = batch_size
         self.shuffle = shuffle
+        self.num_wavelengths = num_wavelengths
+        self.num_layers = num_layers
         self.dataset: Any = None
         self.index = 0  # keep track of iteration position
         self.indices = []  # store shuffled indices if shuffling enabled
