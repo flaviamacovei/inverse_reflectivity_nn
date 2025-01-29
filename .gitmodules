@@ -1,3 +1,6 @@
 [submodule "tmm_fast"]
 	path = tmm_fast
 	url = https://github.com/MLResearchAtOSRAM/tmm_fast
+[submodule "mirror-transformer"]
+	path = mirror-transformer
+	url = https://github.com/HTuennermann/mirror-transformer
