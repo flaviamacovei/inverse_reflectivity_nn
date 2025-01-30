@@ -1,8 +1,8 @@
-from DataloaderInterface import BaseDataLoader
+from DataloaderInterface import BaseDataloader
 import random
 import torch
 
-class RandomDataloader(BaseDataLoader):
+class RandomDataloader(BaseDataloader):
 
     def __init__(self, batch_size: int, num_wavelengths: int, num_layers: int, shuffle: bool = False, num_points: int = 1000):
         super().__init__(batch_size = batch_size, num_wavelengths = num_wavelengths, num_layers = num_layers, shuffle = shuffle)

@@ -3,7 +3,7 @@ from typing import Any, Iterator
 import math
 
 
-class BaseDataLoader(ABC):
+class BaseDataloader(ABC):
     def __init__(self, batch_size: int, num_wavelengths: int, num_layers: int, shuffle: bool = False):
         self.batch_size = batch_size
         self.shuffle = shuffle
