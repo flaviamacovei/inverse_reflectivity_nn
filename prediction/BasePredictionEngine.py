@@ -3,6 +3,7 @@ import torch
 import sys
 sys.path.append(sys.path[0] + '/..')
 from data.BaseDataloader import BaseDataloader
+from data.values.ReflectiveProps import ReflectiveProps
 
 class BasePredictionEngine(ABC):
 
@@ -14,5 +15,5 @@ class BasePredictionEngine(ABC):
         pass
 
     @abstractmethod
-    def predict(self, properties: torch.Tensor):
+    def predict(self, reflective_props: ReflectiveProps):
         pass
