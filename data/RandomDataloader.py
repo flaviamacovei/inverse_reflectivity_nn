@@ -1,4 +1,4 @@
-from data.DataloaderInterface import BaseDataloader
+from data.BaseDataloader import BaseDataloader
 import torch
 
 class RandomDataloader(BaseDataloader):

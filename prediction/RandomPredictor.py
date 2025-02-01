@@ -1,8 +1,8 @@
-from prediction.PredictionEngineInterface import BasePredictionEngine
+from prediction.BasePredictionEngine import BasePredictionEngine
 import torch
 import sys
 sys.path.append(sys.path[0] + '/..')
-from data.DataloaderInterface import BaseDataloader
+from data.BaseDataloader import BaseDataloader
 
 class RandomPredictor(BasePredictionEngine):
     def __init__(self, dataloader: BaseDataloader):

@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 import torch
 import sys
 sys.path.append(sys.path[0] + '/..')
-from data.DataloaderInterface import BaseDataloader
+from data.BaseDataloader import BaseDataloader
 
 class BasePredictionEngine(ABC):
 
