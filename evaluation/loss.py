@@ -45,6 +45,6 @@ def compute_loss(reflective_props: ReflectiveProps, coating: Coating):
     upper_error = torch.clamp(preds - upper_bound, 0, 1)
     lower_error = torch.clamp(lower_bound - preds, 0, 1)
 
-    total_error = torch.sum(upper_error + lower_error)
+    total_error = torch.sum(upper_error ** 2 + lower_error ** 2)
 
     return total_error
