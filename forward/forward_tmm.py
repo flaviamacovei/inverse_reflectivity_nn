@@ -1,16 +1,19 @@
 import numpy as np
 import torch
 from tmm_fast import coh_tmm as tmm
+import os
+import time
 import sys
 sys.path.append(sys.path[0] + '/..')
-from data.values.ReflectiveProps import ReflectiveProps
+from data.values.ReflectivePropsValue import ReflectivePropsValue
 from data.values.Coating import Coating
 from mirror_transformer.direct_opt import SM, Material, Stack
 from config import device, num_stacks, materials_file
 
 def make_stack():
     sm = SM()
-    with open("../mirror_transformer/" + materials_file, "r", encoding = "ISO-8859-1") as f:
+    materials_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "mirror_transformer")
+    with open(materials_dir + "/" + materials_file, "r", encoding = "ISO-8859-1") as f:
         for line in f:
             sm.run(line)
     materials = [Material(m) for m in sm.materials]
@@ -32,9 +35,12 @@ def create_args(start_wl: int, end_wl: int, steps: int):
 def coating_to_reflective_props(coating: Coating, start_wl: int, end_wl: int, steps: int):
     thicknesses = coating.get_thicknesses()
 
-    M, theta, wavelengths = create_args("../mirror_transformer/" + materials_file, start_wl, end_wl, steps)
+    M, theta, wavelengths = create_args(start_wl, end_wl, steps)
     reflective_props_tensor = tmm('p', M, (thicknesses), theta, wavelengths, device=device)['R']
 
-    result = ReflectiveProps(start_wl, end_wl, reflective_props_tensor)
+    steps = reflective_props_tensor.shape[2]
+    reflective_props_tensor = reflective_props_tensor.reshape(steps)
+
+    result = ReflectivePropsValue(start_wl, end_wl, reflective_props_tensor)
 
     return result
