@@ -2,3 +2,4 @@ tmm-fast
 numpy
 torch
 matplotlib
+scipy
