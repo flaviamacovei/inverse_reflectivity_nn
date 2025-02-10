@@ -1,20 +1,14 @@
 import torch
 import sys
 sys.path.append(sys.path[0] + '/..')
-from data.values.ReflectiveProps import ReflectiveProps
-from config import device
+from data.values.ReflectivePropsPattern import ReflectivePropsPattern
+from data.values.ReflectivePropsValue import ReflectivePropsValue
 
 
-def compute_loss(input: ReflectiveProps, target: ReflectiveProps):
-    refs = target.get_properties()
-    preds = input.get_properties()
+def compute_loss(input: ReflectivePropsValue, target: ReflectivePropsPattern):
 
-    lower_bound, upper_bound = torch.chunk(refs, 2, dim=1)
-    lower_bound = lower_bound.reshape(target.get_steps()).to(device)
-    upper_bound = upper_bound.reshape(target.get_steps()).to(device)
-
-    upper_error = torch.clamp(preds - upper_bound, 0, 1)
-    lower_error = torch.clamp(lower_bound - preds, 0, 1)
+    upper_error = torch.clamp(input.get_value() - target.get_upper_bound(), 0, 1)
+    lower_error = torch.clamp(target.get_lower_bound() - input.get_value(), 0, 1)
 
     total_error = torch.sum(upper_error ** 2 + lower_error ** 2)
 
