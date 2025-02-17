@@ -1,4 +1,6 @@
 **/__pycache__
 .idea
-.pptx
-.py~
+*.pptx
+**/*.py~
+out/*
+history.txt
