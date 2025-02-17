@@ -1,4 +1,3 @@
-tmm-fast
 numpy
 torch
 matplotlib
