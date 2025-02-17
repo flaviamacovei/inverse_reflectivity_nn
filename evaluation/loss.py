@@ -6,9 +6,8 @@ from data.values.ReflectivePropsValue import ReflectivePropsValue
 
 
 def compute_loss(input: ReflectivePropsValue, target: ReflectivePropsPattern):
-
-    upper_error = torch.clamp(input.get_value() - target.get_upper_bound(), 0, 1)
-    lower_error = torch.clamp(target.get_lower_bound() - input.get_value(), 0, 1)
+    upper_error = input.get_value() - target.get_upper_bound()
+    lower_error = target.get_lower_bound() - input.get_value()
 
     total_error = torch.sum(upper_error ** 2 + lower_error ** 2)
 
