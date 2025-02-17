@@ -8,9 +8,9 @@ num_stacks = 1
 
 materials_file = "Mirror Design with AI/Simple Designs/Filters/Design narrow Bandpass - optimized.dsg"
 
-start_wl = 500e-9
-end_wl = 1500e-9
-steps = 10
+start_wl = 300e-9
+end_wl = 1100e-9
+steps = 8001
 wavelengths = torch.linspace(start_wl, end_wl, steps)
 
 theta = torch.tensor(np.linspace(0, 0, 1) * (np.pi / 180), dtype = torch.float32).to(device)

@@ -9,7 +9,7 @@ from data.values.ReflectivePropsValue import ReflectivePropsValue
 from config import wavelengths
 
 
-def visualise(preds: ReflectivePropsValue = None, refs: ReflectivePropsPattern = None, filename: str = "visualisation"):
+def visualise_spline(preds: ReflectivePropsValue = None, refs: ReflectivePropsPattern = None, filename: str = "visualisation"):
     plt.clf()
 
     wavelengths_spline = torch.linspace(wavelengths[0], wavelengths[-1], 1000)
@@ -31,6 +31,19 @@ def visualise(preds: ReflectivePropsValue = None, refs: ReflectivePropsPattern =
         wl_vl_spline = make_interp_spline(wavelengths, value)
         value_spline = np.clip(wl_vl_spline(wavelengths_spline), 0, 1)
         plt.plot(wavelengths_spline, value_spline, color='#D86ECC')
+
+    plt.ylim(0, 1.1)
+    plt.savefig(f"out/{filename}.png")
+
+def visualise(preds: ReflectivePropsValue = None, refs: ReflectivePropsPattern = None, filename: str = "visualisation"):
+    plt.clf()
+
+    if refs:
+        plt.plot(wavelengths, refs.get_lower_bound().detach().cpu(), color='#8ED973')
+        plt.plot(wavelengths, refs.get_upper_bound().detach().cpu(), color='#C04F15')
+
+    if preds:
+        plt.plot(wavelengths, preds.get_value().detach().cpu(), color='#D86ECC')
 
     plt.ylim(0, 1.1)
     plt.savefig(f"out/{filename}.png")

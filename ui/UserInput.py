@@ -2,12 +2,11 @@ import numpy as np
 
 from utils.ObservableList import ObservableList
 import torch
-from config import device, tolerance
 import sys
 sys.path.append(sys.path[0] + '/..')
 from data.values.Region import Region
 from data.values.ReflectivePropsPattern import ReflectivePropsPattern
-from config import wavelengths
+from config import wavelengths, device, tolerance
 
 class UserInput():
     def __init__(self):
