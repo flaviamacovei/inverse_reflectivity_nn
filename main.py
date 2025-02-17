@@ -6,6 +6,7 @@ from data.values.ReflectivePropsPattern import ReflectivePropsPattern
 from data.values.Coating import Coating
 from ui.visualise import visualise
 from ui.FileInput import FileInput
+from data.values.RefractiveIndex import RefractiveIndex
 
 if __name__ == "__main__":
     num_layers = 10
@@ -19,8 +20,17 @@ if __name__ == "__main__":
     prediction = model.predict(pattern)
     thicknesses = prediction.get_thicknesses()
     refractive_indices = prediction.get_refractive_indices()
-    print(f"Predicted thicknesses: {thicknesses.detach().numpy()}")
-    print(f"Predicted refractive indices. {refractive_indices.detach().numpy()}")
 
-    optimal_reflective_props = coating_to_reflective_props(prediction)
+    print(f"Predicted thicknesses: {thicknesses.detach().numpy()}")
+    print(f"Predicted refractive indices: {refractive_indices.detach().numpy()}")
+
+
+    refractive_indices_rounded = torch.tensor([RefractiveIndex.round(x) for x in refractive_indices])
+    true_coating = Coating(thicknesses, refractive_indices_rounded)
+
+
+
+    print(f"Predicted refractive indices: {refractive_indices_rounded.detach().numpy()}")
+
+    optimal_reflective_props = coating_to_reflective_props(true_coating)
     visualise(optimal_reflective_props, pattern, "optimised")

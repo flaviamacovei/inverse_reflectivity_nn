@@ -18,7 +18,6 @@ class FileInput():
 
         self.wavelenghts = [float(line.split(",")[0]) for line in lines]
         self.values = [float(line.split(",")[1]) / 100 for line in lines]
-        print(self.values)
 
     def to_reflective_props_pattern(self):
         lower_bound = torch.tensor(self.values, device = device)
