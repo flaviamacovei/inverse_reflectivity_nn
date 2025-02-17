@@ -10,6 +10,7 @@ class RandomPredictor(BasePredictionEngine):
         super().__init__()
         self.num_layers = num_layers
 
-    def predict(self, reflecive_props: ReflectivePropsPattern):
+    def predict(self, target: ReflectivePropsPattern):
         thicknesses_tensor = torch.rand((self.num_layers))
-        return Coating(thicknesses_tensor)
+        refractive_indices_tensor = torch.rand((self.num_layers))
+        return Coating(thicknesses_tensor, refractive_indices_tensor)
