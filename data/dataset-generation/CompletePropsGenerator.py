@@ -13,11 +13,11 @@ class CompletePropsGenerator(BaseGenerator):
 
     def make_point(self):
         coating = self.make_random_coating()
-        reflective_props_tensor = coating_to_reflective_props(coating, self.START_WL, self.END_WL, self.STEPS).get_value()
+        reflective_props_tensor = coating_to_reflective_props(coating).get_value()
 
         lower_bound = torch.clamp(reflective_props_tensor - self.TOLERANCE / 2, 0, 1)
         upper_bound = torch.clamp(reflective_props_tensor + self.TOLERANCE / 2, 0, 1)
 
-        result = ReflectivePropsPattern(self.START_WL, self.END_WL, lower_bound, upper_bound)
+        result = ReflectivePropsPattern(lower_bound, upper_bound)
 
         return result

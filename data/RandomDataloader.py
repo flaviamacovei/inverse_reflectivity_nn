@@ -4,6 +4,7 @@ import torch
 from values.ReflectivePropsPattern import ReflectivePropsPattern
 from values.Coating import Coating
 from forward.forward_tmm import coating_to_reflective_props
+from config import wavelengths
 
 class RandomDataloader(BaseDataloader):
 
@@ -13,9 +14,6 @@ class RandomDataloader(BaseDataloader):
         self.num_points = num_points
         self.MIN_THICKNESS = 1.0e-08
         self.MAX_THICKNESS = 1.0e-07
-        self.START_WL = 500
-        self.END_WL = 1500
-        self.STEPS = 1000
         self.TOLERANCE = tolerance
 
     def load_data(self):
@@ -24,9 +22,10 @@ class RandomDataloader(BaseDataloader):
             thicknesses_tensor = (self.MAX_THICKNESS - self.MIN_THICKNESS) * torch.rand((self.num_layers)) + self.MIN_THICKNESS
             thicknesses_tensor[0] = float("Inf")
             thicknesses_tensor[-1] = float("Inf")
-            coating = Coating(thicknesses_tensor)
-            properties_tensor = coating_to_reflective_props(coating, self.START_WL, self.END_WL, self.STEPS)
+            refractive_indices_tensor = torch.rand((self.num_layers))
+            coating = Coating(thicknesses_tensor, refractive_indices_tensor)
+            properties_tensor = coating_to_reflective_props(coating).get_value()
             lower_bound = torch.clamp(properties_tensor - self.TOLERANCE / 2, 0, 1)
             upper_bound = torch.clamp(properties_tensor + self.TOLERANCE / 2, 0, 1)
-            reflective_props = ReflectivePropsPattern(self.START_WL, self.END_WL, lower_bound, upper_bound)
+            reflective_props = ReflectivePropsPattern(lower_bound, upper_bound)
             self.dataset.append((reflective_props, coating))

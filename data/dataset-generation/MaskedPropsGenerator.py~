@@ -6,7 +6,7 @@ sys.path.append(sys.path[0] + '/../..')
 from data.values.ReflectivePropsPattern import ReflectivePropsPattern
 from data.values.Coating import Coating
 from forward.forward_tmm import coating_to_reflective_props
-from config import device, steps
+from config import device
 
 class MaskedPropsGenerator(BaseGenerator):
     def __init__(self, num_points):
@@ -16,21 +16,21 @@ class MaskedPropsGenerator(BaseGenerator):
 
     def make_point(self):
         num_masks = random.randint(self.MIN_NUM_MASKS, self.MAX_NUM_MASKS)
-        mask_indices = sorted(random.sample(range(steps), num_masks * 2))
+        mask_indices = sorted(random.sample(range(self.STEPS), num_masks * 2))
 
         coating = self.make_random_coating()
-        reflective_props_tensor = coating_to_reflective_props(coating).get_value()
+        reflective_props_tensor = coating_to_reflective_props(coating, self.START_WL, self.END_WL, self.STEPS).get_value()
 
         lower_bound = reflective_props_tensor - self.TOLERANCE / 2
         upper_bound = reflective_props_tensor + self.TOLERANCE / 2
 
-        mask = torch.zeros(steps, device = device)
+        mask = torch.zeros(self.STEPS, device = device)
         for i in range(num_masks):
             mask[mask_indices[i * 2]:mask_indices[i * 2 + 1]] = 1
 
         lower_bound = torch.clamp(lower_bound - mask, 0, 1)
         upper_bound = torch.clamp(upper_bound + mask, 0, 1)
 
-        result = ReflectivePropsPattern(lower_bound, upper_bound)
+        result = ReflectivePropsPattern(self.START_WL, self.END_WL, lower_bound, upper_bound)
 
         return result
