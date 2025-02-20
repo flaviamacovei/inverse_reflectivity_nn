@@ -14,3 +14,6 @@ class ReflectivePropsPattern(BaseReflectiveProps):
 
     def get_upper_bound(self):
         return self.upper_bound
+
+    def to(self, device = str):
+        return ReflectivePropsPattern(self.lower_bound.to(device), self.upper_bound.to(device))

@@ -9,3 +9,6 @@ class ReflectivePropsValue(BaseReflectiveProps):
 
     def get_value(self):
         return self.value
+
+    def to(self, device: str):
+        return ReflectivePropsValue(self.value.to(device))
