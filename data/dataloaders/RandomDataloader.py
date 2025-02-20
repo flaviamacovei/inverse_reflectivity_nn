@@ -1,10 +1,9 @@
-from data.BaseDataloader import BaseDataloader
+from data.dataloaders.BaseDataloader import BaseDataloader
 from config import tolerance
 import torch
-from values.ReflectivePropsPattern import ReflectivePropsPattern
-from values.Coating import Coating
+from data.values.Coating import Coating
 from forward.forward_tmm import coating_to_reflective_props
-from config import wavelengths
+
 
 class RandomDataloader(BaseDataloader):
 
@@ -27,5 +26,5 @@ class RandomDataloader(BaseDataloader):
             properties_tensor = coating_to_reflective_props(coating).get_value()
             lower_bound = torch.clamp(properties_tensor - self.TOLERANCE / 2, 0, 1)
             upper_bound = torch.clamp(properties_tensor + self.TOLERANCE / 2, 0, 1)
-            reflective_props = ReflectivePropsPattern(lower_bound, upper_bound)
-            self.dataset.append((reflective_props, coating))
+            reflective_props_tensor = torch.cat((lower_bound, upper_bound))
+            self.dataset.append(reflective_props_tensor)
