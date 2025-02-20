@@ -14,7 +14,7 @@ def generate_dataset(num_points):
     train_tensors = torch.stack(train_tensors)
 
     train_set = TensorDataset(train_tensors)
-    torch.save(train_set, f'C:/Users/diama/Desktop/uni/winter24/research/inverse_reflectivity_nn/data/datasets/complete_props_{num_points}.pt')
+    torch.save(train_set, f'../datasets/complete_props_{num_points}.pt')
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
