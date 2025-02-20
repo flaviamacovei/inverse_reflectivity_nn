@@ -67,8 +67,8 @@ class UserInput():
         self.read_regions()
 
     def to_reflective_props_pattern(self):
-        lower_bound = torch.zeros(wavelengths.size, device = device)
-        upper_bound = torch.ones(wavelengths.size, device = device)
+        lower_bound = torch.zeros(wavelengths.size()[0], device = device)
+        upper_bound = torch.ones(wavelengths.size()[0], device = device)
 
         for region in self.regions:
             lower_bound[region.get_start_wl() - wavelengths[0]:region.get_end_wl() - wavelengths[0]] = region.get_value()

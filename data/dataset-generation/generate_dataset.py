@@ -8,11 +8,13 @@ def generate_dataset(num_points):
     train_set_generator = CompletePropsGenerator(num_points)
     train_tensors = []
     for reflective_props in train_set_generator.generate():
-        train_tensor = torch.stack((reflective_props.get_lower_bound(), reflective_props.get_upper_bound()))
+        train_tensor = torch.cat((reflective_props.get_lower_bound(), reflective_props.get_upper_bound()))
         train_tensors.append(train_tensor)
 
-    train_set = TensorDataset(*train_tensors)
-    torch.save(train_set, f'datasets/complete_props_{num_points}.pt')
+    train_tensors = torch.stack(train_tensors)
+
+    train_set = TensorDataset(train_tensors)
+    torch.save(train_set, f'C:/Users/diama/Desktop/uni/winter24/research/inverse_reflectivity_nn/data/datasets/complete_props_{num_points}.pt')
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:

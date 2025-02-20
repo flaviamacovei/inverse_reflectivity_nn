@@ -10,9 +10,12 @@ materials_file = "Mirror Design with AI/Simple Designs/Filters/Design narrow Ban
 
 start_wl = 300e-9
 end_wl = 1100e-9
-steps = 8001
+steps = 1000
 wavelengths = torch.linspace(start_wl, end_wl, steps)
 
 theta = torch.tensor(np.linspace(0, 0, 1) * (np.pi / 180), dtype = torch.float32).to(device)
 
-tolerance = 0 #default: 1.0e-3
+tolerance = 0.1 #default: 1.0e-3
+
+learning_rate = 0.00001
+num_epochs = 500

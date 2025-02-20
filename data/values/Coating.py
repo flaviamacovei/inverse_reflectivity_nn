@@ -11,3 +11,6 @@ class Coating():
 
     def get_refractive_indices(self):
         return self.refractive_indices
+
+    def __str__(self):
+        return f"Coating object:\n\tthicknesses: {self.thicknesses.detach().numpy()},\n\trefractive_indices: {self.refractive_indices.detach().numpy()}"
