@@ -5,3 +5,4 @@
 out/*
 history.txt
 data/datasets/*
+wandb/*

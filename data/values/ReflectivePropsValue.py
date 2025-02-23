@@ -12,3 +12,6 @@ class ReflectivePropsValue(BaseReflectiveProps):
 
     def to(self, device: str):
         return ReflectivePropsValue(self.value.to(device))
+
+    def device(self):
+        return self.value.device
