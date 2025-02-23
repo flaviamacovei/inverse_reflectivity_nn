@@ -8,7 +8,7 @@ def generate_dataset(num_points):
     train_set_generator = CompletePropsGenerator(num_points)
     train_tensors = []
     for reflective_props in train_set_generator.generate():
-        train_tensor = torch.cat((reflective_props.get_lower_bound(), reflective_props.get_upper_bound()))
+        train_tensor = torch.cat((reflective_props.get_lower_bound(), reflective_props.get_upper_bound()), dim = 1).squeeze()
         train_tensors.append(train_tensor)
 
     train_tensors = torch.stack(train_tensors)

@@ -11,7 +11,7 @@ def coating_to_reflective_props(coating: Coating):
 
     reflective_props_tensor = compute_multilayer_optics('s', refractive_indices, thicknesses, theta, wavelengths, device = device)['R']
 
-    steps = reflective_props_tensor.shape[1]
+    steps = reflective_props_tensor.shape[:1] + reflective_props_tensor.shape[2:]
     reflective_props_tensor = reflective_props_tensor.reshape(steps)
 
     result = ReflectivePropsValue(reflective_props_tensor)

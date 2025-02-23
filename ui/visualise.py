@@ -10,6 +10,9 @@ from config import wavelengths
 
 
 def visualise_spline(preds: ReflectivePropsValue = None, refs: ReflectivePropsPattern = None, filename: str = "visualisation"):
+    assert not preds or len(preds.get_value().shape) == 2
+    assert not refs or len(refs.get_lower_bound().shape) == 2
+
     global wavelengths
     plt.clf()
 
@@ -20,11 +23,11 @@ def visualise_spline(preds: ReflectivePropsValue = None, refs: ReflectivePropsPa
     if refs:
         refs = refs.to("cpu")
 
-        lower_bound = refs.get_lower_bound().detach().cpu()
+        lower_bound = refs.get_lower_bound()[0].detach().cpu()
         wl_lb_spline = make_interp_spline(wavelengths_cpu, lower_bound)
         lower_bound_spline = np.clip(wl_lb_spline(wavelengths_spline), 0, 1)
 
-        upper_bound = refs.get_upper_bound().detach().cpu()
+        upper_bound = refs.get_upper_bound()[0].detach().cpu()
         wl_ub_spline = make_interp_spline(wavelengths_cpu, upper_bound)
         upper_bound_spline = np.clip(wl_ub_spline(wavelengths_spline), 0, 1)
         plt.plot(wavelengths_spline, lower_bound_spline, color='#8ED973')
@@ -32,7 +35,7 @@ def visualise_spline(preds: ReflectivePropsValue = None, refs: ReflectivePropsPa
 
     if preds:
         preds = preds.to("cpu")
-        value = preds.get_value().detach().cpu()
+        value = preds.get_value()[0].detach().cpu()
         wl_vl_spline = make_interp_spline(wavelengths_cpu, value)
         value_spline = np.clip(wl_vl_spline(wavelengths_spline), 0, 1)
         plt.plot(wavelengths_spline, value_spline, color='#D86ECC')
@@ -41,20 +44,21 @@ def visualise_spline(preds: ReflectivePropsValue = None, refs: ReflectivePropsPa
     plt.savefig(f"out/{filename}.png")
 
 def visualise(preds: ReflectivePropsValue = None, refs: ReflectivePropsPattern = None, filename: str = "visualisation"):
+    assert not preds or len(preds.get_value().shape) == 2
+    assert not refs or len(refs.get_lower_bound().shape) == 2
     global wavelengths
     plt.clf()
 
     wavelengths_cpu = wavelengths.to("cpu")
 
-
     if refs:
         refs = refs.to("cpu")
-        plt.plot(wavelengths_cpu, refs.get_lower_bound().detach().cpu(), color='#8ED973')
-        plt.plot(wavelengths_cpu, refs.get_upper_bound().detach().cpu(), color='#C04F15')
+        plt.plot(wavelengths_cpu, refs.get_lower_bound()[0].detach().cpu(), color='#8ED973')
+        plt.plot(wavelengths_cpu, refs.get_upper_bound()[0].detach().cpu(), color='#C04F15')
 
     if preds:
         preds = preds.to("cpu")
-        plt.plot(wavelengths_cpu, preds.get_value().detach().cpu(), color='#D86ECC')
+        plt.plot(wavelengths_cpu, preds.get_value()[0].detach().cpu(), color='#D86ECC')
 
     plt.ylim(0, 1.1)
     plt.savefig(f"out/{filename}.png")

@@ -3,7 +3,7 @@ from data.values.BaseReflectiveProps import BaseReflectiveProps
 
 class ReflectivePropsValue(BaseReflectiveProps):
     def __init__(self, value: torch.Tensor):
-        assert len(value.shape) == 1
+        assert len(value.shape) == 2
         super().__init__()
         self.value = value
 
