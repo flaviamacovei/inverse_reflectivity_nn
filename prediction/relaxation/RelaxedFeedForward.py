@@ -43,8 +43,8 @@ class BoundedMLP(nn.Module):
         self.output_size = output_size
 
         self.trainable_model = trainable_model
-        self.pretreated_size = self.trainable_model.get_output_size()
-        self.linear = nn.Linear(self.pretreated_size, self.output_size, device = device)
+        pretreated_size = self.trainable_model.get_output_size()
+        self.linear = nn.Linear(pretreated_size, self.output_size, device = device)
 
         self.lower_bound = torch.zeros((1, self.output_size), device = device)
         self.upper_bound = torch.ones((1, self.output_size), device = device)
