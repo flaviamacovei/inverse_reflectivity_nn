@@ -9,7 +9,7 @@ num_stacks = 1
 
 materials_file = "Mirror Design with AI/Simple Designs/Filters/Design narrow Bandpass - optimized.dsg"
 
-dataset_file = 'complete_props_2000.pt'
+dataset_file = 'complete_props_200.pt'
 
 start_wl = 300e-9
 end_wl = 1100e-9
@@ -23,7 +23,7 @@ theta = torch.tensor(np.linspace(0, 0, 1) * (np.pi / 180), dtype = torch.float32
 tolerance = 0.1 #default: 1.0e-3
 
 learning_rate = 0.001
-num_epochs = 10
+num_epochs = 50
 batch_size = 32
 
 # wandb.init(

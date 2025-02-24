@@ -20,7 +20,7 @@ class GradientSolver(BaseRelaxedSolver):
         self.MIN_THICKNESSES = 10
         self.MAX_THICKNESSES = 10_000
 
-    def solve_relaxed(self, target: ReflectivePropsPattern):
+    def solve(self, target: ReflectivePropsPattern):
         params_init = self.make_init()
         bounds = self.make_bounds(self.num_layers)
 

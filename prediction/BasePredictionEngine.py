@@ -11,4 +11,4 @@ class BasePredictionEngine(ABC):
         self.discretiser: BaseDiscretiser = None
 
     def predict(self, target: ReflectivePropsPattern):
-        return self.discretiser.solve_discretised(target)
+        return self.discretiser.solve(target)

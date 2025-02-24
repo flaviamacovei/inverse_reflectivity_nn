@@ -93,7 +93,7 @@ class RelaxedFeedForward(BaseTrainableRelaxedSolver):
                 print(f"Loss in epoch {epoch + 1}: {loss.item()}")
             self.optimiser.step()
 
-    def solve_relaxed(self, target: ReflectivePropsPattern):
+    def solve(self, target: ReflectivePropsPattern):
         self.bounded_model.eval()
         self.trainable_model.eval()
         model_input = torch.cat((target.get_lower_bound(), target.get_upper_bound()), dim = 1)

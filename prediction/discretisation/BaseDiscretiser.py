@@ -9,5 +9,5 @@ class BaseDiscretiser(ABC):
         self.relaxed_solver = relaxed_solver
 
     @abstractmethod
-    def solve_discretised(self, target: ReflectivePropsPattern):
+    def solve(self, target: ReflectivePropsPattern):
         pass

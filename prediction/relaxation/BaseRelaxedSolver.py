@@ -8,5 +8,5 @@ class BaseRelaxedSolver(ABC):
     def __init__(self):
         pass
     @abstractmethod
-    def solve_relaxed(self, target: ReflectivePropsPattern):
+    def solve(self, target: ReflectivePropsPattern):
         pass

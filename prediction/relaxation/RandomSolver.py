@@ -10,7 +10,7 @@ class RandomSolver(BaseRelaxedSolver):
         super().__init__()
         self.num_layers = num_layers
 
-    def solve_relaxed(self, target: ReflectivePropsPattern):
+    def solve(self, target: ReflectivePropsPattern):
         thicknesses_tensor = torch.rand((self.num_layers))
         refractive_indices_tensor = torch.rand((self.num_layers))
         return Coating(thicknesses_tensor, refractive_indices_tensor)

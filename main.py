@@ -2,7 +2,7 @@ import os
 import torch
 from forward.forward_tmm import coating_to_reflective_props
 from prediction.GradientRounded import GradientRounded
-from prediction.FFRounded import FFRounded
+from prediction.MLPGomory import MLPGomory
 from data.values.Coating import Coating
 from ui.visualise import visualise
 from ui.FileInput import FileInput
@@ -32,7 +32,7 @@ if __name__ == "__main__":
     pattern = ReflectivePropsPattern(lower_bound, upper_bound)
     visualise(refs = pattern, filename = "original")
 
-    prediction_engine = FFRounded(num_layers)
+    prediction_engine = MLPGomory(num_layers)
     prediction_engine.train_relaxed_engine()
     prediction = prediction_engine.predict(pattern)
     thicknesses = prediction.get_thicknesses()

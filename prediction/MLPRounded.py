@@ -8,7 +8,7 @@ from prediction.discretisation.Rounder import Rounder
 from config import batch_size, dataset_file, device, thicknesses_bounds, refractive_indeces_bounds
 
 
-class FFRounded(BasePredictionEngine):
+class MLPRounded(BasePredictionEngine):
     def __init__(self, num_layers):
         dataset = torch.load("data/datasets/" + dataset_file)
         dataloader = DataLoader(dataset, batch_size = batch_size, shuffle = False)

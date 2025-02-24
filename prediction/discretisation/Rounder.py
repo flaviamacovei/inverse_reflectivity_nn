@@ -14,8 +14,8 @@ class Rounder(BaseDiscretiser):
     def __init__(self, relaxed_solver: BaseRelaxedSolver):
         super().__init__(relaxed_solver)
 
-    def solve_discretised(self, target: ReflectivePropsPattern):
-        relaxed_prediction = self.relaxed_solver.solve_relaxed(target)
+    def solve(self, target: ReflectivePropsPattern):
+        relaxed_prediction = self.relaxed_solver.solve(target)
         relaxed_prediction_value = coating_to_reflective_props(relaxed_prediction)
         visualise(preds = relaxed_prediction_value, filename = "before_rounding")
         return self.round(relaxed_prediction)
