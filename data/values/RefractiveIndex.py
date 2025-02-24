@@ -13,6 +13,9 @@ class RefractiveIndex(float):
     def __str__(self):
         return str(self.value)
 
+    def get_value(self):
+        return self.value
+
     @staticmethod
     def ceil(x: float):
         return RefractiveIndex(min(RefractiveIndex.VALUE_SPACE, key=lambda y: y if y >= x else float('inf')))
@@ -37,3 +40,8 @@ class RefractiveIndex(float):
     @staticmethod
     def round_tensor(x: torch.Tensor):
         return torch.tensor([RefractiveIndex.round(val) for val in x.flatten()], device = device).view(x.shape)
+
+    def __eq__(self, other):
+        if isisntance(other, RefractiveIndex):
+            return torch.equal(self.value, other.get_value())
+        return False

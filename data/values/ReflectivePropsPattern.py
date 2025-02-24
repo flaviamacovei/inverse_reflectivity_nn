@@ -21,3 +21,8 @@ class ReflectivePropsPattern(BaseReflectiveProps):
 
     def device(self):
         self.lower_bound.device
+
+    def __eq__(self, other):
+        if isinstance(other, ReflectivePropsPattern):
+            return torch.equal(self.lower_bound, other.get_lower_bound()) and torch.equal(self.upper_bound, other.get_upper_bound())
+        return False

@@ -15,3 +15,8 @@ class ReflectivePropsValue(BaseReflectiveProps):
 
     def device(self):
         return self.value.device
+
+    def __eq__(self, other):
+        if isisntance(other, ReflectivePropsValue):
+            return torch.equal(self.value, other.get_value())
+        return False

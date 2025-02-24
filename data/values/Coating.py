@@ -22,3 +22,8 @@ class Coating():
 
     def device(self):
         return self.thicknesses.device
+
+    def __eq__(self, other):
+        if isinstance(other, Coating):
+            return torch.equal(self.thicknesses, other.get_thicknesses()) and torch.equal(self.refractive_indices, other.get_refractive_indices())
+        return False
