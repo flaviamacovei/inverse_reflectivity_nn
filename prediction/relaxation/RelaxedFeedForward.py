@@ -11,16 +11,16 @@ from data.values.Coating import Coating
 from forward.forward_tmm import coating_to_reflective_props
 from evaluation.loss import compute_loss
 from data.values.ReflectivePropsPattern import ReflectivePropsPattern
-from config import wavelengths, device, learning_rate, num_epochs
+from config import wavelengths, device, learning_rate, num_epochs, thicknesses_bounds, refractive_indices_bounds
 
 class TrainableMLP(nn.Module):
-    def __init__(self, num_layers: int):
+    def __init__(self):
         super().__init__()
         in_dim = 2 * wavelengths.size()[0]
         layer_1_features = 128
         layer_2_features = 512
         layer_3_features = 64
-        output_size = 2 * num_layers
+        self.output_size = 20
         self.net = nn.Sequential(
             nn.Linear(in_dim, layer_1_features, device = device),
             nn.ReLU(),
@@ -28,45 +28,70 @@ class TrainableMLP(nn.Module):
             nn.ReLU(),
             nn.Linear(layer_2_features, layer_3_features, device = device),
             nn.ReLU(),
-            nn.Linear(layer_3_features, output_size, device = device)
+            nn.Linear(layer_3_features, self.output_size, device = device)
         )
 
     def forward(self, x):
         return self.net(x)
 
+    def get_output_size(self):
+        return self.output_size
+
 class BoundedMLP(nn.Module):
-    def __init__(self, trainable_model: TrainableMLP, thicknesses_bounds: (torch.Tensor, torch.Tensor), refractive_indices_bounds: (torch.Tensor, torch.Tensor)):
+    def __init__(self, trainable_model: TrainableMLP, output_size: int):
         super().__init__()
+        self.output_size = output_size
+
         self.trainable_model = trainable_model
-        self.lower_bound = torch.cat((thicknesses_bounds[0], refractive_indices_bounds[0]), dim = 1)
-        self.upper_bound = torch.cat((thicknesses_bounds[1], refractive_indices_bounds[1]), dim = 1)
+        self.pretreated_size = self.trainable_model.get_output_size()
+        self.linear = nn.Linear(self.pretreated_size, self.output_size, device = device)
+
+        self.lower_bound = torch.zeros((1, self.output_size), device = device)
+        self.upper_bound = torch.ones((1, self.output_size), device = device)
 
     def forward(self, x):
-        pretrained_output = self.trainable_model(x)
-        scaled_output = (self.upper_bound - self.lower_bound) * torch.sigmoid(pretrained_output) + self.lower_bound
-        return scaled_output
+        pretreated_result = self.trainable_model(x)
+        scaled_result = self.linear(pretreated_result)
+        output = (self.upper_bound - self.lower_bound) * torch.sigmoid(scaled_result) + self.lower_bound
+        return output
 
-    def set_thicknesses_bounds(self, lower_bound: torch.Tensor, upper_bound: torch.Tensor):
-        self.lower_bound[:, :wavelengths.size()[0]] = lower_bound
-        self.upper_bound[:, :wavelengths.size()[0]] = upper_bound
+    def get_lower_bound(self):
+        return self.lower_bound
 
-    def set_refractive_indices_bounds(self, lower_bound: torch.Tensor, upper_bound: torch.Tensor):
-        self.lower_bound[:, wavelengths.size()[0]:] = lower_bound
-        self.upper_bound[:, wavelengths.size()[0]:] = upper_bound
+    def get_upper_bound(self):
+        return self.upper_bound
+
+    def get_output_size(self):
+        return self.output_size
+
+    def set_lower_bound(self, lower_bound: torch.Tensor):
+        self.lower_bound = lower_bound
+
+    def set_upper_bound(self, upper_bound: torch.Tensor):
+        self.upper_bound = upper_bound
 
 class RelaxedFeedForward(BaseTrainableRelaxedSolver):
-    def __init__(self, dataloader: BaseDataloader, num_layers: int, thicknesses_bounds: (torch.Tensor, torch.Tensor), refractive_indices_bounds: (torch.Tensor, torch.Tensor)):
+    def __init__(self, dataloader: BaseDataloader, num_layers: int):
         super().__init__(dataloader)
         self.SCALING_FACTOR_THICKNESSES = 1.0e4
         self.SCALING_FACTOR_REFRACTIVE_INDICES = 0.1
-        self.trainable_model = TrainableMLP(num_layers).to(device)
-        thicknesses_bounds = [bound * self.SCALING_FACTOR_THICKNESSES for bound in thicknesses_bounds]
-        refractive_indices_bounds = [bound * self.SCALING_FACTOR_REFRACTIVE_INDICES for bound in refractive_indices_bounds]
-        self.bounded_model = BoundedMLP(self.trainable_model, thicknesses_bounds, refractive_indices_bounds).to(device)
+
+        self.trainable_model = TrainableMLP().to(device)
+        self.bounded_model = BoundedMLP(self.trainable_model, 2 * num_layers).to(device)
+
+        thicknesses_lower_bound = torch.ones((1, num_layers), device=device) * thicknesses_bounds[0]
+        thicknesses_upper_bound = torch.ones((1, num_layers), device=device) * thicknesses_bounds[1]
+        refractive_index_lower_bound = torch.ones((1, num_layers), device=device) * refractive_indices_bounds[0]
+        refractive_index_upper_bound = torch.ones((1, num_layers), device=device) * refractive_indices_bounds[1]
+        lower_bound = torch.cat((thicknesses_lower_bound * self.SCALING_FACTOR_THICKNESSES, refractive_index_lower_bound * self.SCALING_FACTOR_REFRACTIVE_INDICES), dim = 1)
+        upper_bound = torch.cat((thicknesses_upper_bound * self.SCALING_FACTOR_THICKNESSES, refractive_index_upper_bound * self.SCALING_FACTOR_REFRACTIVE_INDICES), dim = 1)
+
+        self.bounded_model.set_lower_bound(lower_bound)
+        self.bounded_model.set_upper_bound(upper_bound)
+
         self.optimiser = optim.Adam(self.bounded_model.parameters(), lr = learning_rate)
 
     def train(self):
-        self.bounded_model.train()
         self.trainable_model.train()
         loss_scale = 1
         for epoch in range(num_epochs):
@@ -94,7 +119,6 @@ class RelaxedFeedForward(BaseTrainableRelaxedSolver):
             self.optimiser.step()
 
     def solve(self, target: ReflectivePropsPattern):
-        self.bounded_model.eval()
         self.trainable_model.eval()
         model_input = torch.cat((target.get_lower_bound(), target.get_upper_bound()), dim = 1)
         return self.model_forward(model_input)
@@ -111,3 +135,4 @@ class RelaxedFeedForward(BaseTrainableRelaxedSolver):
         refractive_indices_bounds = [bound * self.SCALING_FACTOR_REFRACTIVE_INDICES for bound in refractive_indices_bounds]
         self.bounded_model.set_thicknesses_bounds(thicknesses_bounds[0], thicknesses_bounds[1])
         self.bounded_model.set_refractive_indices_bounds(refractive_indices_bounds[0], refractive_indices_bounds[1])
+

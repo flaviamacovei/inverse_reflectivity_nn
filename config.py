@@ -16,14 +16,14 @@ end_wl = 1100e-9
 steps = 1000
 wavelengths = torch.linspace(start_wl, end_wl, steps, device = device)
 thicknesses_bounds = (1E-9, 1E-6)
-refractive_indeces_bounds = (0.12, 2.25)
+refractive_indices_bounds = (0.12, 2.25)
 
 theta = torch.tensor(np.linspace(0, 0, 1) * (np.pi / 180), dtype = torch.float32).to(device)
 
 tolerance = 0.1 #default: 1.0e-3
 
 learning_rate = 0.001
-num_epochs = 50
+num_epochs = 10
 batch_size = 32
 
 # wandb.init(
