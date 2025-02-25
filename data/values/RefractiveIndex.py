@@ -18,7 +18,7 @@ class RefractiveIndex(float):
 
     @staticmethod
     def ceil(x: float):
-        return RefractiveIndex(min(RefractiveIndex.VALUE_SPACE, key=lambda y: y if y >= x else float('inf')))
+        return min(RefractiveIndex.VALUE_SPACE, key=lambda y: y if y >= x else float('inf'))
 
     @staticmethod
     def ceil_tensor(x: torch.Tensor):
@@ -26,7 +26,7 @@ class RefractiveIndex(float):
 
     @staticmethod
     def floor(x: float):
-        return RefractiveIndex(max(RefractiveIndex.VALUE_SPACE, key=lambda y: y if y <= x else float('-inf')))
+        return max(RefractiveIndex.VALUE_SPACE, key=lambda y: y if y <= x else float('-inf'))
 
     @staticmethod
     def floor_tensor(x: torch.Tensor):
@@ -35,7 +35,7 @@ class RefractiveIndex(float):
 
     @staticmethod
     def round(x: float):
-        return RefractiveIndex(min(RefractiveIndex.VALUE_SPACE, key=lambda y: abs(y - x)))
+        return min(RefractiveIndex.VALUE_SPACE, key=lambda y: abs(y - x))
 
     @staticmethod
     def round_tensor(x: torch.Tensor):
@@ -45,3 +45,7 @@ class RefractiveIndex(float):
         if isisntance(other, RefractiveIndex):
             return torch.equal(self.value, other.get_value())
         return False
+
+    @staticmethod
+    def is_discrete(x: torch.Tensor):
+        return torch.all(torch.isin(x, torch.tensor(RefractiveIndex.VALUE_SPACE, device = device)))

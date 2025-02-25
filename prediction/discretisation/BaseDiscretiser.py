@@ -1,9 +1,11 @@
 from abc import ABC, abstractmethod
+import torch
 import sys
 sys.path.append(sys.path[0] + '/..')
 from prediction.relaxation.BaseRelaxedSolver import BaseRelaxedSolver
 from data.values.ReflectivePropsPattern import ReflectivePropsPattern
 from data.values.RefractiveIndex import RefractiveIndex
+from config import device
 
 class BaseDiscretiser(ABC):
     def __init__(self, relaxed_solver: BaseRelaxedSolver):
@@ -21,5 +23,4 @@ class BaseDiscretiser(ABC):
         for i in range(input.shape[0]):
             if input[i] != rounded_tensor[i]:
                 nondiscrete_indices[i] = 1
-        print(f"from refractive index: {nondiscrete_indices}")
         return nondiscrete_indices.nonzero(as_tuple = True)[0].tolist()
