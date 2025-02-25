@@ -15,7 +15,7 @@ class Coating():
         return self.refractive_indices
 
     def __str__(self):
-        return f"Coating object:\n\tthicknesses: {self.thicknesses.to('cpu').detach().numpy()},\n\trefractive_indices: {self.refractive_indices.to('cpu').detach().numpy()}"
+        return f"Coating object:\n\tthicknesses: {self.thicknesses.squeeze().cpu().detach().numpy()},\n\trefractive_indices: {self.refractive_indices.squeeze().cpu().detach().numpy()}"
 
     def to(self, device: str):
         return Coating(self.thicknesses.to(device), self.refractive_indices.to(device))
