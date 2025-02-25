@@ -3,6 +3,7 @@ import torch
 from forward.forward_tmm import coating_to_reflective_props
 from prediction.GradientRounded import GradientRounded
 from prediction.MLPGomory import MLPGomory
+from prediction.MLPBandB import MLPBandB
 from data.values.Coating import Coating
 from ui.visualise import visualise
 from ui.FileInput import FileInput
@@ -15,15 +16,15 @@ def notify():
 
 
 if __name__ == "__main__":
-    num_layers = 20
+    num_layers = 4
 
     # file_input = FileInput()
     # file_input.read_from_csv("data/Neuschwanstein_target.csv")
     # pattern = file_input.to_reflective_props_pattern()
 
 
-    random_thicknesses = torch.rand((1, num_layers // 2), device = device) * 1E-6
-    random_refractive_indices = (2.25 - 0.12) * torch.rand((1, num_layers // 2), device = device) + 0.12
+    random_thicknesses = torch.rand((1, num_layers), device = device) * 1E-6
+    random_refractive_indices = (2.25 - 0.12) * torch.rand((1, num_layers), device = device) + 0.12
     random_refractive_indices_rounded = RefractiveIndex.round_tensor(random_refractive_indices)
     coating = Coating(random_thicknesses, random_refractive_indices_rounded)
     value = coating_to_reflective_props(coating)
@@ -32,7 +33,7 @@ if __name__ == "__main__":
     pattern = ReflectivePropsPattern(lower_bound, upper_bound)
     visualise(refs = pattern, filename = "original")
 
-    prediction_engine = MLPGomory(num_layers)
+    prediction_engine = MLPBandB(num_layers)
     prediction_engine.train_relaxed_engine()
     prediction = prediction_engine.predict(pattern)
     thicknesses = prediction.get_thicknesses()
