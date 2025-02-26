@@ -31,6 +31,6 @@ class MaskedPropsGenerator(BaseGenerator):
         lower_bound = torch.clamp(lower_bound - mask, 0, 1)
         upper_bound = torch.clamp(upper_bound + mask, 0, 1)
 
-        result = ReflectivePropsPattern(lower_bound, upper_bound)
+        pattern = ReflectivePropsPattern(lower_bound, upper_bound)
 
-        return result
+        return pattern, coating

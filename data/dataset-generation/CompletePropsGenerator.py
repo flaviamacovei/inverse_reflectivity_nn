@@ -18,6 +18,6 @@ class CompletePropsGenerator(BaseGenerator):
         lower_bound = torch.clamp(reflective_props_tensor - self.TOLERANCE / 2, 0, 1)
         upper_bound = torch.clamp(reflective_props_tensor + self.TOLERANCE / 2, 0, 1)
 
-        result = ReflectivePropsPattern(lower_bound, upper_bound)
+        pattern = ReflectivePropsPattern(lower_bound, upper_bound)
 
-        return result
+        return pattern, coating
