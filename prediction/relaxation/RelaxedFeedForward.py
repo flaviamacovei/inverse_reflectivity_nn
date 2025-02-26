@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.functional as F
 import wandb
+import gc
 import sys
 sys.path.append(sys.path[0] + '/..')
 from prediction.relaxation.BaseTrainableRelaxedSolver import BaseTrainableRelaxedSolver
@@ -97,27 +98,37 @@ class RelaxedFeedForward(BaseTrainableRelaxedSolver):
         loss_scale = 1
         for epoch in range(num_epochs):
             self.optimiser.zero_grad()
-            loss = torch.tensor(0.0, device = device)
-            for refs in self.dataloader:
+            epoch_loss = torch.tensor(0.0, device = device)
+            for i, refs in enumerate(self.dataloader):
+                # loss = torch.tensor(0.0, device = device)
+                print(f"iteration: {i}")
+                torch.cuda.empty_cache()
+                gc.collect()
+                # print(f"Before forward: {torch.cuda.memory_allocated() / 1e6} MB")
+
                 refs = refs[0].float().to(device)
                 coating = self.model_forward(refs)
                 preds = coating_to_reflective_props(coating)
                 lower_bound, upper_bound = refs.chunk(2, dim = 1)
 
                 refs_obj = ReflectivePropsPattern(lower_bound, upper_bound)
-                batch_loss = compute_loss(preds, refs_obj)
-                loss += batch_loss
+                loss = compute_loss(preds, refs_obj)
+                epoch_loss += loss
+                # loss += batch_loss
+                # print(f"should be None: {loss.grad_fn}")
 
-            if epoch == 0:
-                loss_scale = loss
+                # print(f"After backward: {torch.cuda.memory_allocated() / 1e6} MB")
+
+            # if epoch == 0:
+            #     loss_scale = loss
             # wandb.log({"loss": loss.item() / loss_scale})
 
-            loss.backward()
-            self.trainable_model.net[2].weight.grad[:, :wavelengths.size()[0]] /= self.SCALING_FACTOR_THICKNESSES
-            self.trainable_model.net[2].weight.grad[:, wavelengths.size()[0]:] /= self.SCALING_FACTOR_REFRACTIVE_INDICES
-            if epoch % 10 == 0:
-                print(f"Loss in epoch {epoch + 1}: {loss.item()}")
-            self.optimiser.step()
+                loss.backward()
+                self.trainable_model.net[2].weight.grad[:, :wavelengths.size()[0]] /= self.SCALING_FACTOR_THICKNESSES
+                self.trainable_model.net[2].weight.grad[:, wavelengths.size()[0]:] /= self.SCALING_FACTOR_REFRACTIVE_INDICES
+                self.optimiser.step()
+            if epoch % 1 == 0:
+                print(f"Loss in epoch {epoch + 1}: {epoch_loss.item()}")
 
     def solve(self, target: ReflectivePropsPattern):
         self.trainable_model.eval()
@@ -150,10 +161,4 @@ class RelaxedFeedForward(BaseTrainableRelaxedSolver):
         thicknesses_upper_bound = self.bounded_model.get_upper_bound()[:, :self.num_layers] / self.SCALING_FACTOR_THICKNESSES
         refractive_indices_upper_bound = self.bounded_model.get_upper_bound()[:, self.num_layers:] / self.SCALING_FACTOR_REFRACTIVE_INDICES
         return torch.cat((thicknesses_upper_bound, refractive_indices_upper_bound), dim = 1)
-
-    # def set_bounds(self, thicknesses_bounds: (torch.Tensor, torch.Tensor), refractive_indices_bounds: (torch.Tensor, torch.Tensor)):
-    #     thicknesses_bounds = [bound * self.SCALING_FACTOR_THICKNESSES for bound in thicknesses_bounds]
-    #     refractive_indices_bounds = [bound * self.SCALING_FACTOR_REFRACTIVE_INDICES for bound in refractive_indices_bounds]
-    #     self.bounded_model.set_thicknesses_bounds(thicknesses_bounds[0], thicknesses_bounds[1])
-    #     self.bounded_model.set_refractive_indices_bounds(refractive_indices_bounds[0], refractive_indices_bounds[1])
 
