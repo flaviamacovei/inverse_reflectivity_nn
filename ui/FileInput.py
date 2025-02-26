@@ -20,7 +20,7 @@ class FileInput():
         self.values = [float(line.split(",")[1]) / 100 for line in lines]
 
     def to_reflective_props_pattern(self):
-        lower_bound = torch.tensor(self.values, device = device)
+        lower_bound = torch.tensor(self.values, device = device).unsqueeze(0)
         upper_bound = lower_bound.clone()
 
         lower_bound = torch.clamp(lower_bound - tolerance / 2, 0, 1)

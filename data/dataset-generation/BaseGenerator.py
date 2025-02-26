@@ -28,7 +28,7 @@ class BaseGenerator(ABC):
     def generate(self):
         points = []
         for i in range(self.num_points):
-            if i % (self.num_points // 10) == 0:
+            if i % (max(self.num_points // 10, 1)) == 0:
                 print(f"{i}/{self.num_points}")
             points.append(self.make_point())
         return points

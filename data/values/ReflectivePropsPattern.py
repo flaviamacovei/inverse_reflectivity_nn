@@ -5,7 +5,7 @@ class ReflectivePropsPattern(BaseReflectiveProps):
     def __init__(self, lower_bound: torch.Tensor, upper_bound: torch.Tensor):
         assert lower_bound.shape == upper_bound.shape
         assert lower_bound.device == upper_bound.device
-        assert torch.all(lower_bound <= upper_bound)
+        assert torch.all(lower_bound <= upper_bound), f"Lower bound must be less than or equal to upper bound:\n{lower_bound}\n{upper_bound}"
         super().__init__()
         self.lower_bound = lower_bound
         self.upper_bound = upper_bound
