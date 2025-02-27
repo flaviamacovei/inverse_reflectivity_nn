@@ -5,6 +5,9 @@ import torch.functional as F
 import wandb
 import gc
 import sys
+
+from test import refractive_indices
+
 sys.path.append(sys.path[0] + '/..')
 from prediction.relaxation.BaseTrainableRelaxedSolver import BaseTrainableRelaxedSolver
 from data.dataloaders.BaseDataloader import BaseDataloader
@@ -13,6 +16,7 @@ from forward.forward_tmm import coating_to_reflective_props
 from evaluation.loss import compute_loss
 from data.values.ReflectivePropsPattern import ReflectivePropsPattern
 from config import wavelengths, device, learning_rate, num_epochs, thicknesses_bounds, refractive_indices_bounds
+from ui.visualise import visualise
 
 class TrainableMLP(nn.Module):
     def __init__(self):
@@ -53,7 +57,8 @@ class BoundedMLP(nn.Module):
     def forward(self, x):
         pretreated_result = self.trainable_model(x)
         scaled_result = self.linear(pretreated_result)
-        output = (self.upper_bound - self.lower_bound) * torch.sigmoid(scaled_result) + self.lower_bound
+        norm_result = self.split_minmax_normalisation(scaled_result)
+        output = (self.upper_bound - self.lower_bound) * norm_result + self.lower_bound
         return output
 
     def get_lower_bound(self):
@@ -71,10 +76,23 @@ class BoundedMLP(nn.Module):
     def set_upper_bound(self, upper_bound: torch.Tensor):
         self.upper_bound = upper_bound
 
+    def split_minmax_normalisation(self, x: torch.Tensor, epsilon = 1e-8):
+        first_half, second_half = torch.chunk(x, 2, dim = 1)
+
+        def minmax_norm(t: torch.Tensor):
+            min_t = t.min(dim = -1, keepdim = True).values
+            max_t = t.max(dim = -1, keepdim = True).values
+            return (t - min_t) / (max_t - min_t + epsilon)  # Normalization
+
+        first_half_norm = minmax_norm(first_half)
+        second_half_norm = minmax_norm(second_half)
+
+        return torch.cat([first_half_norm, second_half_norm], dim=-1)
+
 class RelaxedFeedForward(BaseTrainableRelaxedSolver):
     def __init__(self, dataloader: BaseDataloader, num_layers: int):
         super().__init__(dataloader)
-        self.SCALING_FACTOR_THICKNESSES = 1.0e4
+        self.SCALING_FACTOR_THICKNESSES = 1.0e6
         self.SCALING_FACTOR_REFRACTIVE_INDICES = 0.1
         self.num_layers = num_layers
 
@@ -99,25 +117,18 @@ class RelaxedFeedForward(BaseTrainableRelaxedSolver):
         for epoch in range(num_epochs):
             self.optimiser.zero_grad()
             epoch_loss = torch.tensor(0.0, device = device)
-            for i, refs in enumerate(self.dataloader):
-                # loss = torch.tensor(0.0, device = device)
-                print(f"iteration: {i}")
+            for refs in self.dataloader:
                 torch.cuda.empty_cache()
                 gc.collect()
-                # print(f"Before forward: {torch.cuda.memory_allocated() / 1e6} MB")
 
                 refs = refs[0].float().to(device)
+                lower_bound, upper_bound = refs.chunk(2, dim = 1)
+                refs_obj = ReflectivePropsPattern(lower_bound, upper_bound)
+
                 coating = self.model_forward(refs)
                 preds = coating_to_reflective_props(coating)
-                lower_bound, upper_bound = refs.chunk(2, dim = 1)
-
-                refs_obj = ReflectivePropsPattern(lower_bound, upper_bound)
                 loss = compute_loss(preds, refs_obj)
                 epoch_loss += loss
-                # loss += batch_loss
-                # print(f"should be None: {loss.grad_fn}")
-
-                # print(f"After backward: {torch.cuda.memory_allocated() / 1e6} MB")
 
             # if epoch == 0:
             #     loss_scale = loss
