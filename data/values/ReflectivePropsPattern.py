@@ -26,3 +26,6 @@ class ReflectivePropsPattern(BaseReflectiveProps):
         if isinstance(other, ReflectivePropsPattern):
             return torch.equal(self.lower_bound, other.get_lower_bound()) and torch.equal(self.upper_bound, other.get_upper_bound())
         return False
+
+    def __str__(self):
+        return f"Reflective Props Pattern object:\n\tlower bound: {self.lower_bound.squeeze().cpu().detach().numpy()},\n\tupper bound: {self.upper_bound.squeeze().cpu().detach().numpy()}"

@@ -5,6 +5,7 @@ from prediction.GradientRounded import GradientRounded
 from prediction.MLPGomory import MLPGomory
 from prediction.MLPBandB import MLPBandB
 from data.values.Coating import Coating
+from prediction.MLPRounded import MLPRounded
 from ui.visualise import visualise
 from ui.FileInput import FileInput
 from config import wavelengths, tolerance, device
@@ -16,7 +17,7 @@ def notify():
 
 
 if __name__ == "__main__":
-    num_layers = 4
+    num_layers = 6
 
     # file_input = FileInput()
     # file_input.read_from_csv("data/Neuschwanstein_target.csv")
@@ -36,11 +37,10 @@ if __name__ == "__main__":
     prediction_engine = MLPBandB(num_layers)
     prediction_engine.train_relaxed_engine()
     prediction = prediction_engine.predict(pattern)
-    thicknesses = prediction.get_thicknesses()
-    refractive_indices = prediction.get_refractive_indices()
 
-    print(f"Predicted thicknesses: {thicknesses.to('cpu').detach().numpy()}")
-    print(f"Predicted refractive indices: {refractive_indices.to('cpu').detach().numpy()}")
+    print(f"real coating: {coating}")
+
+    print(f"Predicted coating: {prediction}")
 
     optimal_reflective_props = coating_to_reflective_props(prediction)
     visualise(optimal_reflective_props, pattern, "optimised")

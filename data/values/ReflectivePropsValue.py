@@ -20,3 +20,6 @@ class ReflectivePropsValue(BaseReflectiveProps):
         if isisntance(other, ReflectivePropsValue):
             return torch.equal(self.value, other.get_value())
         return False
+
+    def __str__(self):
+        return f"Reflective Props Value object:\n\tvalue: {self.value.squeeze().cpu().detach().numpy()}"
