@@ -92,6 +92,7 @@ class BoundedMLP(nn.Module):
 class RelaxedFeedForward(BaseTrainableRelaxedSolver):
     def __init__(self, dataloader: BaseDataloader, num_layers: int):
         super().__init__(dataloader)
+        self.dataloader = dataloader
         self.SCALING_FACTOR_THICKNESSES = 1.0e6
         self.SCALING_FACTOR_REFRACTIVE_INDICES = 0.1
         self.num_layers = num_layers
@@ -115,24 +116,26 @@ class RelaxedFeedForward(BaseTrainableRelaxedSolver):
         self.trainable_model.train()
         loss_scale = 1
         for epoch in range(num_epochs):
+            self.dataloader.next_epoch()
             self.optimiser.zero_grad()
             epoch_loss = torch.tensor(0.0, device = device)
-            for refs in self.dataloader:
+            for i, refs in enumerate(self.dataloader):
                 torch.cuda.empty_cache()
                 gc.collect()
 
                 refs = refs[0].float().to(device)
                 lower_bound, upper_bound = refs.chunk(2, dim = 1)
                 refs_obj = ReflectivePropsPattern(lower_bound, upper_bound)
+                # visualise(refs = refs_obj, filename = "from_training_loop")
 
                 coating = self.model_forward(refs)
                 preds = coating_to_reflective_props(coating)
                 loss = compute_loss(preds, refs_obj)
                 epoch_loss += loss
 
-            # if epoch == 0:
-            #     loss_scale = loss
-            # wandb.log({"loss": loss.item() / loss_scale})
+                # if epoch == 0:
+                #     loss_scale = loss
+                # wandb.log({"loss": loss.item() / loss_scale})
 
                 loss.backward()
                 self.trainable_model.net[2].weight.grad[:, :wavelengths.size()[0]] /= self.SCALING_FACTOR_THICKNESSES
@@ -140,6 +143,8 @@ class RelaxedFeedForward(BaseTrainableRelaxedSolver):
                 self.optimiser.step()
             if epoch % 1 == 0:
                 print(f"Loss in epoch {epoch + 1}: {epoch_loss.item()}")
+
+        torch.save(self.bounded_model, "data/models/relaxed_model.pt")
 
     def solve(self, target: ReflectivePropsPattern):
         self.trainable_model.eval()
