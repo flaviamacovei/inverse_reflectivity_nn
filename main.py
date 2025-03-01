@@ -17,15 +17,15 @@ def notify():
 
 
 if __name__ == "__main__":
-    num_layers = 6
+    num_layers = 13
 
     # file_input = FileInput()
     # file_input.read_from_csv("data/Neuschwanstein_target.csv")
     # pattern = file_input.to_reflective_props_pattern()
 
 
-    random_thicknesses = torch.rand((1, num_layers), device = device) * 1E-6
-    random_refractive_indices = (2.25 - 0.12) * torch.rand((1, num_layers), device = device) + 0.12
+    random_thicknesses = torch.rand((1, num_layers - 2), device = device) * 1E-6
+    random_refractive_indices = (2.25 - 0.12) * torch.rand((1, num_layers - 2), device = device) + 0.12
     random_refractive_indices_rounded = RefractiveIndex.round_tensor(random_refractive_indices)
     coating = Coating(random_thicknesses, random_refractive_indices_rounded)
     value = coating_to_reflective_props(coating)
@@ -35,10 +35,11 @@ if __name__ == "__main__":
     visualise(refs = pattern, filename = "original")
 
     prediction_engine = MLPBandB(num_layers)
+    # prediction_engine.load_relaxed_engine("data/models/relaxed_model.pt")
     prediction_engine.train_relaxed_engine()
     prediction = prediction_engine.predict(pattern)
 
-    print(f"real coating: {coating}")
+    # print(f"real coating: {coating}")
 
     print(f"Predicted coating: {prediction}")
 
