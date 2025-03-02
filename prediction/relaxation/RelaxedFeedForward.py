@@ -116,7 +116,7 @@ class RelaxedFeedForward(BaseTrainableRelaxedSolver):
 
     def train(self):
         self.trainable_model.train()
-        loss_scale = 1
+        loss_scale = None
         for epoch in range(CM().get('training.num_epochs')):
             self.dataloader.next_epoch()
             self.optimiser.zero_grad()
@@ -129,13 +129,14 @@ class RelaxedFeedForward(BaseTrainableRelaxedSolver):
                 epoch_loss += loss
 
                 if CM().get('wandb_log'):
-                    if epoch == 0:
+                    if not loss_scale:
                         loss_scale = loss
                     wandb.log({"loss": loss.item() / loss_scale})
 
                 loss.backward()
                 self.trainable_model.net[2].weight.grad[:, :CM().get('wavelengths').size()[0]] /= self.SCALING_FACTOR_THICKNESSES
                 self.trainable_model.net[2].weight.grad[:, CM().get('wavelengths').size()[0]:] /= self.SCALING_FACTOR_REFRACTIVE_INDICES
+
                 self.optimiser.step()
             if epoch % 1 == 0:
                 print(f"Loss in epoch {epoch + 1}: {epoch_loss.item()}")
