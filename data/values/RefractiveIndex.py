@@ -1,7 +1,7 @@
 import torch
 import sys
 sys.path.append(sys.path[0] + '/..')
-from config import device
+from utils.ConfigManager import ConfigManager as CM
 
 
 class RefractiveIndex(float):
@@ -22,7 +22,7 @@ class RefractiveIndex(float):
 
     @staticmethod
     def ceil_tensor(x: torch.Tensor):
-        return torch.tensor([RefractiveIndex.ceil(val) for val in x.flatten()], device = device).view(x.shape)
+        return torch.tensor([RefractiveIndex.ceil(val) for val in x.flatten()], device = CM().get('device')).view(x.shape)
 
     @staticmethod
     def floor(x: float):
@@ -30,7 +30,7 @@ class RefractiveIndex(float):
 
     @staticmethod
     def floor_tensor(x: torch.Tensor):
-        return torch.tensor([RefractiveIndex.floor(val) for val in x.flatten()], device = device).view(x.shape)
+        return torch.tensor([RefractiveIndex.floor(val) for val in x.flatten()], device = CM().get('device')).view(x.shape)
 
 
     @staticmethod
@@ -39,7 +39,7 @@ class RefractiveIndex(float):
 
     @staticmethod
     def round_tensor(x: torch.Tensor):
-        return torch.tensor([RefractiveIndex.round(val) for val in x.flatten()], device = device).view(x.shape)
+        return torch.tensor([RefractiveIndex.round(val) for val in x.flatten()], device = CM().get('device')).view(x.shape)
 
     def __eq__(self, other):
         if isisntance(other, RefractiveIndex):
@@ -48,4 +48,4 @@ class RefractiveIndex(float):
 
     @staticmethod
     def is_discrete(x: torch.Tensor):
-        return torch.all(torch.isin(x, torch.tensor(RefractiveIndex.VALUE_SPACE, device = device)))
+        return torch.all(torch.isin(x, torch.tensor(RefractiveIndex.VALUE_SPACE, device = CM().get('device'))))

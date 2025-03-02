@@ -6,11 +6,13 @@ seed: 0
 num_stacks: 1
 
 dataset_files:
-  - "complete_with_labels_50000.pt"
-  - "masked_with_labels_50000.pt"
+  - "complete_props_100.pt"
+  - "masked_props_100.pt"
+  - "explicit_props_100.pt"
 
-min_num_layers: 3
-max_num_layers: &max_layers 13
+layers:
+  min: 3
+  max: &max_layers 13
 
 wavelengths:
   start: 300.e-9
@@ -43,6 +45,6 @@ wandb:
   project: "inverse-mirrors-nn"
   config:
     architecture: "MLP"
-    learning_rate: *lr,
-    epochs: *epochs,
-    batch_size: *batch_size,
+    learning_rate: *lr
+    epochs: *epochs
+    batch_size: *batch_size

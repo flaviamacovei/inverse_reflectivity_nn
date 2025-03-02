@@ -3,7 +3,7 @@ from torch.utils.data import TensorDataset
 from CompletePropsGenerator import CompletePropsGenerator
 import sys
 sys.path.append(sys.path[0] + "/..")
-from config import device, max_num_layers
+from utils.ConfigManager import ConfigManager as CM
 
 
 def generate_dataset(num_points):
@@ -14,8 +14,8 @@ def generate_dataset(num_points):
     for (reflective_props, coating) in train_set_generator.generate():
         feature_tensor = torch.cat((reflective_props.get_lower_bound(), reflective_props.get_upper_bound()), dim = 1).squeeze()
         values = torch.cat((coating.get_thicknesses(), coating.get_refractive_indices()), dim = 0).squeeze()
-        label_tensor = torch.zeros((max_num_layers * 2), device = device).float()
-        label_tensor.put_(torch.tensor(range(values.shape[0]), device = device), values)
+        label_tensor = torch.zeros((CM().get('layers.max') * 2), device = CM().get('device')).float()
+        label_tensor.put_(torch.tensor(range(values.shape[0]), device = CM().get('device')), values)
         feature_tensors.append(feature_tensor)
         label_tensors.append(label_tensor)
 

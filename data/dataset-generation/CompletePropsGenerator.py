@@ -5,7 +5,6 @@ sys.path.append(sys.path[0] + '/../..')
 from data.values.Coating import Coating
 from data.values.ReflectivePropsPattern import ReflectivePropsPattern
 from forward.forward_tmm import coating_to_reflective_props
-from config import device
 
 class CompletePropsGenerator(BaseGenerator):
     def __init__(self, num_points):

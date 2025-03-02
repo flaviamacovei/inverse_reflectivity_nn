@@ -4,7 +4,7 @@ import random
 import sys
 sys.path.append(sys.path[0] + '/../..')
 from data.values.ReflectivePropsPattern import ReflectivePropsPattern
-from config import device, steps
+from utils.ConfigManager import ConfigManager as CM
 
 class ExplicitPropsGenerator(BaseGenerator):
     def __init__(self, num_points):
@@ -20,11 +20,11 @@ class ExplicitPropsGenerator(BaseGenerator):
 
     def make_point(self):
         num_regions = random.randint(self.MIN_NUM_REGIONS, self.MAX_NUM_REGIONS)
-        region_indices = sorted(random.sample(range(steps), num_regions * 2))
+        region_indices = sorted(random.sample(range(CM().get('wavelengths').size()[0]), num_regions * 2))
         values = [self.generate_random_value() for _ in range(num_regions)]
 
-        lower_bound = torch.zeros((1, steps), device = device)
-        upper_bound = torch.ones((1, steps), device = device)
+        lower_bound = torch.zeros((1, CM().get('wavelengths').size()[0]), device = CM().get('device'))
+        upper_bound = torch.ones((1, CM().get('wavelengths').size()[0]), device = CM().get('device'))
 
         for i in range(num_regions):
             lower_bound[:, region_indices[i * 2]:region_indices[i * 2 + 1]] = values[i]

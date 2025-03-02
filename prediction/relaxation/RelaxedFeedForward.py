@@ -12,25 +12,25 @@ from data.values.Coating import Coating
 from forward.forward_tmm import coating_to_reflective_props
 from evaluation.loss import compute_loss
 from data.values.ReflectivePropsPattern import ReflectivePropsPattern
-from config import wavelengths, device, learning_rate, num_epochs, thicknesses_bounds, refractive_indices_bounds
+from utils.ConfigManager import ConfigManager as CM
 from ui.visualise import visualise
 
 class TrainableMLP(nn.Module):
     def __init__(self):
         super().__init__()
-        in_dim = 2 * wavelengths.size()[0]
+        in_dim = 2 * CM().get('wavelengths').size()[0]
         layer_1_features = 128
         layer_2_features = 512
         layer_3_features = 64
         self.output_size = 20
         self.net = nn.Sequential(
-            nn.Linear(in_dim, layer_1_features, device = device),
+            nn.Linear(in_dim, layer_1_features, device = CM().get('device')),
             nn.ReLU(),
-            nn.Linear(layer_1_features, layer_2_features, device = device),
+            nn.Linear(layer_1_features, layer_2_features, device = CM().get('device')),
             nn.ReLU(),
-            nn.Linear(layer_2_features, layer_3_features, device = device),
+            nn.Linear(layer_2_features, layer_3_features, device = CM().get('device')),
             nn.ReLU(),
-            nn.Linear(layer_3_features, self.output_size, device = device)
+            nn.Linear(layer_3_features, self.output_size, device = CM().get('device'))
         )
 
     def forward(self, x):
@@ -46,10 +46,10 @@ class BoundedMLP(nn.Module):
 
         self.trainable_model = trainable_model
         pretreated_size = self.trainable_model.get_output_size()
-        self.linear = nn.Linear(pretreated_size, self.output_size, device = device)
+        self.linear = nn.Linear(pretreated_size, self.output_size, device = CM().get('device'))
 
-        self.lower_bound = torch.zeros((1, self.output_size), device = device)
-        self.upper_bound = torch.ones((1, self.output_size), device = device)
+        self.lower_bound = torch.zeros((1, self.output_size), device = CM().get('device'))
+        self.upper_bound = torch.ones((1, self.output_size), device = CM().get('device'))
 
     def forward(self, x):
         pretreated_result = self.trainable_model(x)
@@ -93,33 +93,33 @@ class RelaxedFeedForward(BaseTrainableRelaxedSolver):
         self.SCALING_FACTOR_REFRACTIVE_INDICES = 0.1
         self.num_layers = num_layers
 
-        self.trainable_model = TrainableMLP().to(device)
-        self.bounded_model = BoundedMLP(self.trainable_model, 2 * num_layers).to(device)
+        self.trainable_model = TrainableMLP().to(CM().get('device'))
+        self.bounded_model = BoundedMLP(self.trainable_model, 2 * num_layers).to(CM().get('device'))
 
-        thicknesses_lower_bound = torch.ones((1, num_layers), device=device) * thicknesses_bounds[0]
-        thicknesses_upper_bound = torch.ones((1, num_layers), device=device) * thicknesses_bounds[1]
-        refractive_index_lower_bound = torch.ones((1, num_layers), device=device) * refractive_indices_bounds[0]
-        refractive_index_upper_bound = torch.ones((1, num_layers), device=device) * refractive_indices_bounds[1]
+        thicknesses_lower_bound = torch.ones((1, num_layers), device=CM().get('device')) * CM().get('thicknesses_bounds.min')
+        thicknesses_upper_bound = torch.ones((1, num_layers), device=CM().get('device')) * CM().get('thicknesses_bounds.max')
+        refractive_index_lower_bound = torch.ones((1, num_layers), device=CM().get('device')) * CM().get('refractive_indices_bounds.min')
+        refractive_index_upper_bound = torch.ones((1, num_layers), device=CM().get('device')) * CM().get('refractive_indices_bounds.max')
         lower_bound = torch.cat((thicknesses_lower_bound * self.SCALING_FACTOR_THICKNESSES, refractive_index_lower_bound * self.SCALING_FACTOR_REFRACTIVE_INDICES), dim = 1)
         upper_bound = torch.cat((thicknesses_upper_bound * self.SCALING_FACTOR_THICKNESSES, refractive_index_upper_bound * self.SCALING_FACTOR_REFRACTIVE_INDICES), dim = 1)
 
         self.bounded_model.set_lower_bound(lower_bound)
         self.bounded_model.set_upper_bound(upper_bound)
 
-        self.optimiser = optim.Adam(self.bounded_model.parameters(), lr = learning_rate)
+        self.optimiser = optim.Adam(self.bounded_model.parameters(), lr = CM().get('training.learning_rate'))
 
     def train(self):
         self.trainable_model.train()
         loss_scale = 1
-        for epoch in range(num_epochs):
+        for epoch in range(CM().get('training.num_epochs')):
             self.dataloader.next_epoch()
             self.optimiser.zero_grad()
-            epoch_loss = torch.tensor(0.0, device = device)
+            epoch_loss = torch.tensor(0.0, device = CM().get('device'))
             for batch in self.dataloader:
                 torch.cuda.empty_cache()
                 gc.collect()
 
-                loss = self.compute_batch_loss_labels(batch)
+                loss = self.compute_batch_loss_no_labels(batch)
                 epoch_loss += loss
 
                 if epoch == 0:
@@ -127,8 +127,8 @@ class RelaxedFeedForward(BaseTrainableRelaxedSolver):
                 wandb.log({"loss": loss.item() / loss_scale})
 
                 loss.backward()
-                self.trainable_model.net[2].weight.grad[:, :wavelengths.size()[0]] /= self.SCALING_FACTOR_THICKNESSES
-                self.trainable_model.net[2].weight.grad[:, wavelengths.size()[0]:] /= self.SCALING_FACTOR_REFRACTIVE_INDICES
+                self.trainable_model.net[2].weight.grad[:, :CM().get('wavelengths').size()[0]] /= self.SCALING_FACTOR_THICKNESSES
+                self.trainable_model.net[2].weight.grad[:, CM().get('wavelengths').size()[0]:] /= self.SCALING_FACTOR_REFRACTIVE_INDICES
                 self.optimiser.step()
             if epoch % 1 == 0:
                 print(f"Loss in epoch {epoch + 1}: {epoch_loss.item()}")
@@ -147,14 +147,14 @@ class RelaxedFeedForward(BaseTrainableRelaxedSolver):
 
     def compute_batch_loss_labels(self, batch: (torch.Tensor, torch.Tensor)):
         pattern, labels = batch
-        pattern = pattern.float().to(device)
-        labels = labels.float().to(device)
+        pattern = pattern.float().to(CM().get('device'))
+        labels = labels.float().to(CM().get('device'))
         coating = self.scaled_forward(pattern)
         preds = torch.cat((coating.get_thicknesses(), coating.get_refractive_indices()), dim=1)
         return torch.sum((preds - labels)**2)**0.5
 
     def compute_batch_loss_no_labels(self, batch: torch.Tensor):
-        pattern = batch[0].float().to(device)
+        pattern = batch[0].float().to(CM().get('device'))
         lower_bound, upper_bound = pattern.chunk(2, dim=1)
         refs_obj = ReflectivePropsPattern(lower_bound, upper_bound)
         coating = self.scaled_forward(pattern)

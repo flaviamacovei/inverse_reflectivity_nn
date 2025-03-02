@@ -8,7 +8,7 @@ from data.values.ReflectivePropsPattern import ReflectivePropsPattern
 from data.values.Coating import Coating
 from forward.forward_tmm import coating_to_reflective_props
 from evaluation.loss import compute_loss
-from config import device
+from utils.ConfigManager import ConfigManager as CM
 
 class GradientSolver(BaseRelaxedSolver):
     def __init__(self, num_layers: int):
@@ -76,7 +76,7 @@ class GradientSolver(BaseRelaxedSolver):
 
     def split_params(self, params):
         refractive_indices = torch.tensor(params[:np.prod(self.num_layers)].reshape(self.num_layers),
-                                          dtype=torch.float64, device=device, requires_grad=True)
+                                          dtype=torch.float64, device=CM().get('device'), requires_grad=True)
         thicknesses = torch.tensor(params[np.prod(self.num_layers):].reshape(self.num_layers), dtype=torch.float64,
-                                   device=device, requires_grad=True)
+                                   device=CM().get('device'), requires_grad=True)
         return refractive_indices, thicknesses

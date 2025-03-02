@@ -1,8 +1,8 @@
 from data.dataloaders.BaseDataloader import BaseDataloader
-from config import tolerance
 import torch
 from data.values.Coating import Coating
 from forward.forward_tmm import coating_to_reflective_props
+from utils.ConfigManager import ConfigManager as CM
 
 
 class RandomDataloader(BaseDataloader):
@@ -13,7 +13,7 @@ class RandomDataloader(BaseDataloader):
         self.num_points = num_points
         self.MIN_THICKNESS = 1.0e-08
         self.MAX_THICKNESS = 1.0e-07
-        self.TOLERANCE = tolerance
+        self.TOLERANCE = CM().get('tolerance')
 
     def load_data(self):
         self.dataset = list()

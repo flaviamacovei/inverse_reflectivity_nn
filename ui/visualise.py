@@ -6,17 +6,15 @@ import sys
 sys.path.append(sys.path[0] + '/..')
 from data.values.ReflectivePropsPattern import ReflectivePropsPattern
 from data.values.ReflectivePropsValue import ReflectivePropsValue
-from config import wavelengths
+from utils.ConfigManager import ConfigManager as CM
 
 
 def visualise_spline(preds: ReflectivePropsValue = None, refs: ReflectivePropsPattern = None, filename: str = "visualisation"):
     assert not preds or len(preds.get_value().shape) == 2
     assert not refs or len(refs.get_lower_bound().shape) == 2
-
-    global wavelengths
     plt.clf()
 
-    wavelengths_cpu = wavelengths.to("cpu")
+    wavelengths_cpu = CM().get('wavelengths').to("cpu")
 
     wavelengths_spline = torch.linspace(wavelengths_cpu[0], wavelengths_cpu[-1], 1000)
 
@@ -46,10 +44,9 @@ def visualise_spline(preds: ReflectivePropsValue = None, refs: ReflectivePropsPa
 def visualise(preds: ReflectivePropsValue = None, refs: ReflectivePropsPattern = None, filename: str = "visualisation"):
     assert not preds or len(preds.get_value().shape) == 2
     assert not refs or len(refs.get_lower_bound().shape) == 2
-    global wavelengths
     plt.clf()
 
-    wavelengths_cpu = wavelengths.to("cpu")
+    wavelengths_cpu = CM().get('wavelengths').to("cpu")
 
     if refs:
         refs = refs.to("cpu")

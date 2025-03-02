@@ -6,7 +6,6 @@ from prediction.discretisation.BaseDiscretiser import BaseDiscretiser
 from data.values.ReflectivePropsPattern import ReflectivePropsPattern
 from data.values.Coating import Coating
 from data.values.RefractiveIndex import RefractiveIndex
-from config import device
 from ui.visualise import visualise
 from forward.forward_tmm import coating_to_reflective_props
 

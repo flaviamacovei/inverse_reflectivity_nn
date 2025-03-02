@@ -6,7 +6,7 @@ import sys
 sys.path.append(sys.path[0] + '/..')
 from data.values.Region import Region
 from data.values.ReflectivePropsPattern import ReflectivePropsPattern
-from config import wavelengths, device, tolerance
+from utils.ConfigManager import ConfigManager as CM
 
 class UserInput():
     def __init__(self):
@@ -16,7 +16,7 @@ class UserInput():
     def append_action(self, region: Region):
         assert region, "Region must not be None."
         assert self.start_wl <= region.get_start_wl() and self.end_wl >= region.get_end_wl(), "Region must be within frame."
-        assert np.searchsorted(wavelengths, region.get_start_wl()) == region.get_start_wl() and np.searchsorted(wavelengths, region.get_end_wl()) == region.get_end_wl(), "Region must be interval of frame."
+        assert np.searchsorted(CM().get('wavelengths'), region.get_start_wl()) == region.get_start_wl() and np.searchsorted(CM().get('wavelengths'), region.get_end_wl()) == region.get_end_wl(), "Region must be interval of frame."
         # assert (region.get_start_wl() - self.start_wl) % self.step_length == 0 and (region.get_end_wl() - self.end_wl) % self.step_length == 0, "Region must be multiple of step length."
         for existing_region in self.regions:
             if not (
@@ -67,14 +67,14 @@ class UserInput():
         self.read_regions()
 
     def to_reflective_props_pattern(self):
-        lower_bound = torch.zeros(wavelengths.size()[0], device = device)
-        upper_bound = torch.ones(wavelengths.size()[0], device = device)
+        lower_bound = torch.zeros(wavelengths.size()[0], device = CM().get('device'))
+        upper_bound = torch.ones(wavelengths.size()[0], device = CM().get('device'))
 
         for region in self.regions:
             lower_bound[region.get_start_wl() - wavelengths[0]:region.get_end_wl() - wavelengths[0]] = region.get_value()
             upper_bound[region.get_start_wl() - wavelengths[0]:region.get_end_wl() - wavelengths[0]] = region.get_value()
 
-        lower_bound = torch.clamp(lower_bound - tolerance / 2, 0, 1)
-        upper_bound = torch.clamp(upper_bound + tolerance / 2, 0, 1)
+        lower_bound = torch.clamp(lower_bound - CM().get('tolerance') / 2, 0, 1)
+        upper_bound = torch.clamp(upper_bound + CM().get('tolerance') / 2, 0, 1)
 
         return ReflectivePropsPattern(lower_bound, upper_bound)

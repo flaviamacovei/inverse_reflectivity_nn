@@ -2,7 +2,7 @@ import torch
 import sys
 sys.path.append(sys.path[0] + '/..')
 from data.values.ReflectivePropsPattern import ReflectivePropsPattern
-from config import wavelengths, tolerance, device
+from utils.ConfigManager import ConfigManager as CM
 
 class FileInput():
     def __init__(self):
@@ -20,10 +20,10 @@ class FileInput():
         self.values = [float(line.split(",")[1]) / 100 for line in lines]
 
     def to_reflective_props_pattern(self):
-        lower_bound = torch.tensor(self.values, device = device).unsqueeze(0)
+        lower_bound = torch.tensor(self.values, device = CM().get('device')).unsqueeze(0)
         upper_bound = lower_bound.clone()
 
-        lower_bound = torch.clamp(lower_bound - tolerance / 2, 0, 1)
-        upper_bound = torch.clamp(upper_bound + tolerance / 2, 0, 1)
+        lower_bound = torch.clamp(lower_bound - CM().get('tolerance') / 2, 0, 1)
+        upper_bound = torch.clamp(upper_bound + CM().get('tolerance') / 2, 0, 1)
 
         return ReflectivePropsPattern(lower_bound, upper_bound)
