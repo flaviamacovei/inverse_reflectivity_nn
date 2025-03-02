@@ -11,8 +11,8 @@ from data.dataloaders.DynamicDataloader import DynamicDataloader
 
 class MLPBandB(BasePredictionEngine):
     def __init__(self, num_layers):
-        switch_condition = lambda epoch: epoch % max(1, num_epochs // 3) == 0
-        dataloader = DynamicDataloader(batch_size = batch_size, shuffle = False, switch_condition = switch_condition)
+        switch_condition = lambda epoch: epoch % max(1, num_epochs // 4) == 0
+        dataloader = DynamicDataloader(batch_size = batch_size, shuffle = False)
         dataloader.load_data(dataset_files)
         self.relaxed_solver = RelaxedFeedForward(dataloader, num_layers)
         self.discretiser = BranchAndBound(self.relaxed_solver)

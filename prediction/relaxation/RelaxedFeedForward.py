@@ -5,9 +5,6 @@ import torch.functional as F
 import wandb
 import gc
 import sys
-
-from test import refractive_indices
-
 sys.path.append(sys.path[0] + '/..')
 from prediction.relaxation.BaseTrainableRelaxedSolver import BaseTrainableRelaxedSolver
 from data.dataloaders.BaseDataloader import BaseDataloader
@@ -17,6 +14,7 @@ from evaluation.loss import compute_loss
 from data.values.ReflectivePropsPattern import ReflectivePropsPattern
 from config import wavelengths, device, learning_rate, num_epochs, thicknesses_bounds, refractive_indices_bounds
 from ui.visualise import visualise
+
 
 class TrainableMLP(nn.Module):
     def __init__(self):
@@ -133,9 +131,9 @@ class RelaxedFeedForward(BaseTrainableRelaxedSolver):
                 loss = compute_loss(preds, refs_obj)
                 epoch_loss += loss
 
-                # if epoch == 0:
-                #     loss_scale = loss
-                # wandb.log({"loss": loss.item() / loss_scale})
+                if epoch == 0:
+                    loss_scale = loss
+                wandb.log({"loss": loss.item() / loss_scale})
 
                 loss.backward()
                 self.trainable_model.net[2].weight.grad[:, :wavelengths.size()[0]] /= self.SCALING_FACTOR_THICKNESSES
@@ -144,7 +142,7 @@ class RelaxedFeedForward(BaseTrainableRelaxedSolver):
             if epoch % 1 == 0:
                 print(f"Loss in epoch {epoch + 1}: {epoch_loss.item()}")
 
-        torch.save(self.bounded_model, "data/models/relaxed_model.pt")
+        torch.save(self.bounded_model, "data/models/no_labels_3_datasets.pt")
 
     def solve(self, target: ReflectivePropsPattern):
         self.trainable_model.eval()

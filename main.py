@@ -39,7 +39,7 @@ if __name__ == "__main__":
     prediction_engine.train_relaxed_engine()
     prediction = prediction_engine.predict(pattern)
 
-    # print(f"real coating: {coating}")
+    print(f"real coating: {coating}")
 
     print(f"Predicted coating: {prediction}")
 
