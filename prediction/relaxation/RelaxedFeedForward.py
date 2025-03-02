@@ -14,6 +14,7 @@ from evaluation.loss import match
 from data.values.ReflectivePropsPattern import ReflectivePropsPattern
 from utils.ConfigManager import ConfigManager as CM
 from ui.visualise import visualise
+from utils.os_utils import get_unique_filename
 
 class TrainableMLP(nn.Module):
     def __init__(self):
@@ -140,6 +141,9 @@ class RelaxedFeedForward(BaseTrainableRelaxedSolver):
                 self.optimiser.step()
             if epoch % 1 == 0:
                 print(f"Loss in epoch {epoch + 1}: {epoch_loss.item()}")
+        model_filename = f"out/models/model_{CM().get('training.loss_function')}_{'switch' if CM().get('training.dataset_switching') else 'no-switch'}_{CM().get('wavelengths').size()[0]}.pt"
+        torch.save(self.bounded_model, get_unique_filename(model_filename))
+
 
     def solve(self, target: ReflectivePropsPattern):
         self.trainable_model.eval()
