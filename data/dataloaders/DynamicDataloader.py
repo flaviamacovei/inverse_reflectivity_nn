@@ -7,7 +7,7 @@ sys.path.append(sys.path[0] + '/../..')
 from data.dataloaders.BaseDataloader import BaseDataloader
 
 class DynamicDataloader(BaseDataloader):
-    def __init__(self, batch_size: int, shuffle: bool = True, switch_condition: Callable[[int], bool] = None):
+    def __init__(self, batch_size: int, shuffle: bool = True, switch_condition: Callable[[int], bool] = lambda epoch: False):
         super().__init__(batch_size, shuffle)
         self.dataloaders = []
         self.switch_condition = switch_condition
@@ -24,9 +24,10 @@ class DynamicDataloader(BaseDataloader):
         """
         Call this method at the beginning of each epoch
         """
-        if self.switch_condition is not None and self.switch_condition(self.epoch) and self.current_index < len(self.dataloaders) - 1:
-            self.current_index += 1
         self.epoch += 1
+        if self.switch_condition(self.epoch) and self.current_index < len(self.dataloaders) - 1:
+            self.current_index += 1
+            print("On dataloader " + str(self.current_index))
 
     def __iter__(self):
         return iter(self.dataloaders[self.current_index])
