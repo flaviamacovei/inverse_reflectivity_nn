@@ -33,10 +33,11 @@ if __name__ == "__main__":
     # file_input.read_from_csv("data/Neuschwanstein_target.csv")
     # pattern = file_input.to_reflective_props_pattern()
 
-    wandb.init(
-        project = CM().get('wandb.project'),
-        config = CM().get('wandb.config')
-    )
+    if CM().get('wandb_log'):
+        wandb.init(
+            project = CM().get('wandb.project'),
+            config = CM().get('wandb.config')
+        )
 
     pattern = make_random_pattern()
     visualise(refs = pattern, filename = "original")

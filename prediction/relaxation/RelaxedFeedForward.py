@@ -128,9 +128,10 @@ class RelaxedFeedForward(BaseTrainableRelaxedSolver):
                 loss = self.compute_loss(batch)
                 epoch_loss += loss
 
-                if epoch == 0:
-                    loss_scale = loss
-                wandb.log({"loss": loss.item() / loss_scale})
+                if CM().get('wandb_log'):
+                    if epoch == 0:
+                        loss_scale = loss
+                    wandb.log({"loss": loss.item() / loss_scale})
 
                 loss.backward()
                 self.trainable_model.net[2].weight.grad[:, :CM().get('wavelengths').size()[0]] /= self.SCALING_FACTOR_THICKNESSES

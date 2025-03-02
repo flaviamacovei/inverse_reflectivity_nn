@@ -38,6 +38,8 @@ training:
   batch_size: &batch_size 128
   loss_function: "free" # or: "guided"
 
+wandb_log: true
+
 wandb:
   project: "inverse-mirrors-nn"
   config:
