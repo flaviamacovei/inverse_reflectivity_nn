@@ -7,7 +7,7 @@ from prediction.relaxation.BaseRelaxedSolver import BaseRelaxedSolver
 from data.values.ReflectivePropsPattern import ReflectivePropsPattern
 from data.values.TreeNode import TreeNode
 from forward.forward_tmm import coating_to_reflective_props
-from evaluation.loss import compute_loss
+from evaluation.loss import match
 from data.values.RefractiveIndex import RefractiveIndex
 from data.values.Coating import Coating
 from ui.visualise import visualise
@@ -70,7 +70,7 @@ class BranchAndBound(BaseDiscretiser):
         self.relaxed_solver.set_upper_bound(upper_bound)
         relaxed_solution = self.relaxed_solver.solve(target)
         preds = coating_to_reflective_props(relaxed_solution)
-        error = compute_loss(preds, target)
+        error = match(preds, target)
         return TreeNode(relaxed_solution, error, lower_bound, upper_bound)
 
     def select_branching_index(self, refractive_indices: torch.Tensor):

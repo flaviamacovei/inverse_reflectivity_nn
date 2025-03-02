@@ -10,7 +10,7 @@ from prediction.relaxation.BaseTrainableRelaxedSolver import BaseTrainableRelaxe
 from data.dataloaders.BaseDataloader import BaseDataloader
 from data.values.Coating import Coating
 from forward.forward_tmm import coating_to_reflective_props
-from evaluation.loss import compute_loss
+from evaluation.loss import match
 from data.values.ReflectivePropsPattern import ReflectivePropsPattern
 from utils.ConfigManager import ConfigManager as CM
 from ui.visualise import visualise
@@ -93,6 +93,12 @@ class RelaxedFeedForward(BaseTrainableRelaxedSolver):
         self.SCALING_FACTOR_REFRACTIVE_INDICES = 0.1
         self.num_layers = num_layers
 
+        self.loss_functions = {
+            "free": self.compute_loss_free,
+            "guided": self.compute_loss_guided
+        }
+        self.compute_loss = self.loss_functions.get(CM().get('training.loss_function'))
+
         self.trainable_model = TrainableMLP().to(CM().get('device'))
         self.bounded_model = BoundedMLP(self.trainable_model, 2 * num_layers).to(CM().get('device'))
 
@@ -119,7 +125,7 @@ class RelaxedFeedForward(BaseTrainableRelaxedSolver):
                 torch.cuda.empty_cache()
                 gc.collect()
 
-                loss = self.compute_batch_loss_no_labels(batch)
+                loss = self.compute_loss(batch)
                 epoch_loss += loss
 
                 if epoch == 0:
@@ -145,7 +151,7 @@ class RelaxedFeedForward(BaseTrainableRelaxedSolver):
         refractive_indices = refractive_indices / self.SCALING_FACTOR_REFRACTIVE_INDICES
         return Coating(thicknesses, refractive_indices)
 
-    def compute_batch_loss_labels(self, batch: (torch.Tensor, torch.Tensor)):
+    def compute_loss_guided(self, batch: (torch.Tensor, torch.Tensor)):
         pattern, labels = batch
         pattern = pattern.float().to(CM().get('device'))
         labels = labels.float().to(CM().get('device'))
@@ -153,13 +159,13 @@ class RelaxedFeedForward(BaseTrainableRelaxedSolver):
         preds = torch.cat((coating.get_thicknesses(), coating.get_refractive_indices()), dim=1)
         return torch.sum((preds - labels)**2)**0.5
 
-    def compute_batch_loss_no_labels(self, batch: torch.Tensor):
+    def compute_loss_free(self, batch: torch.Tensor):
         pattern = batch[0].float().to(CM().get('device'))
         lower_bound, upper_bound = pattern.chunk(2, dim=1)
         refs_obj = ReflectivePropsPattern(lower_bound, upper_bound)
         coating = self.scaled_forward(pattern)
         preds = coating_to_reflective_props(coating)
-        return compute_loss(preds, refs_obj)
+        return match(preds, refs_obj)
 
     def set_lower_bound(self, lower_bound: torch.Tensor):
         thicknesses_lower_bound = lower_bound[:, :self.num_layers] * self.SCALING_FACTOR_THICKNESSES

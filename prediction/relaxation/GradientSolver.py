@@ -7,7 +7,7 @@ from prediction.relaxation.BaseRelaxedSolver import BaseRelaxedSolver
 from data.values.ReflectivePropsPattern import ReflectivePropsPattern
 from data.values.Coating import Coating
 from forward.forward_tmm import coating_to_reflective_props
-from evaluation.loss import compute_loss
+from evaluation.loss import match
 from utils.ConfigManager import ConfigManager as CM
 
 class GradientSolver(BaseRelaxedSolver):
@@ -46,7 +46,7 @@ class GradientSolver(BaseRelaxedSolver):
         thicknesses_scaled = thicknesses / self.SCALING_FACTOR
         coating = Coating(thicknesses_scaled, refractive_indices)
         preds = coating_to_reflective_props(coating)
-        loss = compute_loss(preds, refs)
+        loss = match(preds, refs)
 
         loss.backward(retain_graph = True)
 

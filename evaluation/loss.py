@@ -5,7 +5,7 @@ from data.values.ReflectivePropsPattern import ReflectivePropsPattern
 from data.values.ReflectivePropsValue import ReflectivePropsValue
 
 
-def compute_loss(input: ReflectivePropsValue, target: ReflectivePropsPattern):
+def match(input: ReflectivePropsValue, target: ReflectivePropsPattern):
     upper_error = input.get_value() - target.get_upper_bound()
     lower_error = target.get_lower_bound() - input.get_value()
 

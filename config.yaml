@@ -1,14 +1,10 @@
-# config.yaml
 device: 'auto'
 
 seed: 0
 
 num_stacks: 1
 
-dataset_files:
-  - "complete_props_100.pt"
-  - "masked_props_100.pt"
-  - "explicit_props_100.pt"
+dataset_size: 100
 
 layers:
   min: 3
@@ -40,6 +36,7 @@ training:
   learning_rate: &lr 0.001
   num_epochs: &epochs 60
   batch_size: &batch_size 128
+  loss_function: "free" # or: "guided"
 
 wandb:
   project: "inverse-mirrors-nn"
