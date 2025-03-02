@@ -11,6 +11,7 @@ from evaluation.loss import match
 from data.values.RefractiveIndex import RefractiveIndex
 from data.values.Coating import Coating
 from ui.visualise import visualise
+from utils.ConfigManager import ConfigManager as CM
 
 class BranchAndBound(BaseDiscretiser):
     def __init__(self, relaxed_solver: BaseRelaxedSolver):
@@ -22,10 +23,10 @@ class BranchAndBound(BaseDiscretiser):
         visualise(value, target, "before_rounding")
         max_error = float("Inf")
         optimum = None
-        max_iter = 300
+        iteration = 0
         while len(solution_tree) > 0:
-            if max_iter % (max(max_iter // 10, 1)) == 0:
-                print(max_iter)
+            if iteration % max(1, CM.get('branch_and_bound.max_iter') // 10) == 0:
+                print(iteration)
 
             current_node = solution_tree.pop()
             refractive_indices = current_node.get_coating().get_refractive_indices()

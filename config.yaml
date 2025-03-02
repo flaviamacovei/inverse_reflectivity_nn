@@ -38,6 +38,9 @@ training:
   dataset_switching: false
   dataset_size: 100
 
+branch_and_bound:
+  max_iter: 300
+
 wandb_log: false
 
 wandb:
