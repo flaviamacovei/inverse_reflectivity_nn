@@ -90,106 +90,58 @@ class BoundedMLP(nn.Module):
 class RelaxedFeedForward(BaseTrainableRelaxedSolver):
     def __init__(self, dataloader: BaseDataloader, num_layers: int):
         super().__init__(dataloader)
-        self.SCALING_FACTOR_THICKNESSES = 1.0e6
-        self.SCALING_FACTOR_REFRACTIVE_INDICES = 0.1
+        self.trainable_model = TrainableMLP().to(CM().get('device'))
+        self.model = BoundedMLP(self.trainable_model, 2 * num_layers).to(CM().get('device'))
+
         self.num_layers = num_layers
 
-        self.loss_functions = {
-            "free": self.compute_loss_free,
-            "guided": self.compute_loss_guided
-        }
-        self.compute_loss = self.loss_functions.get(CM().get('training.loss_function'))
+        thicknesses_lower_bound = torch.ones((1, num_layers), device=CM().get('device')) * CM().get(
+            'thicknesses_bounds.min')
+        thicknesses_upper_bound = torch.ones((1, num_layers), device=CM().get('device')) * CM().get(
+            'thicknesses_bounds.max')
+        refractive_index_lower_bound = torch.ones((1, num_layers), device=CM().get('device')) * CM().get(
+            'refractive_indices_bounds.min')
+        refractive_index_upper_bound = torch.ones((1, num_layers), device=CM().get('device')) * CM().get(
+            'refractive_indices_bounds.max')
+        lower_bound = torch.cat((thicknesses_lower_bound * self.SCALING_FACTOR_THICKNESSES,
+                                 refractive_index_lower_bound * self.SCALING_FACTOR_REFRACTIVE_INDICES), dim=1)
+        upper_bound = torch.cat((thicknesses_upper_bound * self.SCALING_FACTOR_THICKNESSES,
+                                 refractive_index_upper_bound * self.SCALING_FACTOR_REFRACTIVE_INDICES), dim=1)
 
-        self.trainable_model = TrainableMLP().to(CM().get('device'))
-        self.bounded_model = BoundedMLP(self.trainable_model, 2 * num_layers).to(CM().get('device'))
+        self.model.set_lower_bound(lower_bound)
+        self.model.set_upper_bound(upper_bound)
 
-        thicknesses_lower_bound = torch.ones((1, num_layers), device=CM().get('device')) * CM().get('thicknesses_bounds.min')
-        thicknesses_upper_bound = torch.ones((1, num_layers), device=CM().get('device')) * CM().get('thicknesses_bounds.max')
-        refractive_index_lower_bound = torch.ones((1, num_layers), device=CM().get('device')) * CM().get('refractive_indices_bounds.min')
-        refractive_index_upper_bound = torch.ones((1, num_layers), device=CM().get('device')) * CM().get('refractive_indices_bounds.max')
-        lower_bound = torch.cat((thicknesses_lower_bound * self.SCALING_FACTOR_THICKNESSES, refractive_index_lower_bound * self.SCALING_FACTOR_REFRACTIVE_INDICES), dim = 1)
-        upper_bound = torch.cat((thicknesses_upper_bound * self.SCALING_FACTOR_THICKNESSES, refractive_index_upper_bound * self.SCALING_FACTOR_REFRACTIVE_INDICES), dim = 1)
-
-        self.bounded_model.set_lower_bound(lower_bound)
-        self.bounded_model.set_upper_bound(upper_bound)
-
-        self.optimiser = optim.Adam(self.bounded_model.parameters(), lr = CM().get('training.learning_rate'))
-
-    def train(self):
-        self.trainable_model.train()
-        loss_scale = None
-        for epoch in range(CM().get('training.num_epochs')):
-            self.dataloader.next_epoch()
-            self.optimiser.zero_grad()
-            epoch_loss = torch.tensor(0.0, device = CM().get('device'))
-            for batch in self.dataloader:
-                torch.cuda.empty_cache()
-                gc.collect()
-
-                loss = self.compute_loss(batch)
-                epoch_loss += loss
-
-                if CM().get('wandb_log'):
-                    if not loss_scale:
-                        loss_scale = loss
-                    wandb.log({"loss": loss.item() / loss_scale})
-
-                loss.backward()
-                self.trainable_model.net[2].weight.grad[:, :CM().get('wavelengths').size()[0]] /= self.SCALING_FACTOR_THICKNESSES
-                self.trainable_model.net[2].weight.grad[:, CM().get('wavelengths').size()[0]:] /= self.SCALING_FACTOR_REFRACTIVE_INDICES
-
-                self.optimiser.step()
-            if epoch % 1 == 0:
-                print(f"Loss in epoch {epoch + 1}: {epoch_loss.item()}")
-        model_filename = f"out/models/model_{CM().get('training.loss_function')}_{'switch' if CM().get('training.dataset_switching') else 'no-switch'}_{CM().get('wavelengths').size()[0]}.pt"
-        torch.save(self.bounded_model, get_unique_filename(model_filename))
-
-
-    def solve(self, target: ReflectivePropsPattern):
-        self.trainable_model.eval()
-        model_input = torch.cat((target.get_lower_bound(), target.get_upper_bound()), dim = 1)
-        return self.scaled_forward(model_input)
-
-    def scaled_forward(self, target: torch.Tensor):
-        coating_props = self.bounded_model(target)
-        thicknesses, refractive_indices = coating_props.chunk(2, dim = 1)
-        thicknesses = thicknesses / self.SCALING_FACTOR_THICKNESSES
-        refractive_indices = refractive_indices / self.SCALING_FACTOR_REFRACTIVE_INDICES
-        return Coating(thicknesses, refractive_indices)
-
-    def compute_loss_guided(self, batch: (torch.Tensor, torch.Tensor)):
-        pattern, labels = batch
-        pattern = pattern.float().to(CM().get('device'))
-        labels = labels.float().to(CM().get('device'))
-        coating = self.scaled_forward(pattern)
-        preds = torch.cat((coating.get_thicknesses(), coating.get_refractive_indices()), dim=1)
-        return torch.sum((preds - labels)**2)**0.5
-
-    def compute_loss_free(self, batch: torch.Tensor):
-        pattern = batch[0].float().to(CM().get('device'))
-        lower_bound, upper_bound = pattern.chunk(2, dim=1)
-        refs_obj = ReflectivePropsPattern(lower_bound, upper_bound)
-        coating = self.scaled_forward(pattern)
-        preds = coating_to_reflective_props(coating)
-        return match(preds, refs_obj)
+        self.initialise_opitimiser()
 
     def set_lower_bound(self, lower_bound: torch.Tensor):
         thicknesses_lower_bound = lower_bound[:, :self.num_layers] * self.SCALING_FACTOR_THICKNESSES
         refractive_indices_lower_bound = lower_bound[:, self.num_layers:] * self.SCALING_FACTOR_REFRACTIVE_INDICES
-        self.bounded_model.set_lower_bound(torch.cat((thicknesses_lower_bound, refractive_indices_lower_bound), dim = 1))
+        self.model.set_lower_bound(torch.cat((thicknesses_lower_bound, refractive_indices_lower_bound), dim = 1))
 
     def set_upper_bound(self, upper_bound: torch.Tensor):
         thicknesses_upper_bound = upper_bound[:, :self.num_layers] * self.SCALING_FACTOR_THICKNESSES
         refractive_indices_upper_bound = upper_bound[:, self.num_layers:] * self.SCALING_FACTOR_REFRACTIVE_INDICES
-        self.bounded_model.set_upper_bound(torch.cat((thicknesses_upper_bound, refractive_indices_upper_bound), dim = 1))
+        self.model.set_upper_bound(torch.cat((thicknesses_upper_bound, refractive_indices_upper_bound), dim = 1))
 
     def get_lower_bound(self):
-        thicknesses_lower_bound = self.bounded_model.get_lower_bound()[:, :self.num_layers] / self.SCALING_FACTOR_THICKNESSES
-        refractive_indices_lower_bound = self.bounded_model.get_lower_bound()[:, self.num_layers:] / self.SCALING_FACTOR_REFRACTIVE_INDICES
+        thicknesses_lower_bound = self.model.get_lower_bound()[:, :self.num_layers] / self.SCALING_FACTOR_THICKNESSES
+        refractive_indices_lower_bound = self.model.get_lower_bound()[:, self.num_layers:] / self.SCALING_FACTOR_REFRACTIVE_INDICES
         return torch.cat((thicknesses_lower_bound, refractive_indices_lower_bound), dim = 1)
 
     def get_upper_bound(self):
-        thicknesses_upper_bound = self.bounded_model.get_upper_bound()[:, :self.num_layers] / self.SCALING_FACTOR_THICKNESSES
-        refractive_indices_upper_bound = self.bounded_model.get_upper_bound()[:, self.num_layers:] / self.SCALING_FACTOR_REFRACTIVE_INDICES
+        thicknesses_upper_bound = self.model.get_upper_bound()[:, :self.num_layers] / self.SCALING_FACTOR_THICKNESSES
+        refractive_indices_upper_bound = self.model.get_upper_bound()[:, self.num_layers:] / self.SCALING_FACTOR_REFRACTIVE_INDICES
         return torch.cat((thicknesses_upper_bound, refractive_indices_upper_bound), dim = 1)
+
+    def set_to_train(self):
+        self.trainable_model.train()
+
+    def set_to_eval(self):
+        self.trainable_model.eval()
+
+    def scale_gradients(self):
+        self.trainable_model.net[2].weight.grad[:,
+        :CM().get('wavelengths').size()[0]] /= self.SCALING_FACTOR_THICKNESSES
+        self.trainable_model.net[2].weight.grad[:,
+        CM().get('wavelengths').size()[0]:] /= self.SCALING_FACTOR_REFRACTIVE_INDICES
 
