@@ -30,6 +30,10 @@ num_layers: *max_layers
 
 tolerance: 1.0e-3
 
+scaling:
+  thicknesses: 1.0e+6
+  refractive_indices: 0.1
+
 training:
   learning_rate: &lr 0.001
   num_epochs: &epochs 60
