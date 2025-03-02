@@ -25,7 +25,7 @@ class BranchAndBound(BaseDiscretiser):
         optimum = None
         iteration = 0
         while len(solution_tree) > 0:
-            if iteration % max(1, CM.get('branch_and_bound.max_iter') // 10) == 0:
+            if iteration % max(1, CM.get('branch_and_bound.max_iter')) // 10 == 0:
                 print(iteration)
 
             current_node = solution_tree.pop()
