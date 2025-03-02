@@ -5,12 +5,17 @@ import sys
 sys.path.append(sys.path[0] + '/../..')
 
 from data.dataloaders.BaseDataloader import BaseDataloader
+from utils.ConfigManager import ConfigManager as CM
 
 class DynamicDataloader(BaseDataloader):
-    def __init__(self, batch_size: int, shuffle: bool = True, switch_condition: Callable[[int], bool] = lambda epoch: False):
+    def __init__(self, batch_size: int, shuffle: bool = True):
         super().__init__(batch_size, shuffle)
         self.dataloaders = []
-        self.switch_condition = switch_condition
+        switch_conditions = {
+            True: lambda epoch: epoch % max(1, CM().get('training.num_epochs') // 4) == 0,
+            False: lambda epoch: False
+        }
+        self.switch_condition = switch_conditions[CM().get('training.dataset_switching')]
         self.current_index = 0
         self.epoch = 0
 

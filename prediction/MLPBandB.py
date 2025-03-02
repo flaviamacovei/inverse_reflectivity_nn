@@ -11,7 +11,6 @@ from data.dataloaders.DynamicDataloader import DynamicDataloader
 
 class MLPBandB(BasePredictionEngine):
     def __init__(self, num_layers):
-        switch_condition = lambda epoch: epoch % max(1, CM().get('training.num_epochs') // 4) == 0
         dataloader = DynamicDataloader(batch_size = CM().get('training.batch_size'), shuffle = False)
         dataloader.load_data(CM().get('dataset_files'))
         self.relaxed_solver = RelaxedFeedForward(dataloader, num_layers)

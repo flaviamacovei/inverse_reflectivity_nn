@@ -32,9 +32,9 @@ class ConfigManager:
 
             # set dataset
             if self.config['training']['loss_function'] == "free":
-                self.config['dataset_files'] = [f"free_complete_{self.config['dataset_size']}.pt", f"free_masked_{self.config['dataset_size']}.pt", f"free_explicit_{self.config['dataset_size']}.pt"]
+                self.config['dataset_files'] = [f"free_complete_{self.config['training']['dataset_size']}.pt", f"free_masked_{self.config['training']['dataset_size']}.pt", f"free_explicit_{self.config['training']['dataset_size']}.pt"]
             elif self.config['training']['loss_function'] == "guided":
-                self.config['dataset_files'] = [f"guided_complete_{self.config['dataset_size']}.pt", f"guided_masked_{self.config['dataset_size']}.pt"]
+                self.config['dataset_files'] = [f"guided_complete_{self.config['training']['dataset_size']}.pt", f"guided_masked_{self.config['training']['dataset_size']}.pt"]
             else:
                 raise ValueError (f"Unknown loss function: {self.config['training']['loss_function']}")
 
