@@ -10,10 +10,9 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 num_stacks = 1
 
-materials_file = "Mirror Design with AI/Simple Designs/Filters/Design narrow Bandpass - optimized.dsg"
 
-dataset_files = ['complete_props_50000.pt', 'masked_props_50000.pt', 'explicit_props_50000.pt']
-
+# dataset_files = ['complete_props_100.pt', 'masked_props_100.pt', 'explicit_props_100.pt']
+dataset_files = ["complete_with_labels_50000.pt", "masked_with_labels_50000.pt"]
 min_num_layers = 3
 max_num_layers = 13
 

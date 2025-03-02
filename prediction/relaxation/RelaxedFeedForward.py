@@ -122,9 +122,9 @@ class RelaxedFeedForward(BaseTrainableRelaxedSolver):
                 loss = self.compute_batch_loss_labels(batch)
                 epoch_loss += loss
 
-            # if epoch == 0:
-            #     loss_scale = loss
-            # wandb.log({"loss": loss.item() / loss_scale})
+                if epoch == 0:
+                    loss_scale = loss
+                wandb.log({"loss": loss.item() / loss_scale})
 
                 loss.backward()
                 self.trainable_model.net[2].weight.grad[:, :wavelengths.size()[0]] /= self.SCALING_FACTOR_THICKNESSES
@@ -136,9 +136,9 @@ class RelaxedFeedForward(BaseTrainableRelaxedSolver):
     def solve(self, target: ReflectivePropsPattern):
         self.trainable_model.eval()
         model_input = torch.cat((target.get_lower_bound(), target.get_upper_bound()), dim = 1)
-        return self.model_forward(model_input)
+        return self.scaled_forward(model_input)
 
-    def model_forward(self, target: torch.Tensor):
+    def scaled_forward(self, target: torch.Tensor):
         coating_props = self.bounded_model(target)
         thicknesses, refractive_indices = coating_props.chunk(2, dim = 1)
         thicknesses = thicknesses / self.SCALING_FACTOR_THICKNESSES
@@ -149,15 +149,15 @@ class RelaxedFeedForward(BaseTrainableRelaxedSolver):
         pattern, labels = batch
         pattern = pattern.float().to(device)
         labels = labels.float().to(device)
-        coating = self.model_forward(pattern)
+        coating = self.scaled_forward(pattern)
         preds = torch.cat((coating.get_thicknesses(), coating.get_refractive_indices()), dim=1)
-        return torch.sum((preds - refs)**2)**0.5
+        return torch.sum((preds - labels)**2)**0.5
 
     def compute_batch_loss_no_labels(self, batch: torch.Tensor):
-        pattern = batch.float().to(device)
-        lower_bound, upper_bound = refs.chunk(2, dim=1)
+        pattern = batch[0].float().to(device)
+        lower_bound, upper_bound = pattern.chunk(2, dim=1)
         refs_obj = ReflectivePropsPattern(lower_bound, upper_bound)
-        coating = self.model_forward(pattern)
+        coating = self.scaled_forward(pattern)
         preds = coating_to_reflective_props(coating)
         return compute_loss(preds, refs_obj)
 
