@@ -1,0 +1,48 @@
+# config.yaml
+device: 'auto'
+
+seed: 0
+
+num_stacks: 1
+
+dataset_files:
+  - "complete_with_labels_50000.pt"
+  - "masked_with_labels_50000.pt"
+
+min_num_layers: 3
+max_num_layers: &max_layers 13
+
+wavelengths:
+  start: 300.e-9
+  end: 1100.e-9
+  steps: 1000
+
+thicknesses_bounds:
+  min: 1.e-9
+  max: 1.e-6
+
+refractive_indices_bounds:
+  min: 0.12
+  max: 2.25
+
+theta:
+  start: 0
+  end: 0
+  steps: 1
+
+num_layers: *max_layers
+
+tolerance: 1.0e-3
+
+training:
+  learning_rate: &lr 0.001
+  num_epochs: &epochs 60
+  batch_size: &batch_size 128
+
+wandb:
+  project: "inverse-mirrors-nn"
+  config:
+    architecture: "MLP"
+    learning_rate: *lr,
+    epochs: *epochs,
+    batch_size: *batch_size,
