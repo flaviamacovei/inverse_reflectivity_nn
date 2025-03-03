@@ -2,11 +2,13 @@ import os
 import torch
 import wandb
 from forward.forward_tmm import coating_to_reflective_props
-from prediction.GradientRounded import GradientRounded
-from prediction.MLPGomory import MLPGomory
-from prediction.MLPBandB import MLPBandB
+from prediction.relaxation.GradientSolver import GradientSolver
+from prediction.relaxation.RelaxedMLP import RelaxedMLP
+from prediction.relaxation.RelaxedCNN import RelaxedCNN
+from prediction.discretisation.Rounder import Rounder
+from prediction.discretisation.BranchAndBound import BranchAndBound
+from data.dataloaders.DynamicDataloader import DynamicDataloader
 from data.values.Coating import Coating
-from prediction.MLPRounded import MLPRounded
 from ui.visualise import visualise
 from ui.FileInput import FileInput
 from data.values.RefractiveIndex import RefractiveIndex
@@ -33,18 +35,28 @@ if __name__ == "__main__":
     # file_input.read_from_csv("data/Neuschwanstein_target.csv")
     # pattern = file_input.to_reflective_props_pattern()
 
-    if CM().get('wandb_log'):
-        wandb.init(
-            project = CM().get('wandb.project'),
-            config = CM().get('wandb.config')
-        )
+    relaxed_solvers = {
+        "gradient": GradientSolver,
+        "mlp": RelaxedMLP,
+        "cnn": RelaxedCNN
+    }
+    discretisers = {
+        "rounder": Rounder,
+        "b&b": BranchAndBound
+    }
+
+    RelaxedSolver = relaxed_solvers[CM().get('architecture.relaxed')]
+    Discretiser = discretisers[CM().get('architecture.discretiser')]
+
+    dataloader = DynamicDataloader(batch_size=CM().get('training.batch_size'), shuffle=False)
+    dataloader.load_data(CM().get('dataset_files'))
+
+    relaxed_solver = RelaxedSolver(dataloader)
+    relaxed_solver.train()
+    prediction_engine = Discretiser(relaxed_solver)
 
     pattern = make_random_pattern()
     visualise(refs = pattern, filename = "original")
-
-    prediction_engine = MLPBandB(CM().get('num_layers'))
-    # prediction_engine.load_relaxed_engine("data/models/relaxed_model.pt")
-    prediction_engine.train_relaxed_engine()
     prediction = prediction_engine.predict(pattern)
 
     print(f"Predicted coating: {prediction}")
