@@ -3,10 +3,13 @@ import torch
 import yaml
 import numpy as np
 
+import os
+config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'config.yaml')
+
 class ConfigManager:
     _instance = None
 
-    def __new__(cls, filepath="config.yaml"):
+    def __new__(cls, filepath=config_path):
         if cls._instance is None:
             cls._instance = super(ConfigManager, cls).__new__(cls)
             cls._instance._load(filepath)
@@ -31,9 +34,9 @@ class ConfigManager:
             self.config['theta'] = torch.tensor(np.linspace(self.config['theta']['start'], self.config['theta']['end'], self.config['theta']['steps']) * (np.pi / 180), dtype = torch.float32).to(self.config['device'])
 
             # set dataset
-            if self.config['training']['loss_function'] == "free":
+            if self.config['training']['guidance'] == "free":
                 self.config['dataset_files'] = [f"free_complete_{self.config['training']['dataset_size']}.pt", f"free_masked_{self.config['training']['dataset_size']}.pt", f"free_explicit_{self.config['training']['dataset_size']}.pt"]
-            elif self.config['training']['loss_function'] == "guided":
+            elif self.config['training']['guidance'] == "guided":
                 self.config['dataset_files'] = [f"guided_complete_{self.config['training']['dataset_size']}.pt", f"guided_masked_{self.config['training']['dataset_size']}.pt"]
             else:
                 raise ValueError (f"Unknown loss function: {self.config['training']['loss_function']}")

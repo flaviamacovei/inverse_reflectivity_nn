@@ -1,20 +1,10 @@
 import torch
 import torch.nn as nn
-import torch.optim as optim
-import torch.functional as F
-import wandb
-import gc
 import sys
 sys.path.append(sys.path[0] + '/..')
 from prediction.relaxation.BaseMLPRelaxedSolver import BaseMLPRelaxedSolver
 from data.dataloaders.BaseDataloader import BaseDataloader
-from data.values.Coating import Coating
-from forward.forward_tmm import coating_to_reflective_props
-from evaluation.loss import match
-from data.values.ReflectivePropsPattern import ReflectivePropsPattern
 from utils.ConfigManager import ConfigManager as CM
-from ui.visualise import visualise
-from utils.os_utils import get_unique_filename
 
 class TrainableMLP(nn.Module):
     def __init__(self):
@@ -40,10 +30,16 @@ class TrainableMLP(nn.Module):
     def get_output_size(self):
         return self.output_size
 
-class RelaxedFeedForward(BaseMLPRelaxedSolver):
+class RelaxedMLP(BaseMLPRelaxedSolver):
     def __init__(self, dataloader: BaseDataloader, num_layers: int):
         super().__init__(dataloader, num_layers)
         self.trainable_model = TrainableMLP().to(CM().get('device'))
         self.initialise_model()
         self.initialise_opitimiser()
+
+    def scale_gradients(self):
+        self.trainable_model.net[2].weight.grad[:,
+        :CM().get('wavelengths').size()[0]] /= self.SCALING_FACTOR_THICKNESSES
+        self.trainable_model.net[2].weight.grad[:,
+        CM().get('wavelengths').size()[0]:] /= self.SCALING_FACTOR_REFRACTIVE_INDICES
 
