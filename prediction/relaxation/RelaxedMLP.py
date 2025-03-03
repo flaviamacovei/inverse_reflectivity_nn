@@ -31,15 +31,23 @@ class TrainableMLP(nn.Module):
         return self.output_size
 
 class RelaxedMLP(BaseMLPRelaxedSolver):
-    def __init__(self, dataloader: BaseDataloader, num_layers: int):
-        super().__init__(dataloader, num_layers)
+    def __init__(self, dataloader: BaseDataloader):
+        super().__init__(dataloader)
         self.trainable_model = TrainableMLP().to(CM().get('device'))
         self.initialise_model()
         self.initialise_opitimiser()
 
-    def scale_gradients(self):
+    def scale_gradients_(self):
+        print(f"gradient shape: {self.trainable_model.net[2].weight.grad.shape}")
         self.trainable_model.net[2].weight.grad[:,
         :CM().get('wavelengths').size()[0]] /= self.SCALING_FACTOR_THICKNESSES
         self.trainable_model.net[2].weight.grad[:,
         CM().get('wavelengths').size()[0]:] /= self.SCALING_FACTOR_REFRACTIVE_INDICES
+
+    def scale_gradients(self):
+        for i, param in enumerate(self.model.parameters()):
+            if param.grad is not None:
+                ...
+                # print(f"parame {i} shape: {param.grad.shape}")
+                # param.grad.register_hook(lambda grad: grad / scale_vector.view(-1, 1))
 

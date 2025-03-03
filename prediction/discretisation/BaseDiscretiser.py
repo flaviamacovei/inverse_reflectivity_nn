@@ -12,7 +12,7 @@ class BaseDiscretiser(ABC):
         self.relaxed_solver = relaxed_solver
 
     @abstractmethod
-    def solve(self, target: ReflectivePropsPattern):
+    def predict(self, target: ReflectivePropsPattern):
         pass
 
     def get_nondiscrete_indices(self, input: torch.Tensor):

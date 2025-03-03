@@ -54,9 +54,9 @@ class BoundedMLP(nn.Module):
         return torch.cat([first_half_norm, second_half_norm], dim=-1)
 
 class BaseMLPRelaxedSolver(BaseTrainableRelaxedSolver):
-    def __init__(self, dataloader: BaseDataloader, num_layers: int):
+    def __init__(self, dataloader: BaseDataloader):
         super().__init__(dataloader)
-        self.num_layers = num_layers
+        self.num_layers = CM().get('num_layers')
 
         self.trainable_model = None
         self.model = None
@@ -104,9 +104,3 @@ class BaseMLPRelaxedSolver(BaseTrainableRelaxedSolver):
 
     def set_to_eval(self):
         self.trainable_model.eval()
-
-    def scale_gradients(self):
-        self.trainable_model.net[2].weight.grad[:,
-        :CM().get('wavelengths').size()[0]] /= self.SCALING_FACTOR_THICKNESSES
-        self.trainable_model.net[2].weight.grad[:,
-        CM().get('wavelengths').size()[0]:] /= self.SCALING_FACTOR_REFRACTIVE_INDICES

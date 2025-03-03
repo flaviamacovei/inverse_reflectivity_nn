@@ -11,9 +11,9 @@ from evaluation.loss import match
 from utils.ConfigManager import ConfigManager as CM
 
 class GradientSolver(BaseRelaxedSolver):
-    def __init__(self, num_layers: int):
+    def __init__(self):
         super().__init__()
-        self.num_layers = num_layers
+        self.num_layers = CM().get('num_layers')
         self.SCALING_FACTOR = 1.0e9
         self.MIN_REFRACTIVE_INDICES = 1.0
         self.MAX_REFRACTIVE_INDICES = 3.5

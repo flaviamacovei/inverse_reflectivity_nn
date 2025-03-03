@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import torch
+import wandb
 import sys
 sys.path.append(sys.path[0] + '/..')
 from data.dataloaders.BaseDataloader import BaseDataloader
@@ -23,12 +24,18 @@ class BaseTrainableRelaxedSolver(BaseRelaxedSolver, ABC):
             "free": self.compute_loss_free,
             "guided": self.compute_loss_guided
         }
-        self.compute_loss = self.loss_functions.get(CM().get('training.loss_function'))
+        self.compute_loss = self.loss_functions.get(CM().get('training.guidance'))
 
         self.model = None
         self.optimiser = None
 
     def train(self):
+        if CM().get('wandb_log'):
+            wandb.init(
+                project=CM().get('wandb.project'),
+                config=CM().get('wandb.config')
+            )
+        print("Starting training")
         self.set_to_train()
         loss_scale = None
         for epoch in range(CM().get('training.num_epochs')):
@@ -51,8 +58,10 @@ class BaseTrainableRelaxedSolver(BaseRelaxedSolver, ABC):
                 self.optimiser.step()
             if epoch % 1 == 0:
                 print(f"Loss in epoch {epoch + 1}: {epoch_loss.item()}")
-        model_filename = f"out/models/model_{CM().get('training.loss_function')}_{'switch' if CM().get('training.dataset_switching') else 'no-switch'}_{CM().get('wavelengths').size()[0]}.pt"
-        torch.save(self.model, get_unique_filename(model_filename))
+        print("Training complete")
+        model_filename = get_unique_filename(f"out/models/model_{CM().get('training.guidance')}_{'switch' if CM().get('training.dataset_switching') else 'no-switch'}_{CM().get('wavelengths').size()[0]}.pt")
+        print(f"Saving model to {model_filename}")
+        torch.save(self.model, model_filename)
 
     def solve(self, target: ReflectivePropsPattern):
         self.set_to_eval()

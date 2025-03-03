@@ -17,7 +17,7 @@ class BranchAndBound(BaseDiscretiser):
     def __init__(self, relaxed_solver: BaseRelaxedSolver):
         super().__init__(relaxed_solver)
 
-    def solve(self, target: ReflectivePropsPattern):
+    def predict(self, target: ReflectivePropsPattern):
         solution_tree = [self.make_node(target, self.relaxed_solver.get_lower_bound(), self.relaxed_solver.get_upper_bound())]
         value = coating_to_reflective_props(solution_tree[0].get_coating())
         visualise(value, target, "before_rounding")
