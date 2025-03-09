@@ -40,6 +40,8 @@ class EmbeddingManager():
 
         self.SAVEPATH = 'data/material_embedding/embeddings.pt'
 
+        self.load_embeddings()
+
     def load_materials(self):
         with open(CM().get('material_embedding.data_file'), 'r') as f:
             data = yaml.safe_load(f)
@@ -92,12 +94,14 @@ class EmbeddingManager():
         try:
             self.model = torch.load(self.SAVEPATH)
         except FileNotFoundError:
-            print(f"Embeddings file {self.SAVEPATH} not found. Call EmbeddingManager.train() first.")
+            print(f"Saved embeddings not found. Training model.")
+            self.train()
+            self.save_embeddings()
 
     def __str__(self):
-        max_title_length = max(len(material.title) for material in self.materials)
+        max_title_length = max(len(material.get_title()) for material in self.materials)
         material_embeddings = ''
         for material in self.materials:
             embedding = self.model(material.get_coeffs()).cpu().detach().numpy()
-            material_embeddings += f"{material.title.ljust(max_title_length)}: {embedding}\n"
+            material_embeddings += f"{material.get_title().ljust(max_title_length)}: {embedding}\n"
         return f"Embedding Manager with {len(self.materials)} materials:\n{material_embeddings}"
