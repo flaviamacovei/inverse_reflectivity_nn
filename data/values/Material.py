@@ -11,7 +11,7 @@ class Material:
         self.B = B
         self.C = C
 
-    def refractive_index(self):
+    def get_refractive_indices(self):
         wl2 = CM().get('wavelengths') ** 2
         n2 = 1 + sum(b * wl2 / (wl2 - c) for b, c in zip(self.B, self.C))
         return n2 ** 0.5
