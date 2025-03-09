@@ -1,17 +1,22 @@
 import os
+import time
 import torch
 import wandb
 from forward.forward_tmm import coating_to_reflective_props
-from prediction.GradientRounded import GradientRounded
-from prediction.MLPGomory import MLPGomory
-from prediction.MLPBandB import MLPBandB
+from prediction.relaxation.BaseTrainableRelaxedSolver import BaseTrainableRelaxedSolver
+from prediction.relaxation.GradientSolver import GradientSolver
+from prediction.relaxation.RelaxedMLP import RelaxedMLP
+from prediction.relaxation.RelaxedCNN import RelaxedCNN
+from prediction.discretisation.Rounder import Rounder
+from prediction.discretisation.BranchAndBound import BranchAndBound
+from data.dataloaders.DynamicDataloader import DynamicDataloader
 from data.values.Coating import Coating
-from prediction.MLPRounded import MLPRounded
 from ui.visualise import visualise
 from ui.FileInput import FileInput
 from data.values.RefractiveIndex import RefractiveIndex
 from data.values.ReflectivePropsPattern import ReflectivePropsPattern
 from utils.ConfigManager import ConfigManager as CM
+from evaluation.model_eval import evaluate
 
 def notify():
     os.system("echo -ne '\007'")
@@ -28,29 +33,33 @@ def make_random_pattern():
     return ReflectivePropsPattern(lower_bound, upper_bound)
 
 if __name__ == "__main__":
+    relaxed_solvers = {
+        "gradient": GradientSolver,
+        "mlp": RelaxedMLP,
+        "cnn": RelaxedCNN
+    }
+    discretisers = {
+        "rounder": Rounder,
+        "b&b": BranchAndBound
+    }
 
-    # file_input = FileInput()
-    # file_input.read_from_csv("data/Neuschwanstein_target.csv")
-    # pattern = file_input.to_reflective_props_pattern()
+    RelaxedSolver = relaxed_solvers[CM().get('architecture.relaxed')]
+    Discretiser = discretisers[CM().get('architecture.discretiser')]
 
-    if CM().get('wandb_log'):
-        wandb.init(
-            project = CM().get('wandb.project'),
-            config = CM().get('wandb.config')
-        )
+    dataloader = DynamicDataloader(batch_size=CM().get('training.batch_size'), shuffle=False)
+    dataloader.load_data(CM().get('dataset_files'))
 
-    pattern = make_random_pattern()
-    visualise(refs = pattern, filename = "original")
+    relaxed_solver = RelaxedSolver(dataloader)
+    if isinstance(relaxed_solver,BaseTrainableRelaxedSolver):
+        relaxed_solver.train()
+    prediction_engine = Discretiser(relaxed_solver)
 
-    prediction_engine = MLPBandB(CM().get('num_layers'))
-    # prediction_engine.load_relaxed_engine("data/models/relaxed_model.pt")
-    prediction_engine.train_relaxed_engine()
-    prediction = prediction_engine.predict(pattern)
-
-    print(f"Predicted coating: {prediction}")
-
-    optimal_reflective_props = coating_to_reflective_props(prediction)
-    visualise(optimal_reflective_props, pattern, "optimised")
+    if CM().get('training.evaluate'):
+        for batch_size in [1, 10, 20, 50, 100]:
+            start_time = time.time()
+            evaluate(prediction_engine, batch_size)
+            end_time = time.time()
+            print(f"Batch size: {batch_size}, time: {end_time - start_time}")
 
     notify()
 
