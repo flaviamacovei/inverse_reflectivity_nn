@@ -1,6 +1,6 @@
 device: 'auto' # accepted values: "auto", "cpu"
 
-seed: null
+seed: 0
 
 num_stacks: 1
 
@@ -41,20 +41,21 @@ architecture:
 training:
   learning_rate: &lr 0.001 # default: 0.001
   num_epochs: &epochs 10
-  batch_size: &batch_size 512
+  batch_size: &batch_size 50
   guidance: &guidance "free" # accepted values: "free", "guided"
   dataset_switching: false
-  dataset_size: 2000
+  dataset_size: 100
+  evaluate: true
 
 data_generation:
-  density: "explicit" # accepted values: "complete", "masked", "explicit"
+  density: "complete" # accepted values: "complete", "masked", "explicit"
   guidance: *guidance
-  dataset_size: 2000
+  dataset_size: 100
 
 branch_and_bound:
   max_iter: 300
 
-wandb_log: true
+wandb_log: false
 
 wandb:
   project: "inverse-mirrors-nn"

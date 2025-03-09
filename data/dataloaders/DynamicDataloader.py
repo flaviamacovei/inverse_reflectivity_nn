@@ -12,7 +12,7 @@ class DynamicDataloader(BaseDataloader):
         super().__init__(batch_size, shuffle)
         self.dataloaders = []
         switch_conditions = {
-            True: lambda epoch: epoch % max(1, CM().get('training.num_epochs') // 4) == 0,
+            True: lambda epoch: epoch % max(1, CM().get('training.num_epochs') // (len(CM().get('dataset_files')) + 1)) == 0,
             False: lambda epoch: False
         }
         self.switch_condition = switch_conditions[CM().get('training.dataset_switching')]

@@ -9,7 +9,7 @@ from utils.ConfigManager import ConfigManager as CM
 
 def save_tensors_free(generated):
     feature_tensors = []
-    for reflective_props in generated:
+    for (reflective_props, _) in generated:
         feature_tensor = torch.cat((reflective_props.get_lower_bound(), reflective_props.get_upper_bound()),
                                    dim=1).squeeze()
         feature_tensors.append(feature_tensor)
@@ -35,7 +35,7 @@ def generate_dataset(generators, save_functions):
     save_function = save_functions[CM().get('data_generation.guidance')]
 
     num_points = CM().get('data_generation.dataset_size')
-    dataset_filename = f"../datasets/{CM().get('data_generation.guidance')}_{CM().get('data_generation.density')}_{num_points}.pt"
+    dataset_filename = f"../datasets/validation/{CM().get('data_generation.guidance')}_{CM().get('data_generation.density')}_{num_points}.pt"
     print(f"Generating dataset with {num_points} points")
 
     Generator = generators[CM().get('data_generation.density')]
