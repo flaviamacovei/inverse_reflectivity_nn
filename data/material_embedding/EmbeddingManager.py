@@ -22,7 +22,7 @@ class EmbeddingManager(nn.Module):
 
         self.SAVEPATH = 'data/material_embedding/embeddings.pt'
 
-    def load_materials(self, ):
+    def load_materials(self):
         with open(CM().get('material_embedding.data_file'), 'r') as f:
             data = yaml.safe_load(f)
         return [Material(m['title'], m['B'], m['C']) for m in data['materials']]
@@ -30,9 +30,16 @@ class EmbeddingManager(nn.Module):
     def forward(self, material_index):
         return self.embeddings[material_index]
 
-    def map_to_embedding(self, B, C):
+    def map_to_embedding(self, B: torch.Tensor, C: torch.Tensor):
         input_features = torch.cat((B, C), dim = -1)
         return self.net(input_features)
+
+
+    def map_to_material(self, embedding: torch.Tensor):
+        distances = torch.tensor([self.euclidean_distance(self.embeddings.data[i], embedding) for i in range(self.num_materials)])
+        print(f"distances: {distances}")
+        index = torch.argmin(distances)
+        return self.materials[index], distances[index]
 
     def euclidean_distance(self, x, y):
         return torch.norm(x - y, p = 2, dim = -1)
@@ -68,4 +75,15 @@ class EmbeddingManager(nn.Module):
         torch.save(self.embeddings, self.SAVEPATH)
 
     def load_embeddings(self):
-        self.embeddings = torch.load(self.SAVEPATH)
+        try:
+            self.embeddings = torch.load(self.SAVEPATH)
+        except FileNotFoundError:
+            print(f"Embeddings file {self.SAVEPATH} not found. Call EmbeddingManager.train() first.")
+
+    def __str__(self):
+        max_title_length = max(len(material.title) for material in self.materials)
+        material_embeddings = ''
+        for material in self.materials:
+            embedding = self.forward(self.materials.index(material)).cpu().detach().numpy()
+            material_embeddings += f"{material.title.ljust(max_title_length)}: {embedding}\n"
+        return f"Embeddings Manager with {len(self.materials)} materials:\n{material_embeddings}"

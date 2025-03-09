@@ -21,3 +21,12 @@ class Material:
 
     def get_C(self):
         return torch.tensor(self.C)
+
+    def get_title(self):
+        return self.title
+
+    def __repr__(self):
+        return self.title
+
+    def __str__(self):
+        return f"{self.title}:\nB: {self.B}\nC: {self.C}"

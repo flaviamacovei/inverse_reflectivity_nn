@@ -63,9 +63,14 @@ if __name__ == "__main__":
     #         print(f"Batch size: {batch_size}, time: {end_time - start_time}")
 
     embedding_manager = EmbeddingManager()
-    embedding_manager.train()
-    embedding_manager.save_embeddings()
-    print("finished")
+    # embedding_manager.train()
+    # embedding_manager.save_embeddings()
+    embedding_manager.load_embeddings()
+    # print(embedding_manager)
+
+    embedding = torch.tensor([31.49592, 30.524298])
+    print(embedding_manager.map_to_material(embedding))
+    # print("finished")
 
     notify()
 
