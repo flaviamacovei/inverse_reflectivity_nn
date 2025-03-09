@@ -17,6 +17,7 @@ from data.values.RefractiveIndex import RefractiveIndex
 from data.values.ReflectivePropsPattern import ReflectivePropsPattern
 from utils.ConfigManager import ConfigManager as CM
 from evaluation.model_eval import evaluate
+from data.material_embedding.EmbeddingManager import EmbeddingManager
 
 def notify():
     os.system("echo -ne '\007'")
@@ -33,33 +34,38 @@ def make_random_pattern():
     return ReflectivePropsPattern(lower_bound, upper_bound)
 
 if __name__ == "__main__":
-    relaxed_solvers = {
-        "gradient": GradientSolver,
-        "mlp": RelaxedMLP,
-        "cnn": RelaxedCNN
-    }
-    discretisers = {
-        "rounder": Rounder,
-        "b&b": BranchAndBound
-    }
+    # relaxed_solvers = {
+    #     "gradient": GradientSolver,
+    #     "mlp": RelaxedMLP,
+    #     "cnn": RelaxedCNN
+    # }
+    # discretisers = {
+    #     "rounder": Rounder,
+    #     "b&b": BranchAndBound
+    # }
+    #
+    # RelaxedSolver = relaxed_solvers[CM().get('architecture.relaxed')]
+    # Discretiser = discretisers[CM().get('architecture.discretiser')]
+    #
+    # dataloader = DynamicDataloader(batch_size=CM().get('training.batch_size'), shuffle=False)
+    # dataloader.load_data(CM().get('dataset_files'))
+    #
+    # relaxed_solver = RelaxedSolver(dataloader)
+    # if isinstance(relaxed_solver,BaseTrainableRelaxedSolver):
+    #     relaxed_solver.train()
+    # prediction_engine = Discretiser(relaxed_solver)
+    #
+    # if CM().get('training.evaluate'):
+    #     for batch_size in [1, 10, 20, 50, 100]:
+    #         start_time = time.time()
+    #         evaluate(prediction_engine, batch_size)
+    #         end_time = time.time()
+    #         print(f"Batch size: {batch_size}, time: {end_time - start_time}")
 
-    RelaxedSolver = relaxed_solvers[CM().get('architecture.relaxed')]
-    Discretiser = discretisers[CM().get('architecture.discretiser')]
-
-    dataloader = DynamicDataloader(batch_size=CM().get('training.batch_size'), shuffle=False)
-    dataloader.load_data(CM().get('dataset_files'))
-
-    relaxed_solver = RelaxedSolver(dataloader)
-    if isinstance(relaxed_solver,BaseTrainableRelaxedSolver):
-        relaxed_solver.train()
-    prediction_engine = Discretiser(relaxed_solver)
-
-    if CM().get('training.evaluate'):
-        for batch_size in [1, 10, 20, 50, 100]:
-            start_time = time.time()
-            evaluate(prediction_engine, batch_size)
-            end_time = time.time()
-            print(f"Batch size: {batch_size}, time: {end_time - start_time}")
+    embedding_manager = EmbeddingManager()
+    embedding_manager.train()
+    embedding_manager.save_embeddings()
+    print("finished")
 
     notify()
 

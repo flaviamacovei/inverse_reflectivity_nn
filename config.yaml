@@ -28,6 +28,12 @@ theta:
 
 num_layers: *max_layers
 
+material_embedding:
+  data_file: "data/material_embedding/materials.yaml"
+  dim: 2
+  num_epochs: 10000
+  learning_rate: 0.01
+
 tolerance: 1.0e-3
 
 scaling:
