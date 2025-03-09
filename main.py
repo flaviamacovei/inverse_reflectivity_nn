@@ -1,7 +1,9 @@
 import os
+import time
 import torch
 import wandb
 from forward.forward_tmm import coating_to_reflective_props
+from prediction.relaxation.BaseTrainableRelaxedSolver import BaseTrainableRelaxedSolver
 from prediction.relaxation.GradientSolver import GradientSolver
 from prediction.relaxation.RelaxedMLP import RelaxedMLP
 from prediction.relaxation.RelaxedCNN import RelaxedCNN
@@ -14,6 +16,7 @@ from ui.FileInput import FileInput
 from data.values.RefractiveIndex import RefractiveIndex
 from data.values.ReflectivePropsPattern import ReflectivePropsPattern
 from utils.ConfigManager import ConfigManager as CM
+from evaluation.model_eval import evaluate
 
 def notify():
     os.system("echo -ne '\007'")
@@ -30,11 +33,6 @@ def make_random_pattern():
     return ReflectivePropsPattern(lower_bound, upper_bound)
 
 if __name__ == "__main__":
-
-    # file_input = FileInput()
-    # file_input.read_from_csv("data/Neuschwanstein_target.csv")
-    # pattern = file_input.to_reflective_props_pattern()
-
     relaxed_solvers = {
         "gradient": GradientSolver,
         "mlp": RelaxedMLP,
@@ -52,17 +50,16 @@ if __name__ == "__main__":
     dataloader.load_data(CM().get('dataset_files'))
 
     relaxed_solver = RelaxedSolver(dataloader)
-    relaxed_solver.train()
+    if isinstance(relaxed_solver,BaseTrainableRelaxedSolver):
+        relaxed_solver.train()
     prediction_engine = Discretiser(relaxed_solver)
 
-    pattern = make_random_pattern()
-    visualise(refs = pattern, filename = "original")
-    prediction = prediction_engine.predict(pattern)
-
-    print(f"Predicted coating: {prediction}")
-
-    optimal_reflective_props = coating_to_reflective_props(prediction)
-    visualise(optimal_reflective_props, pattern, "optimised")
+    if CM().get('training.evaluate'):
+        for batch_size in [1, 10, 20, 50, 100]:
+            start_time = time.time()
+            evaluate(prediction_engine, batch_size)
+            end_time = time.time()
+            print(f"Batch size: {batch_size}, time: {end_time - start_time}")
 
     notify()
 
