@@ -15,12 +15,12 @@ class BaseDiscretiser(ABC):
     def predict(self, target: ReflectivePropsPattern):
         pass
 
-    def get_nondiscrete_indices(self, input: torch.Tensor):
+    def get_nondiscrete_map(self, input: torch.Tensor):
         assert len(input.shape) == 2
-        input = input.flatten()
-        rounded_tensor = RefractiveIndex.round_tensor(input).flatten()
-        nondiscrete_indices = torch.zeros(input.shape, dtype = torch.int64, device = CM().get('device')).flatten()
+        rounded_tensor = RefractiveIndex.round_tensor(input)
+        nondiscrete_map = torch.zeros(input.shape, dtype = torch.int64, device = CM().get('device'))
         for i in range(input.shape[0]):
-            if input[i] != rounded_tensor[i]:
-                nondiscrete_indices[i] = 1
-        return nondiscrete_indices.nonzero(as_tuple = True)[0].tolist()
+            for j in range(input.shape[1]):
+                if input[i][j] != rounded_tensor[i][j]:
+                    nondiscrete_map[i][j] = 1
+        return nondiscrete_map

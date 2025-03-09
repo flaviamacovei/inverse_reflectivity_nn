@@ -57,19 +57,20 @@ class BaseMLPRelaxedSolver(BaseTrainableRelaxedSolver):
     def __init__(self, dataloader: BaseDataloader):
         super().__init__(dataloader)
         self.num_layers = CM().get('num_layers')
+        self.batch_size = CM().get('training.batch_size')
 
         self.trainable_model = None
         self.model = None
 
     def initialise_model(self):
         self.model = BoundedMLP(self.trainable_model, 2 * self.num_layers).to(CM().get('device'))
-        thicknesses_lower_bound = torch.ones((1, self.num_layers), device=CM().get('device')) * CM().get(
+        thicknesses_lower_bound = torch.ones((self.batch_size, self.num_layers), device=CM().get('device')) * CM().get(
             'thicknesses_bounds.min')
-        thicknesses_upper_bound = torch.ones((1, self.num_layers), device=CM().get('device')) * CM().get(
+        thicknesses_upper_bound = torch.ones((self.batch_size, self.num_layers), device=CM().get('device')) * CM().get(
             'thicknesses_bounds.max')
-        refractive_index_lower_bound = torch.ones((1, self.num_layers), device=CM().get('device')) * CM().get(
+        refractive_index_lower_bound = torch.ones((self.batch_size, self.num_layers), device=CM().get('device')) * CM().get(
             'refractive_indices_bounds.min')
-        refractive_index_upper_bound = torch.ones((1, self.num_layers), device=CM().get('device')) * CM().get(
+        refractive_index_upper_bound = torch.ones((self.batch_size, self.num_layers), device=CM().get('device')) * CM().get(
             'refractive_indices_bounds.max')
         lower_bound = torch.cat((thicknesses_lower_bound * self.SCALING_FACTOR_THICKNESSES,
                                  refractive_index_lower_bound * self.SCALING_FACTOR_REFRACTIVE_INDICES), dim=1)

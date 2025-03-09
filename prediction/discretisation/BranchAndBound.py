@@ -20,14 +20,11 @@ class BranchAndBound(BaseDiscretiser):
     def predict(self, target: ReflectivePropsPattern):
         solution_tree = [self.make_node(target, self.relaxed_solver.get_lower_bound(), self.relaxed_solver.get_upper_bound())]
         value = coating_to_reflective_props(solution_tree[0].get_coating())
-        visualise(value, target, "before_rounding")
+        # visualise(value, target, "before_rounding")
         max_error = float("Inf")
         optimum = None
         iteration = 0
         while len(solution_tree) > 0:
-            if iteration % max(1, CM().get('branch_and_bound.max_iter') // 10) == 0:
-                print(iteration)
-
             current_node = solution_tree.pop()
             refractive_indices = current_node.get_coating().get_refractive_indices()
             if current_node.get_error() < max_error:
@@ -35,31 +32,31 @@ class BranchAndBound(BaseDiscretiser):
                     optimum = current_node.get_coating()
                     max_error = current_node.get_error()
                 else:
-                    offset = current_node.get_coating().get_thicknesses().shape[1]
-                    branching_index = self.select_branching_index(refractive_indices)
-                    offending_value = current_node.get_coating().get_refractive_indices()[:, branching_index]
-                    branching_index = branching_index + offset
+                    branching_indices = self.select_branching_indices(refractive_indices)
+                    mask = torch.cat((torch.zeros_like(branching_indices), branching_indices), dim = 1).bool()
 
                     lower_bound = current_node.get_lower_bound()
                     upper_bound = current_node.get_upper_bound()
 
+                    round_tensor = torch.cat((torch.zeros_like(refractive_indices), refractive_indices), dim = 1)
+
                     upper_bound_floor = upper_bound.clone()
-                    upper_bound_floor[:, branching_index] = RefractiveIndex.floor_tensor(offending_value)
+                    upper_bound_floor[mask] = RefractiveIndex.floor_tensor(round_tensor)[mask]
                     floor_node = self.make_node(target, lower_bound, upper_bound_floor)
                     solution_tree.append(floor_node)
 
                     lower_bound_ceil = lower_bound.clone()
-                    lower_bound_ceil[:, branching_index] = RefractiveIndex.ceil_tensor(offending_value)
+                    lower_bound_ceil[mask] = RefractiveIndex.ceil_tensor(round_tensor)[mask]
                     ceil_node = self.make_node(target, lower_bound_ceil, upper_bound)
                     solution_tree.append(ceil_node)
 
             iteration += 1
             if iteration == CM().get('branch_and_bound.max_iter'):
                 if optimum:
-                    print("Maximum iterations reached, returning current optimum")
+                    # print("Maximum iterations reached, returning current optimum")
                     return optimum
                 else:
-                    print("Maximum iterations reached, resorting to rounding")
+                    # print("Maximum iterations reached, resorting to rounding")
                     thicknesses = current_node.get_coating().get_thicknesses()
                     refractive_indices = current_node.get_coating().get_refractive_indices()
                     return Coating(thicknesses, RefractiveIndex.round_tensor(refractive_indices))
@@ -74,6 +71,14 @@ class BranchAndBound(BaseDiscretiser):
         error = match(preds, target)
         return TreeNode(relaxed_solution, error, lower_bound, upper_bound)
 
-    def select_branching_index(self, refractive_indices: torch.Tensor):
-        nondiscrete_indices = self.get_nondiscrete_indices(refractive_indices)
-        return random.choice(nondiscrete_indices)
+    def select_branching_indices(self, refractive_indices: torch.Tensor):
+        nondiscrete_map = self.get_nondiscrete_map(refractive_indices)
+        rows = nondiscrete_map.nonzero(as_tuple=True)[0].unique()
+
+        branching_indices = torch.zeros_like(refractive_indices)
+        for row in rows:
+            cols = (nondiscrete_map[row] == 1).nonzero(as_tuple=True)[0]
+            if cols.numel() > 0:
+                chosen_col = cols[torch.randint(len(cols), (1,))]
+                branching_indices[row, chosen_col] = 1
+        return branching_indices

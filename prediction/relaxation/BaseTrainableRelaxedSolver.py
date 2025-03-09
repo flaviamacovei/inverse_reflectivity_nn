@@ -35,7 +35,7 @@ class BaseTrainableRelaxedSolver(BaseRelaxedSolver, ABC):
                 project=CM().get('wandb.project'),
                 config=CM().get('wandb.config')
             )
-        print("Starting training")
+        print("Training model...")
         self.set_to_train()
         loss_scale = None
         for epoch in range(CM().get('training.num_epochs')):
@@ -58,10 +58,12 @@ class BaseTrainableRelaxedSolver(BaseRelaxedSolver, ABC):
                 self.optimiser.step()
             if epoch % 1 == 0:
                 print(f"Loss in epoch {epoch + 1}: {epoch_loss.item()}")
-        print("Training complete")
+        print("Training complete.")
         model_filename = get_unique_filename(f"out/models/model_{CM().get('training.guidance')}_{'switch' if CM().get('training.dataset_switching') else 'no-switch'}_{CM().get('wavelengths').size()[0]}.pt")
         print(f"Saving model to {model_filename}")
         torch.save(self.model, model_filename)
+        if CM().get('wandb_log'):
+            wandb.log({"saved under": model_filename})
 
     def solve(self, target: ReflectivePropsPattern):
         self.set_to_eval()
@@ -76,20 +78,20 @@ class BaseTrainableRelaxedSolver(BaseRelaxedSolver, ABC):
         return Coating(thicknesses, refractive_indices)
 
     def compute_loss_guided(self, batch: (torch.Tensor, torch.Tensor)):
-        pattern, labels = batch
-        pattern = pattern.float().to(CM().get('device'))
+        features, labels = batch
+        features = features.float().to(CM().get('device'))
         labels = labels.float().to(CM().get('device'))
-        coating = self.scaled_forward(pattern)
+        coating = self.scaled_forward(features)
         preds = torch.cat((coating.get_thicknesses(), coating.get_refractive_indices()), dim=1)
         return torch.sum((preds - labels)**2)**0.5
 
     def compute_loss_free(self, batch: torch.Tensor):
-        pattern = batch[0].float().to(CM().get('device'))
-        lower_bound, upper_bound = pattern.chunk(2, dim=1)
-        refs_obj = ReflectivePropsPattern(lower_bound, upper_bound)
-        coating = self.scaled_forward(pattern)
+        features = batch[0].float().to(CM().get('device'))
+        lower_bound, upper_bound = features.chunk(2, dim=1)
+        pattern = ReflectivePropsPattern(lower_bound, upper_bound)
+        coating = self.scaled_forward(features)
         preds = coating_to_reflective_props(coating)
-        return match(preds, refs_obj)
+        return match(preds, pattern)
 
     def initialise_opitimiser(self):
         if self.model is not None:
