@@ -21,7 +21,6 @@ class EmbeddingModel(nn.Module):
 
     def set_embeddings(self, embeddings):
         self.embeddings = embeddings
-        print(f"embeddings from model: {self.embeddings}")
 
 class EmbeddingManager():
     _instance = None
@@ -48,6 +47,8 @@ class EmbeddingManager():
         return [Material(m['title'], m['B'], m['C']) for m in data['materials']]
 
     def encode(self, materials: list[Material]):
+        assert len(materials) > 0, "No materials provided"
+        assert isinstance(materials[0], Material), "Materials must be of type Material"
         input_features = torch.stack([material.get_coeffs() for material in materials])
         return self.model(input_features)
 

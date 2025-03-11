@@ -34,3 +34,6 @@ class Material:
 
     def __str__(self):
         return f"{self.title}:\nB: {self.B.cpu().detach().numpy()}\nC: {self.C.cpu().detach().numpy()}"
+
+    def __eq__(self, other):
+        return self.title == other.get_title() and torch.all(self.B == other.get_B()) and torch.all(self.C == other.get_C())
