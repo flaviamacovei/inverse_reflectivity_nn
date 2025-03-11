@@ -8,28 +8,55 @@ from utils.ConfigManager import ConfigManager as CM
 
 class Coating():
 
-    def __init__(self, materials: list[Material], thicknesses: torch.Tensor):
-        assert len(materials) == thicknesses.shape[0]
-        self.layers = [(material, thickness) for material, thickness in zip(materials, thicknesses)]
+
+    def __init__(self, materials: list [list[Material]], thicknesses: torch.Tensor):
+        assert len(thicknesses.shape) == 2
+        assert len(materials) == thicknesses.shape[0] # batch size
+        assert len(materials[0]) == thicknesses.shape[1] # number of layers
+        self.num_layers = thicknesses.shape[1]
+        self.layers = [[(material, thickness) for material, thickness in zip(materials[i], thicknesses[i])] for i in range(thicknesses.shape[0])]
         self.em = EmbeddingManager()
+
+    @classmethod
+    def from_encoding(cls, encoding: torch.Tensor):
+        assert len(encoding.shape) == 3
+        assert encoding.shape[2] == CM().get('material_embedding.dim') + 1
+        thicknesses = encoding[:, :, 0]
+        material_encoding = encoding[:, :, 1:]
+        materials = [EmbeddingManager().decode(material_encoding[i])[0] for i in range(material_encoding.shape[0])]
+        return cls(materials, thicknesses)
+
 
     def get_layers(self):
         return self.layers
 
     def get_encoding(self):
-        encoding = torch.zeros((CM().get('material_embedding.dim') + 1, len(self.layers)), device = CM().get('device'))
-        print(f"encoding zeros: {encoding}")
-        for i, layer in enumerate(self.layers):
-            encoding[0, i] = layer[1]
-            encoding[1:, i] = self.em.encode([layer[0]])
-        print(f"encoding: {encoding}")
+        encoding = torch.zeros((len(self.layers), self.num_layers, CM().get('material_embedding.dim') + 1), device = CM().get('device'))
+        for i, item in enumerate(self.layers):
+            encoding[i, :, 0] = torch.stack([layer[1] for layer in item])
+            encoding[i, :, 1:] = self.em.encode([layer[0] for layer in item])
+        return encoding
+
+    def get_thicknesses(self):
+        return torch.stack([torch.cat([layer[1].view(1) for layer in item]) for item in self.layers])
+
+    def get_refractive_indices(self):
+        refractive_indices = torch.zeros((len(self.layers), self.num_layers, CM().get('wavelengths').shape[0]), device = CM().get('device'))
+        for i, item in enumerate(self.layers):
+            refractive_indices[i] = torch.stack([layer[0].get_refractive_indices() for layer in item])
+        return refractive_indices
+
+    def get_materials(self):
+        return [[layer[0] for layer in item] for item in self.layers]
 
     def __str__(self):
-        max_title_length = max(len(layer[0].get_title()) for layer in self.layers)
+        max_title_length = max(len(layer[0].get_title()) for item in self.layers for layer in item)
         layers = ''
-        for layer in self.layers:
-            layers += f"{layer[0].get_title().ljust(max_title_length)}: {layer[1]}\n"
-        return f"Coating with {len(self.layers)} materials:\n{layers}"
+        for item in self.layers:
+            for layer in item:
+                layers += f"{layer[0].get_title().ljust(max_title_length)}: {layer[1]}\n"
+            layers += '-------\n'
+        return f"Coating with {len(self.layers)} {'batches' if len(self.layers) > 1 else 'batch'} of {self.num_layers} layers:\n{layers}"
 
     def __eq__(self, other):
         if isinstance(other, Coating):
