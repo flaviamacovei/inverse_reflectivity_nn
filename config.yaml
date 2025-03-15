@@ -11,7 +11,7 @@ layers:
 wavelengths:
   start: 300.e-3
   end: 1100.e-3
-  steps: 1000
+  steps: 10
 
 polarisation: 's' # accepted values: "s", "p"
 
@@ -24,8 +24,8 @@ refractive_indices_bounds:
   max: 2.25
 
 theta:
-  start: 0
-  end: 0
+  start: 0.
+  end: 0.
   steps: 1
 
 num_layers: *max_layers
@@ -33,7 +33,7 @@ num_layers: *max_layers
 material_embedding:
   data_file: "data/material_embedding/materials.yaml"
   dim: 2
-  num_epochs: 100
+  num_epochs: 200
   learning_rate: 0.01
 
 tolerance: 1.0e-3
