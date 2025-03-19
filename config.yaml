@@ -11,7 +11,7 @@ layers:
 wavelengths:
   start: 300.e-3
   end: 1100.e-3
-  steps: 10
+  steps: 1000
 
 polarisation: 's' # accepted values: "s", "p"
 

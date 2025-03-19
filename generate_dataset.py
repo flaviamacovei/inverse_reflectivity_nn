@@ -1,12 +1,12 @@
 import torch
 from torch.utils.data import TensorDataset
-from CompletePropsGenerator import CompletePropsGenerator
-from MaskedPropsGenerator import MaskedPropsGenerator
-from ExplicitPropsGenerator import ExplicitPropsGenerator
 import sys
 sys.path.append(sys.path[0] + '/..')
 from utils.ConfigManager import ConfigManager as CM
 from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
+from data.dataset_generation.CompletePropsGenerator import CompletePropsGenerator
+from data.dataset_generation.MaskedPropsGenerator import MaskedPropsGenerator
+from data.dataset_generation.ExplicitPropsGenerator import ExplicitPropsGenerator
 
 def save_tensors_free(generated):
     feature_tensors = []
@@ -23,9 +23,7 @@ def save_tensors_guided(generated):
     for (reflective_props, coating) in generated:
         feature_tensor = torch.cat((reflective_props.get_lower_bound(), reflective_props.get_upper_bound()),
                                    dim=1).squeeze()
-        values = torch.cat((coating.get_thicknesses(), coating.get_refractive_indices()), dim=0).squeeze()
-        label_tensor = torch.zeros((CM().get('layers.max') * 2), device=CM().get('device')).float()
-        label_tensor.put_(torch.tensor(range(values.shape[0]), device=CM().get('device')), values)
+        label_tensor = coating.get_encoding()
         feature_tensors.append(feature_tensor)
         label_tensors.append(label_tensor)
     feature_tensors = torch.stack(feature_tensors)
@@ -35,14 +33,15 @@ def save_tensors_guided(generated):
 def generate_dataset(generator, save_function):
 
     num_points = CM().get('data_generation.dataset_size')
-    dataset_filename = f"../datasets/validation/{CM().get('data_generation.guidance')}_{CM().get('data_generation.density')}_{num_points}_{EM().hash_materials()}.pt"
+    dataset_filename = f"data/datasets/{CM().get('data_generation.guidance')}_{CM().get('data_generation.density')}_{num_points}_{EM().hash_materials()}.pt"
     print(f"Generating dataset with {num_points} points")
 
     dataset_generator = generator(num_points)
 
     generated_data = dataset_generator.generate()
     dataset = save_function(generated_data)
-    print(f"dataset: {dataset}")
+    for point in dataset:
+        print(point)
     torch.save(dataset, dataset_filename)
     print(f"Dataset saved to {dataset_filename}")
 

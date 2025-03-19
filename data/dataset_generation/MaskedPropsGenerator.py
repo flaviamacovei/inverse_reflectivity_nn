@@ -1,4 +1,3 @@
-from BaseGenerator import BaseGenerator
 import random
 import torch
 import sys
@@ -7,6 +6,7 @@ from data.values.ReflectivePropsPattern import ReflectivePropsPattern
 from data.values.Coating import Coating
 from forward.forward_tmm import coating_to_reflective_props
 from utils.ConfigManager import ConfigManager as CM
+from data.dataset_generation.BaseGenerator import BaseGenerator
 
 class MaskedPropsGenerator(BaseGenerator):
     def __init__(self, num_points):
@@ -16,7 +16,7 @@ class MaskedPropsGenerator(BaseGenerator):
 
     def make_point(self):
         num_masks = random.randint(self.MIN_NUM_MASKS, self.MAX_NUM_MASKS)
-        mask_indices = sorted(random.sample(range(CM().get('wavelengths').size()[0]), num_masks * 2))
+        mask_indices = sorted(random.sample(range(CM().get('wavelengths').shape[0]), num_masks * 2))
 
         coating = self.make_random_coating()
         reflective_props_tensor = coating_to_reflective_props(coating).get_value()

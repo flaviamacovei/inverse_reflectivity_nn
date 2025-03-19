@@ -1,10 +1,10 @@
 import torch
-from BaseGenerator import BaseGenerator
 import random
 import sys
 sys.path.append(sys.path[0] + '/../..')
 from data.values.ReflectivePropsPattern import ReflectivePropsPattern
 from utils.ConfigManager import ConfigManager as CM
+from data.dataset_generation.BaseGenerator import BaseGenerator
 
 class ExplicitPropsGenerator(BaseGenerator):
     def __init__(self, num_points):

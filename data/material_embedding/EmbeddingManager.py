@@ -32,7 +32,7 @@ class EmbeddingModel(nn.Module):
     def set_embeddings(self, embeddings):
         self.embeddings = embeddings
 
-class EmbeddingManager():
+class EmbeddingManager:
     _instance = None
 
     def __new__(cls):

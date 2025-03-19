@@ -4,21 +4,24 @@ import yaml
 import numpy as np
 
 import os
-config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'config.yaml')
+dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+config_path = os.path.join(dir, 'config.yaml')
 
 class ConfigManager:
     _instance = None
 
-    def __new__(cls, filepath=config_path):
+    def __new__(cls, dir = dir):
         if cls._instance is None:
             cls._instance = super(ConfigManager, cls).__new__(cls)
-            cls._instance._load(filepath)
+            cls._instance._load(dir)
         return cls._instance
 
-    def _load(self, config_path):
-        with open(config_path, 'r') as f:
+    def _load(self, dir):
+        with open(dir + '/config.yaml', 'r') as f:
             self.config = yaml.safe_load(f)
         try:
+
+
             # set device
             if self.config['device'] == 'auto':
                 self.config['device'] = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -40,6 +43,9 @@ class ConfigManager:
                 self.config['dataset_files'] = [f"guided_complete_{self.config['training']['dataset_size']}.pt", f"guided_masked_{self.config['training']['dataset_size']}.pt"]
             else:
                 raise ValueError (f"Unknown loss function: {self.config['training']['loss_function']}")
+
+            # set materials location
+            self.config["material_embedding"]["data_file"] = os.path.join(dir, self.config["material_embedding"]["data_file"])
 
         except BaseException as e:
             print(f"Error loading config: {e}")
