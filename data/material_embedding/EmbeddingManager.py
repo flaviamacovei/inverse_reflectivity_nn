@@ -8,16 +8,24 @@ from data.values.Material import Material
 from utils.ConfigManager import ConfigManager as CM
 
 class EmbeddingModel(nn.Module):
-    def __init__(self, in_dim, num_materials, embedding_dim):
+    def __init__(self, in_dim, num_materials, embedding_dim, fixed_points = None):
         super().__init__()
+        hidden_dim = 4
         self.embeddings = nn.Parameter(torch.randn(num_materials, embedding_dim))
-        self.net = nn.Linear(in_dim, embedding_dim)
+        self.net = nn.Sequential(
+            nn.Linear(in_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, embedding_dim)
+        )
+        self.fixed_points = fixed_points
 
     def forward(self, x):
+        if self.fixed_points and x in self.fixed_points:
+            return self.fixed_points[x]
         return self.net(x)
 
     def get_embeddings(self):
-        return self.embeddings # possibly without the data
+        return self.embeddings
 
     def set_embeddings(self, embeddings):
         self.embeddings = embeddings
@@ -34,17 +42,31 @@ class EmbeddingManager():
         self.materials = self.load_materials()
         self.num_materials = len(self.materials)
 
-        indim = self.materials[0].get_B().shape[0] * 2
-        self.model = EmbeddingModel(indim, self.num_materials, CM().get('material_embedding.dim')).to(CM().get('device'))
+        indim = self.materials[0].get_coeffs().shape[0]
 
-        self.SAVEPATH = 'data/material_embedding/embeddings.pt'
+        substrate = self.get_material(CM().get('materials.substrate')).get_coeffs()
+        air = self.get_material(CM().get('materials.air')).get_coeffs()
+        fixed_points = {
+            substrate: torch.zeros((CM().get('material_embedding.dim')), device = CM().get('device')),
+            air: torch.ones((CM().get('material_embedding.dim')), device = CM().get('device')) * 10
+        }
+        self.model = EmbeddingModel(indim, self.num_materials, CM().get('material_embedding.dim'), fixed_points).to(CM().get('device'))
 
+        self.SAVEPATH = f'data/material_embedding/embeddings_{self.hash_materials()}.pt'
         self.load_embeddings()
 
-    def load_materials(self):
-        with open(CM().get('material_embedding.data_file'), 'r') as f:
-            data = yaml.safe_load(f)
-        return [Material(m['title'], m['B'], m['C']) for m in data['materials']]
+    def load_materials(self) -> list[Material]:
+        with open(CM().get('material_embedding.data_file'), 'r') as file:
+            data = yaml.safe_load(file)
+        thin_films = CM().get('materials.thin_films')
+        allowed_titles = thin_films + [CM().get('materials.substrate'), CM().get('materials.air')]
+        materials = [Material(m['title'], m['B'], m['C']) for m in data['materials'] if m['title'] in allowed_titles]
+        materials.sort()
+        return materials
+
+    def hash_materials(self):
+        material_hashes = [hash(material) for material in self.materials]
+        return hash(tuple(material_hashes))
 
     def encode(self, materials: list[Material]):
         assert len(materials) > 0, "No materials provided"
@@ -80,13 +102,11 @@ class EmbeddingManager():
 
     def train(self):
         optimiser = torch.optim.Adam(self.model.parameters(), lr = CM().get('material_embedding.learning_rate'))
-        for epoch in range(CM().get('material_embedding.num_epochs')):
+        for _ in range(CM().get('material_embedding.num_epochs')):
             optimiser.zero_grad()
             loss = self.compute_loss()
             loss.backward()
             optimiser.step()
-            if epoch % 10 == 0:
-                print(f'Epoch {epoch}: loss = {loss}')
 
     def save_embeddings(self):
         torch.save(self.model, self.SAVEPATH)
@@ -98,6 +118,15 @@ class EmbeddingManager():
             print(f"Saved embeddings not found. Training model.")
             self.train()
             self.save_embeddings()
+
+    def get_materials(self):
+        return self.materials
+
+    def get_material(self, title: str):
+        try:
+            return list(filter(lambda m: m.get_title() == title, self.materials))[0]
+        except IndexError:
+            raise ValueError(f"Material with title {title} not found")
 
     def __str__(self):
         max_title_length = max(len(material.get_title()) for material in self.materials)

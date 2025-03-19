@@ -37,3 +37,9 @@ class Material:
 
     def __eq__(self, other):
         return self.title == other.get_title() and torch.all(self.B == other.get_B()) and torch.all(self.C == other.get_C())
+
+    def __hash__(self):
+        return int(torch.cdist(self.B[None, :], self.C[None, :], p = 2).sum().item() * 5734)
+
+    def __lt__(self, other):
+        return self.title < other.get_title()
