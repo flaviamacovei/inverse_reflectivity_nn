@@ -61,6 +61,9 @@ class EmbeddingManager():
         with open(CM().get('material_embedding.data_file'), 'r') as file:
             data = yaml.safe_load(file)
         thin_films = CM().get('materials.thin_films')
+        if len(thin_films) == 0:
+            raise ValueError("No thin films specified")
+
         allowed_titles = thin_films + [CM().get('materials.substrate'), CM().get('materials.air')]
         materials = []
         for m in data['materials']:
