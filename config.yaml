@@ -20,12 +20,20 @@ thicknesses_bounds:
   max: 1.e-6
 
 materials:
-  substrate: "Suprasil Heraeus" # accepted values: "Suprasil Heraeus", "Suprasil", "BK7"
-  air: "Air"
+  substrate: "Suprasil Heraeus" # accepted values: "Suprasil Heraeus", "Suprasil", "BK7", "DC_Substrate"
+  air: "Air" # accepted values: "Air", "DC_Air"
   thin_films:
     - "SiO2 IBS"
     - "TiO2 IBS"
-    -
+#    - "H"
+#    - "L"
+#    - "A"
+#    - "F"
+#    - "M"
+#    - "T"
+#    - "Ag"
+#    - "Au"
+#    - "Ni"
 
 refractive_indices_bounds:
   min: 0.12

@@ -5,6 +5,8 @@ import yaml
 import sys
 sys.path.append(sys.path[0] + '/..')
 from data.values.Material import Material
+from data.values.SellmeierMaterial import SellmeierMaterial
+from data.values.ConstantRIMaterial import ConstantRIMaterial
 from utils.ConfigManager import ConfigManager as CM
 
 class EmbeddingModel(nn.Module):
@@ -60,7 +62,20 @@ class EmbeddingManager():
             data = yaml.safe_load(file)
         thin_films = CM().get('materials.thin_films')
         allowed_titles = thin_films + [CM().get('materials.substrate'), CM().get('materials.air')]
-        materials = [Material(m['title'], m['B'], m['C']) for m in data['materials'] if m['title'] in allowed_titles]
+        materials = []
+        for m in data['materials']:
+            if m['title'] not in allowed_titles:
+                continue
+            if 'B' in m and 'C' in m:
+                materials.append(SellmeierMaterial(m['title'], m['B'], m['C']))
+            elif 'R' in m:
+                materials.append(ConstantRIMaterial(m['title'], m['R']))
+            else:
+                raise ValueError(f"Material {m['title']} must have either 'B' and 'C' or 'R'")
+
+        material_type = type(materials[0])
+        for m in materials:
+            assert isinstance(m, material_type), f"All materials must be of same type."
         materials.sort()
         return materials
 
@@ -102,7 +117,7 @@ class EmbeddingManager():
 
     def train(self):
         optimiser = torch.optim.Adam(self.model.parameters(), lr = CM().get('material_embedding.learning_rate'))
-        for _ in range(CM().get('material_embedding.num_epochs')):
+        for epoch in range(CM().get('material_embedding.num_epochs')):
             optimiser.zero_grad()
             loss = self.compute_loss()
             loss.backward()

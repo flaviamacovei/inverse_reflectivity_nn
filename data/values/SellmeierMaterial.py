@@ -19,10 +19,10 @@ class SellmeierMaterial(Material):
         return n2 ** 0.5
 
     def get_coeffs(self):
-        return torch.cat((self.get_B(), self.get_C()))
+        return torch.cat((self.B, self.C))
 
     def __str__(self):
         return f"{self.title}:\nB: {self.B.cpu().detach().numpy()}\nC: {self.C.cpu().detach().numpy()}"
 
     def __hash__(self):
-        return abs(torch.cdist(self.B[None, :], self.C[None, :], p = 2).sum().item() * 5734)
+        return abs(int(torch.cdist(self.B[None, :], self.C[None, :], p = 2).sum().item() * 5734))

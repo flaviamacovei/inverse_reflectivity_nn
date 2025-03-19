@@ -8,7 +8,7 @@ from utils.ConfigManager import ConfigManager as CM
 class ConstantRIMaterial(Material):
     def __init__(self, title: str, reflective_index: Union[torch.Tensor, float]):
         super().__init__(title)
-        self.refractive_index = reflective_index if isinstance(reflective_index, torch.Tensor) else torch.tensor(reflective_index)
+        self.refractive_index = reflective_index if isinstance(reflective_index, torch.Tensor) else torch.tensor([reflective_index], device = CM().get('device'))
 
     def get_refractive_indices(self):
         result = torch.zeros_like(CM().get('wavelengths'))
@@ -22,4 +22,4 @@ class ConstantRIMaterial(Material):
         return f"{self.title}:\nrefractive index: {self.refractive_index.cpu().detach().numpy()}"
 
     def __hash__(self):
-        return abs(self.refractive_index * 5407)
+        return abs(int(self.refractive_index.item() * 5407))

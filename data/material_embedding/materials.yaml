@@ -22,3 +22,36 @@ materials:
    - title: "BK7"
      B: [1.03961212, 0.231792344, 1.01046945]
      C: [0.00600069867, 0.0200179144, 103.560653]
+
+   - title: "DC_Substrate"
+     R: 1.52
+
+   - title: "DC_Air"
+     R: 1.00
+
+   - title: "H"
+     R: 2.25
+
+   - title: "L"
+     R: 1.45
+
+   - title: "A"
+     R: 1.65
+
+   - title: "F"
+     R: 2.00
+
+   - title: "M"
+     R: 1.38
+
+   - title: "T"
+     R: 2.15
+
+   - title: "Ag"
+     R: 0.12
+
+   - title: "Au"
+     R: 0.306
+
+   - title: "Ni"
+     R: 1.8
