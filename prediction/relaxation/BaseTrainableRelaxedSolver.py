@@ -67,29 +67,32 @@ class BaseTrainableRelaxedSolver(BaseRelaxedSolver, ABC):
 
     def solve(self, target: ReflectivePropsPattern):
         self.set_to_eval()
+        print(f"target shape: {target.get_lower_bound().shape}")
         model_input = torch.cat((target.get_lower_bound(), target.get_upper_bound()), dim = 1)
         return self.scaled_forward(model_input)
 
     def scaled_forward(self, target: torch.Tensor):
-        coating_props = self.model(target)
-        thicknesses, refractive_indices = coating_props.chunk(2, dim = 1)
-        thicknesses = thicknesses / self.SCALING_FACTOR_THICKNESSES
-        refractive_indices = refractive_indices / self.SCALING_FACTOR_REFRACTIVE_INDICES
-        return Coating(thicknesses, refractive_indices)
+        coating_props = self.model(target.float())
+        coating_props = coating_props.reshape((coating_props.shape[0], CM().get('layers.max'), CM().get('material_embedding.dim') + 1))
+        # TODO: add scaling
+        return Coating.from_encoding(coating_props)
 
     def compute_loss_guided(self, batch: (torch.Tensor, torch.Tensor)):
         features, labels = batch
         features = features.float().to(CM().get('device'))
         labels = labels.float().to(CM().get('device'))
         coating = self.scaled_forward(features)
-        preds = torch.cat((coating.get_thicknesses(), coating.get_refractive_indices()), dim=1)
+        preds = coating.get_encoding()
         return torch.sum((preds - labels)**2)**0.5
 
     def compute_loss_free(self, batch: torch.Tensor):
         features = batch[0].float().to(CM().get('device'))
+        print(f"features: {features.shape}")
         lower_bound, upper_bound = features.chunk(2, dim=1)
         pattern = ReflectivePropsPattern(lower_bound, upper_bound)
+        print(f"pattern lower bound shape: {pattern.get_lower_bound().shape}")
         coating = self.scaled_forward(features)
+        print(f"coating batch size: {coating.get_encoding().shape[0]}")
         preds = coating_to_reflective_props(coating)
         return match(preds, pattern)
 

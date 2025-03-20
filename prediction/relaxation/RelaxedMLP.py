@@ -13,7 +13,7 @@ class TrainableMLP(nn.Module):
         layer_1_features = 128
         layer_2_features = 512
         layer_3_features = 64
-        self.output_size = 20
+        self.output_size = CM().get('layers.max') * (CM().get('material_embedding.dim') + 1)
         self.net = nn.Sequential(
             nn.Linear(in_dim, layer_1_features, device = CM().get('device')),
             nn.ReLU(),
@@ -25,7 +25,8 @@ class TrainableMLP(nn.Module):
         )
 
     def forward(self, x):
-        return self.net(x)
+        result = self.net(x)
+        return result
 
     def get_output_size(self):
         return self.output_size
