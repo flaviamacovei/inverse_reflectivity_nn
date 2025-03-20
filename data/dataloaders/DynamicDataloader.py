@@ -6,6 +6,7 @@ sys.path.append(sys.path[0] + '/../..')
 
 from data.dataloaders.BaseDataloader import BaseDataloader
 from utils.ConfigManager import ConfigManager as CM
+from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
 
 class DynamicDataloader(BaseDataloader):
     def __init__(self, batch_size: int, shuffle: bool = True):
@@ -20,9 +21,14 @@ class DynamicDataloader(BaseDataloader):
         self.epoch = 0
 
     def load_data(self, dataset_paths: list = []):
-        for path in dataset_paths:
-            dataset = torch.load("data/datasets/" + path)
-            dataloader = DataLoader(dataset, batch_size = self.batch_size, shuffle = self.shuffle)
+        for name in dataset_paths:
+            try:
+                filepath = "data/datasets/" + name + f"_{EM().hash_materials()}.pt"
+                dataset = torch.load(filepath)
+            except FileNotFoundError:
+                print("Dataset in current configuration not found. Please run generate_dataset.py first.")
+                return
+            dataloader = DataLoader(dataset, batch_size = self.batch_size, shuffle = self.shuffle, drop_last = True)
             self.dataloaders.append(dataloader)
 
     def next_epoch(self):
