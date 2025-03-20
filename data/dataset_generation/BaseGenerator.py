@@ -9,7 +9,7 @@ from utils.ConfigManager import ConfigManager as CM
 from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
 
 class BaseGenerator(ABC):
-    def __init__(self, num_points: int):
+    def __init__(self, num_points: int = 1):
         self.num_points = num_points
         self.TOLERANCE = CM().get('tolerance')
 

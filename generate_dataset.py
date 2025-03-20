@@ -23,7 +23,7 @@ def save_tensors_guided(generated):
     for (reflective_props, coating) in generated:
         feature_tensor = torch.cat((reflective_props.get_lower_bound(), reflective_props.get_upper_bound()),
                                    dim=1).squeeze()
-        label_tensor = coating.get_encoding()
+        label_tensor = coating.get_encoding().squeeze()
         feature_tensors.append(feature_tensor)
         label_tensors.append(label_tensor)
     feature_tensors = torch.stack(feature_tensors)
@@ -40,8 +40,6 @@ def generate_dataset(generator, save_function):
 
     generated_data = dataset_generator.generate()
     dataset = save_function(generated_data)
-    for point in dataset:
-        print(point)
     torch.save(dataset, dataset_filename)
     print(f"Dataset saved to {dataset_filename}")
 

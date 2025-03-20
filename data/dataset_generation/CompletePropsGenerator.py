@@ -7,7 +7,7 @@ from data.values.ReflectivePropsPattern import ReflectivePropsPattern
 from forward.forward_tmm import coating_to_reflective_props
 
 class CompletePropsGenerator(BaseGenerator):
-    def __init__(self, num_points):
+    def __init__(self, num_points = 1):
         super().__init__(num_points)
 
     def make_point(self):

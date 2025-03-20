@@ -7,7 +7,7 @@ from utils.ConfigManager import ConfigManager as CM
 from data.dataset_generation.BaseGenerator import BaseGenerator
 
 class ExplicitPropsGenerator(BaseGenerator):
-    def __init__(self, num_points):
+    def __init__(self, num_points = 1):
         super().__init__(num_points)
         self.MIN_NUM_REGIONS = 1
         self.MAX_NUM_REGIONS = 7
