@@ -24,8 +24,8 @@ class BaseGenerator(ABC):
         coating_materials = [[substrate] + thin_films + [air]]
         coating_materials[0].extend([air] * (CM().get('layers.max') - num_layers))
 
-        thicknesses = torch.ones((1, CM().get('layers.max')), device = CM().get('device'))
-        thicknesses[0, :num_layers] = torch.rand((1, num_layers), device = CM().get('device')) / 1.0e6
+        thicknesses = torch.zeros((1, CM().get('layers.max')), device = CM().get('device'))
+        thicknesses[0, :num_layers] = torch.rand((1, num_layers), device = CM().get('device')) * 0.2
 
         return Coating(coating_materials, thicknesses)
 

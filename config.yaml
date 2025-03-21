@@ -6,7 +6,7 @@ num_stacks: 1
 
 layers:
   min: 3
-  max: &max_layers 13
+  max: &max_layers 20
 
 wavelengths:
   start: 300.e-3
@@ -36,8 +36,8 @@ materials:
 #    - "Ni"
 
 refractive_indices_bounds:
-  min: 0.12
-  max: 2.25
+  min: -20
+  max: 20
 
 theta:
   start: 0.
