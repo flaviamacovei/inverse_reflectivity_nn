@@ -20,8 +20,6 @@ class ConfigManager:
         with open(dir + '/config.yaml', 'r') as f:
             self.config = yaml.safe_load(f)
         try:
-
-
             # set device
             if self.config['device'] == 'auto':
                 self.config['device'] = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -45,7 +43,7 @@ class ConfigManager:
                 raise ValueError (f"Unknown loss function: {self.config['training']['loss_function']}")
 
             # set materials location
-            self.config["material_embedding"]["data_file"] = os.path.join(dir, self.config["material_embedding"]["data_file"])
+            self.config['material_embedding']['data_file'] = os.path.join(dir, self.config['material_embedding']['data_file'])
 
         except BaseException as e:
             print(f"Error loading config: {e}")

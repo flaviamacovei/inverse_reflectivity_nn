@@ -10,6 +10,7 @@ from forward.forward_tmm import coating_to_reflective_props
 from evaluation.loss import match
 from utils.ConfigManager import ConfigManager as CM
 
+# TODO: incorporate encodings
 class GradientModel(BaseModel):
     def __init__(self):
         super().__init__()

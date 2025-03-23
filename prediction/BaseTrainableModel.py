@@ -61,7 +61,6 @@ class BaseTrainableModel(BaseModel, ABC):
 
     def initialise_weights(self, model: nn.Module):
         if isinstance(model, nn.Linear):
-            print("initialising weights")
             init.kaiming_normal_(model.weight, nonlinearity = 'relu')
             if model.bias is not None:
                 init.zeros_(model.bias)
