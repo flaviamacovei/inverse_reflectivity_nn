@@ -4,7 +4,6 @@ import torch
 import sys
 sys.path.append(sys.path[0] + '/../..')
 from data.values.Coating import Coating
-from data.values.RefractiveIndex import RefractiveIndex
 from utils.ConfigManager import ConfigManager as CM
 from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
 
@@ -21,13 +20,14 @@ class BaseGenerator(ABC):
         thin_film_materials = list(filter(lambda x: x != substrate and x != air, EM().get_materials()))
         thin_films = random.choices(thin_film_materials, k = num_layers - 2)
 
-        coating_materials = [[substrate] + thin_films + [air]]
-        coating_materials[0].extend([air] * (CM().get('layers.max') - num_layers))
+        coating_materials = [substrate] + thin_films + [air]
+        coating_materials.extend([air] * (CM().get('layers.max') - num_layers))
 
         thicknesses = torch.zeros((1, CM().get('layers.max')), device = CM().get('device'))
         thicknesses[0, :num_layers] = torch.rand((1, num_layers), device = CM().get('device')) * 0.2
 
-        return Coating(coating_materials, thicknesses)
+        encoding = torch.cat([thicknesses[:, :, None], EM().encode(coating_materials)[None]], dim = 2)
+        return Coating(encoding)
 
     @abstractmethod
     def make_point(self):
