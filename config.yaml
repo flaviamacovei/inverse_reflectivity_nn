@@ -6,7 +6,7 @@ num_stacks: 1
 
 layers:
   min: 3
-  max: &max_layers 20
+  max: &max_layers 13
 
 wavelengths:
   start: 300.e-3
@@ -58,9 +58,7 @@ scaling:
   thicknesses: 1.0e+6
   refractive_indices: 0.1
 
-architecture:
-  relaxed: &architecture "mlp" # accepted values: "gradient", "mlp", "cnn"
-  discretiser: "b&b" # accepted values: "rounder", "b&b"
+architecture: &architecture "mlp" # accepted values: "gradient", "mlp", "cnn"
 
 training:
   learning_rate: &lr 0.001 # default: 0.001
@@ -79,9 +77,8 @@ data_generation:
 branch_and_bound:
   max_iter: 300
 
-wandb_log: false
-
 wandb:
+  log: false
   project: "inverse-mirrors-nn"
   config:
     architecture: *architecture
