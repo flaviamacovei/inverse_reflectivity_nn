@@ -18,6 +18,7 @@ class RandomDataloader(BaseDataloader):
     def load_data(self):
         self.dataset = list()
         for _ in range(self.num_points):
+            # TODO: update
             thicknesses_tensor = (self.MAX_THICKNESS - self.MIN_THICKNESS) * torch.rand((self.num_layers)) + self.MIN_THICKNESS
             thicknesses_tensor[0] = float("Inf")
             thicknesses_tensor[-1] = float("Inf")

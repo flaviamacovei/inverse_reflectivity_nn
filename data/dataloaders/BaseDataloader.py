@@ -27,14 +27,12 @@ class BaseDataloader(ABC):
         else:
             raise TypeError("Unsupported dataset type.")
 
-    def __getitem__(self, index: int):
+    def __getitem__(self, item):
         if self.dataset is None:
             raise ValueError("Dataset not loaded. Call load_data first.")
 
-        if isinstance(self.dataset, Dataset):
-            return self.dataset[index * self.batch_size: (index + 1) * self.batch_size]
-        elif isinstance(self.dataset, list):
-            return self.dataset[index * self.batch_size: (index + 1) * self.batch_size]
+        if isinstance(self.dataset, Dataset) or isinstance(self.dataset, list):
+            return self.dataset[item]
         else:
             raise TypeError("Unsupported dataset type.")
 

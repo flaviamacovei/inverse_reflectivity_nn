@@ -3,10 +3,10 @@ import sys
 sys.path.append(sys.path[0] + '/..')
 from data.values.ReflectivePropsPattern import ReflectivePropsPattern
 
-class BaseRelaxedSolver(ABC):
+class BaseModel(ABC):
 
     def __init__(self):
         pass
     @abstractmethod
-    def solve(self, target: ReflectivePropsPattern):
+    def predict(self, target: ReflectivePropsPattern):
         pass

@@ -3,14 +3,14 @@ import numpy as np
 from scipy.optimize import minimize, Bounds
 import sys
 sys.path.append(sys.path[0] + '/..')
-from prediction.relaxation.BaseRelaxedSolver import BaseRelaxedSolver
+from prediction.BaseModel import BaseModel
 from data.values.ReflectivePropsPattern import ReflectivePropsPattern
 from data.values.Coating import Coating
 from forward.forward_tmm import coating_to_reflective_props
 from evaluation.loss import match
 from utils.ConfigManager import ConfigManager as CM
 
-class GradientSolver(BaseRelaxedSolver):
+class GradientModel(BaseModel):
     def __init__(self):
         super().__init__()
         self.num_layers = CM().get('num_layers')
@@ -20,7 +20,7 @@ class GradientSolver(BaseRelaxedSolver):
         self.MIN_THICKNESSES = 10
         self.MAX_THICKNESSES = 10_000
 
-    def solve(self, target: ReflectivePropsPattern):
+    def predict(self, target: ReflectivePropsPattern):
         params_init = self.make_init()
         bounds = self.make_bounds(self.num_layers)
 

@@ -7,7 +7,7 @@ from prediction.relaxation.BaseMLPRelaxedSolver import BaseMLPRelaxedSolver
 from data.dataloaders.BaseDataloader import BaseDataloader
 from utils.ConfigManager import ConfigManager as CM
 
-class TrainableMLP(nn.Module):
+class TrainableCNN(nn.Module):
     def __init__(self):
         super().__init__()
         pooling_size = (1, math.ceil(math.log(CM().get('wavelengths').size()[0], 5)))
@@ -32,28 +32,22 @@ class TrainableMLP(nn.Module):
 
 
     def forward(self, x):
-        # print(f"original shape: {x.shape}")
         x = x.view((x.shape[0], 1, 2, x.shape[1] // 2))
         out = self.conv_block_1(x)
-        # print(f"shape after conv block 1: {out.shape}")
         out = self.conv_block_2(out)
-        # print(f"shape after conv2: {out.shape}")
         out = self.conv_block_3(out)
-        # print(f"shape after conv3: {out.shape}")
         out = self.conv_block_4(out)
-        # print(f"shape after conv4: {out.shape}")
         out = self.final_pool(out)
         out = out.view((out.shape[0], out.shape[1]))
-        # print(f"shape end: {out.shape}")
         return out
 
     def get_output_size(self):
         return self.output_size
 
-class RelaxedCNN(BaseMLPRelaxedSolver):
+class CNN(BaseMLPRelaxedSolver):
     def __init__(self, dataloader: BaseDataloader):
         super().__init__(dataloader)
-        self.trainable_model = TrainableMLP().to(CM().get('device'))
+        self.trainable_model = TrainableCNN().to(CM().get('device'))
         self.initialise_model()
         self.initialise_opitimiser()
 
