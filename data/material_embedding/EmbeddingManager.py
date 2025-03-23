@@ -22,9 +22,13 @@ class EmbeddingModel(nn.Module):
         self.fixed_points = fixed_points
 
     def forward(self, x):
-        if self.fixed_points and x in self.fixed_points:
-            return self.fixed_points[x]
-        return self.net(x)
+        keys = torch.stack(list(self.fixed_points.keys())).repeat(x.shape[0], 1, 1)
+        mask = (x[:, None] == keys).all(dim=-1)
+        output = torch.empty((x.shape[0], CM().get('material_embedding.dim')), device=CM().get('device'))
+        fixed_points_values = torch.stack(list(self.fixed_points.values()))
+        output[mask.any(dim=-1)] = fixed_points_values.repeat(x.shape[0], 1, 1)[mask]
+        output[~mask.any(dim=-1)] = self.net(x[~mask.any(dim=-1)])
+        return output
 
     def get_embeddings(self):
         return self.embeddings
@@ -43,19 +47,22 @@ class EmbeddingManager:
     def __init__(self):
         self.materials = self.load_materials()
         self.num_materials = len(self.materials)
+        self.LOSS_SCALE = torch.cat([m.get_coeffs() for m in self.materials]).abs().max().item()
+        self.materials_refractive_indices = torch.stack([m.get_refractive_indices() for m in self.materials])
 
         indim = self.materials[0].get_coeffs().shape[0]
 
         substrate = self.get_material(CM().get('materials.substrate')).get_coeffs()
         air = self.get_material(CM().get('materials.air')).get_coeffs()
         fixed_points = {
-            substrate: torch.zeros((CM().get('material_embedding.dim')), device = CM().get('device')),
-            air: torch.ones((CM().get('material_embedding.dim')), device = CM().get('device')) * 10
+            substrate: torch.ones((CM().get('material_embedding.dim')), device = CM().get('device')),
+            air: torch.zeros((CM().get('material_embedding.dim')), device = CM().get('device'))
         }
         self.model = EmbeddingModel(indim, self.num_materials, CM().get('material_embedding.dim'), fixed_points).to(CM().get('device'))
 
         self.SAVEPATH = f'data/material_embedding/embeddings_{self.hash_materials()}.pt'
         self.load_embeddings()
+        self.embeddings = self.model(torch.stack([m.get_coeffs() for m in self.materials]))
 
     def load_materials(self) -> list[Material]:
         with open(CM().get('material_embedding.data_file'), 'r') as file:
@@ -86,32 +93,54 @@ class EmbeddingManager:
         material_hashes = [hash(material) for material in self.materials]
         return hash(tuple(material_hashes))
 
+    def get_nearest_neighbours(self, embedding: torch.Tensor):
+        distances = torch.cdist(embedding, self.embeddings)
+        indices = torch.argmin(distances, dim = -1)
+        nearest_neighbours = self.model(torch.stack([self.materials[i].get_coeffs() for batch in indices for i in batch]))
+        nearest_neighbours = nearest_neighbours.view(embedding.shape[0], embedding.shape[1], -1)
+        return nearest_neighbours
+
+    def embedding_to_refractive_indices(self, embedding: torch.Tensor):
+        for batch in embedding:
+            for material_embedding in batch:
+                assert material_embedding in self.embeddings, f"Material embedding {material_embedding} not found in embeddings. Call get_nearest_neighbours first."
+        lookup = self.embeddings.repeat(embedding.shape[0], embedding.shape[1], 1, 1)
+        embedding = embedding[:, :, None].repeat(1, 1, self.num_materials, 1)
+        # i don't actually know what this is doing
+        mask_soft = torch.exp(-torch.abs(embedding - lookup)).prod(dim = -1)
+        mask_hard = torch.zeros_like(mask_soft).scatter_(-1, mask_soft.argmax(dim = -1, keepdim = True), 1.0)
+        mask = mask_hard + (mask_soft - mask_soft.detach())
+        all_refractive_indices = self.materials_refractive_indices.repeat(embedding.shape[0], embedding.shape[1], 1, 1)
+        refractive_indices = (all_refractive_indices * mask[:, :, :, None]).sum(dim = -2)
+        return refractive_indices
+
     def encode(self, materials: list[Material]):
         assert len(materials) > 0, "No materials provided"
         assert isinstance(materials[0], Material), "Materials must be of type Material"
         input_features = torch.stack([material.get_coeffs() for material in materials])
         return self.model(input_features)
 
-    def decode(self, embeddings: torch.Tensor):
-        distances = torch.tensor([[self.euclidean_distance(self.model(self.materials[i].get_coeffs()), embeddings[j]) for i in range(self.num_materials)] for j in range(len(embeddings))])
+    def decode(self, embedding: torch.Tensor):
+        distances = torch.cdist(embedding, self.embeddings)
         indices = torch.argmin(distances, dim = -1)
-        materials = [self.materials[index] for index in indices]
-        return materials, [distances[i, indices[i]].item() for i in range(len(embeddings))]
+        materials = [[self.materials[index] for index in batch] for batch in indices]
+        return materials
 
     def euclidean_distance(self, x, y):
         return torch.norm(x - y, p = 2, dim = -1)
 
     def compute_loss(self):
-        loss = torch.tensor(0.0, device=CM().get('device'))
+        loss = torch.tensor([0.0], device=CM().get('device'))
         num_pairs = 0
 
-        for material_i, material_j in itertools.combinations(self.materials, 2):
-            embedding_i = self.model(material_i.get_coeffs())
-            embedding_j = self.model(material_j.get_coeffs())
+        for material_i, material_j in itertools.combinations_with_replacement(self.materials, 2):
+            embedding_i = self.model(material_i.get_coeffs()[None, :])
+            embedding_j = self.model(material_j.get_coeffs()[None, :])
+
 
             embedding_distance = self.euclidean_distance(embedding_i, embedding_j)
 
-            bc_distance = self.euclidean_distance(material_i.get_coeffs(), material_j.get_coeffs())
+            bc_distance = self.euclidean_distance(material_i.get_coeffs()[None, :], material_j.get_coeffs()[None, :]) / self.LOSS_SCALE
 
             loss += (embedding_distance - bc_distance) ** 2
             num_pairs += 1
@@ -120,11 +149,15 @@ class EmbeddingManager:
 
     def train(self):
         optimiser = torch.optim.Adam(self.model.parameters(), lr = CM().get('material_embedding.learning_rate'))
-        for epoch in range(CM().get('material_embedding.num_epochs')):
+        final_loss = None
+        for _ in range(CM().get('material_embedding.num_epochs')):
             optimiser.zero_grad()
             loss = self.compute_loss()
+            final_loss = loss
             loss.backward()
             optimiser.step()
+        if final_loss:
+            print(f"Final loss value: {final_loss}")
 
     def save_embeddings(self):
         torch.save(self.model, self.SAVEPATH)
