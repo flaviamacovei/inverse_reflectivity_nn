@@ -1,17 +1,17 @@
 device: 'auto' # accepted values: "auto", "cpu"
 
-seed: 0
+seed: null # <value> or null
 
 num_stacks: 1
 
 layers:
-  min: 3
-  max: &max_layers 13
+  min: 1 # must be >= 1
+  max: &max_layers 50
 
 wavelengths:
-  start: 300.e-3
-  end: 1100.e-3
-  steps: 1000
+  start: 100.e-3
+  end: 1499.e-3
+  steps: 1400
 
 polarisation: 's' # accepted values: "s", "p"
 
@@ -20,24 +20,20 @@ thicknesses_bounds:
   max: 1.e-6
 
 materials:
-  substrate: "Suprasil Heraeus" # accepted values: "Suprasil Heraeus", "Suprasil", "BK7", "DC_Substrate"
-  air: "Air" # accepted values: "Air", "DC_Air"
+  substrate: "DC_Substrate" # accepted values: "Suprasil Heraeus", "Suprasil", "BK7", "DC_Substrate"
+  air: "DC_Air" # accepted values: "Air", "DC_Air"
   thin_films:
-    - "SiO2 IBS"
-    - "TiO2 IBS"
-#    - "H"
-#    - "L"
-#    - "A"
-#    - "F"
-#    - "M"
-#    - "T"
-#    - "Ag"
-#    - "Au"
-#    - "Ni"
-
-refractive_indices_bounds:
-  min: -20
-  max: 20
+#    - "SiO2 IBS"
+#    - "TiO2 IBS"
+    - "H"
+    - "L"
+    - "A"
+    - "F"
+    - "M"
+    - "T"
+    - "Ag"
+    - "Au"
+    - "Ni"
 
 theta:
   start: 0.
@@ -53,10 +49,6 @@ material_embedding:
   learning_rate: 0.01
 
 tolerance: 1.0e-3
-
-scaling:
-  thicknesses: 1.0e+6
-  refractive_indices: 0.1
 
 architecture: &architecture "mlp" # accepted values: "gradient", "mlp", "cnn"
 

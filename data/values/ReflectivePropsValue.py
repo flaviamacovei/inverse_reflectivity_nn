@@ -13,7 +13,7 @@ class ReflectivePropsValue(BaseReflectiveProps):
     def to(self, device: str):
         return ReflectivePropsValue(self.value.to(device))
 
-    def device(self):
+    def get_device(self):
         return self.value.device
 
     def __eq__(self, other):

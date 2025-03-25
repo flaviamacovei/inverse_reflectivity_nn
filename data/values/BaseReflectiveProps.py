@@ -6,5 +6,5 @@ class BaseReflectiveProps(ABC):
         pass
 
     @abstractmethod
-    def to(self, device = str):
+    def to(self, device: str):
         pass

@@ -16,11 +16,11 @@ class ReflectivePropsPattern(BaseReflectiveProps):
     def get_upper_bound(self):
         return self.upper_bound
 
-    def to(self, device = str):
+    def to(self, device: str):
         return ReflectivePropsPattern(self.lower_bound.to(device), self.upper_bound.to(device))
 
-    def device(self):
-        self.lower_bound.device
+    def get_device(self):
+        return self.lower_bound.device
 
     def __eq__(self, other):
         if isinstance(other, ReflectivePropsPattern):

@@ -52,3 +52,9 @@ class Coating():
         if isinstance(other, Coating):
             return torch.equal(self.get_thicknesses(), other.get_thicknesses()) and torch.equal(self.get_material_encodings(), other.get_material_encodings())
         return False
+
+    def to(self, device: str):
+        return Coating(self.get_encoding().to(device))
+
+    def get_device(self):
+        return self.thicknesses.device
