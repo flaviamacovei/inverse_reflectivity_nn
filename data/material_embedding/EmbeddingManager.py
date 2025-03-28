@@ -8,6 +8,7 @@ from data.values.Material import Material
 from data.values.SellmeierMaterial import SellmeierMaterial
 from data.values.ConstantRIMaterial import ConstantRIMaterial
 from utils.ConfigManager import ConfigManager as CM
+from utils.os_utils import short_hash
 
 class EmbeddingModel(nn.Module):
     def __init__(self, in_dim, num_materials, embedding_dim, fixed_points = None):
@@ -91,7 +92,7 @@ class EmbeddingManager:
 
     def hash_materials(self):
         material_hashes = [hash(material) for material in self.materials]
-        return hash(tuple(material_hashes))
+        return short_hash(tuple(material_hashes))
 
     def get_nearest_neighbours(self, embedding: torch.Tensor):
         distances = torch.cdist(embedding, self.embeddings)
@@ -157,7 +158,7 @@ class EmbeddingManager:
             loss.backward()
             optimiser.step()
         if final_loss:
-            print(f"Final loss value: {final_loss}")
+            print(f"Final loss value: {final_loss.item()}")
 
     def save_embeddings(self):
         torch.save(self.model, self.SAVEPATH)

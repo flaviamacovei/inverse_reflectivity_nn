@@ -20,6 +20,3 @@ class ConstantRIMaterial(Material):
 
     def __str__(self):
         return f"{self.title}:\nrefractive index: {self.refractive_index.cpu().detach().numpy()}"
-
-    def __hash__(self):
-        return abs(int(self.refractive_index.item() * 5407))

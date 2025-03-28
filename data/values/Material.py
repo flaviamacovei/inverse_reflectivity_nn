@@ -4,6 +4,7 @@ from typing import Union
 import sys
 sys.path.append(sys.path[0] + '/..')
 from utils.ConfigManager import ConfigManager as CM
+from utils.os_utils import short_hash
 
 class Material(ABC):
     def __init__(self, title: str):
@@ -30,9 +31,8 @@ class Material(ABC):
     def __eq__(self, other):
         return self.title == other.get_title() and torch.all(self.get_coeffs() == other.get_coeffs())
 
-    @abstractmethod
     def __hash__(self):
-        pass
+        return short_hash(self)
 
     def __lt__(self, other):
         return self.title < other.get_title()

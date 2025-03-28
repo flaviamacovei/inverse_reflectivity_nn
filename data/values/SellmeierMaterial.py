@@ -23,6 +23,3 @@ class SellmeierMaterial(Material):
 
     def __str__(self):
         return f"{self.title}:\nB: {self.B.cpu().detach().numpy()}\nC: {self.C.cpu().detach().numpy()}"
-
-    def __hash__(self):
-        return abs(int(torch.cdist(self.B[None, :], self.C[None, :], p = 2).sum().item() * 5734))
