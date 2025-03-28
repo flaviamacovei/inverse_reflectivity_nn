@@ -7,6 +7,7 @@ sys.path.append(sys.path[0] + '/..')
 from data.values.Region import Region
 from data.values.ReflectivePropsPattern import ReflectivePropsPattern
 from utils.ConfigManager import ConfigManager as CM
+from utils.tmm_utils import get_wavelength_index
 
 class UserInput():
     def __init__(self):
@@ -15,9 +16,8 @@ class UserInput():
 
     def append_action(self, region: Region):
         assert region, "Region must not be None."
-        assert self.start_wl <= region.get_start_wl() and self.end_wl >= region.get_end_wl(), "Region must be within frame."
-        assert np.searchsorted(CM().get('wavelengths'), region.get_start_wl()) == region.get_start_wl() and np.searchsorted(CM().get('wavelengths'), region.get_end_wl()) == region.get_end_wl(), "Region must be interval of frame."
-        # assert (region.get_start_wl() - self.start_wl) % self.step_length == 0 and (region.get_end_wl() - self.end_wl) % self.step_length == 0, "Region must be multiple of step length."
+        assert CM().get('wavelengths')[0] <= region.get_start_wl() and CM().get('wavelengths')[-1] >= region.get_end_wl(), "Region must be within frame."
+        assert isinstance(get_wavelength_index(region.get_start_wl()), int) and isinstance(get_wavelength_index(region.get_end_wl()), int), "Region must be interval of frame."
         for existing_region in self.regions:
             if not (
                     region.get_start_wl() >= existing_region.get_end_wl() or region.get_end_wl() <= existing_region.get_start_wl()):
@@ -41,11 +41,11 @@ class UserInput():
 
 
     def read_regions(self):
-        print("Please specify regions by start wavelength, end wavelength, and target reflectivity.")
+        print("Please specify regions by start wavelength (in nm), end wavelength (in nm), and target reflectivity.")
         cont = True
         while cont:
-            region_start_idx = self.read_int_from_input("Start wavelength: ")
-            region_end_idx = self.read_int_from_input("End wavelength: ")
+            region_start_idx = self.read_int_from_input("Start wavelength: ") * 1.e-3
+            region_end_idx = self.read_int_from_input("End wavelength: ") * 1.e-3
             region_value = self.read_float_from_input("Target reflectivity: ")
             try:
                 region = Region(region_start_idx, region_end_idx, region_value)
@@ -67,12 +67,12 @@ class UserInput():
         self.read_regions()
 
     def to_reflective_props_pattern(self):
-        lower_bound = torch.zeros(wavelengths.size()[0], device = CM().get('device'))
-        upper_bound = torch.ones(wavelengths.size()[0], device = CM().get('device'))
+        lower_bound = torch.zeros((1, CM().get('wavelengths').shape[0]), device = CM().get('device'))
+        upper_bound = torch.ones((1, CM().get('wavelengths').shape[0]), device = CM().get('device'))
 
         for region in self.regions:
-            lower_bound[region.get_start_wl() - wavelengths[0]:region.get_end_wl() - wavelengths[0]] = region.get_value()
-            upper_bound[region.get_start_wl() - wavelengths[0]:region.get_end_wl() - wavelengths[0]] = region.get_value()
+            lower_bound[:, get_wavelength_index(region.get_start_wl()):get_wavelength_index(region.get_end_wl())] = region.get_value()
+            upper_bound[:, get_wavelength_index(region.get_start_wl()):get_wavelength_index(region.get_end_wl())] = region.get_value()
 
         lower_bound = torch.clamp(lower_bound - CM().get('tolerance') / 2, 0, 1)
         upper_bound = torch.clamp(upper_bound + CM().get('tolerance') / 2, 0, 1)

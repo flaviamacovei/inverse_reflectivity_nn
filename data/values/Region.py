@@ -7,7 +7,7 @@ class Region():
         self.value = value
 
     def __str__(self):
-        return f"Region: {self.start_wl:5} to {self.end_wl:5}: {self.value:2.2f}"
+        return f"Region: {int(self.start_wl * 1e3):5} nm to {int(self.end_wl * 1e3):5} nm: {self.value:2.2f}"
 
     def get_start_wl(self):
         return self.start_wl
