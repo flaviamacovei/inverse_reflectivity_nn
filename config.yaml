@@ -66,9 +66,6 @@ data_generation:
   guidance: *guidance
   dataset_size: 100
 
-branch_and_bound:
-  max_iter: 300
-
 wandb:
   log: false
   project: "inverse-mirrors-nn"

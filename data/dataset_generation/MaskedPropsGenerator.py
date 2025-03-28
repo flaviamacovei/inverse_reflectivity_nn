@@ -33,4 +33,4 @@ class MaskedPropsGenerator(BaseGenerator):
 
         pattern = ReflectivePropsPattern(lower_bound, upper_bound)
 
-        return pattern, coating
+        return pattern.to('cpu'), coating.to('cpu')

@@ -35,4 +35,4 @@ class ExplicitPropsGenerator(BaseGenerator):
 
         pattern = ReflectivePropsPattern(lower_bound, upper_bound)
 
-        return pattern, None
+        return pattern.to('cpu'), None

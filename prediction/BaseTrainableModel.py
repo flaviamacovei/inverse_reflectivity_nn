@@ -39,7 +39,6 @@ class BaseTrainableModel(BaseModel, ABC):
             self.optimiser.zero_grad()
             epoch_loss = torch.tensor(0.0, device=CM().get('device'))
             for batch in self.dataloader:
-
                 loss = self.compute_loss(batch)
                 epoch_loss += loss
 
@@ -68,24 +67,28 @@ class BaseTrainableModel(BaseModel, ABC):
     def predict(self, target: ReflectivePropsPattern):
         self.set_to_eval()
         model_input = torch.cat((target.get_lower_bound(), target.get_upper_bound()), dim = 1)
-        encoding = self.model(model_input.float()).reshape((model_input.shape[0], CM().get('layers.max'), CM().get('material_embedding.dim') + 1))
+        encoding = self.model(model_input.float()).reshape((model_input.shape[0], (CM().get('layers.max') + 2), CM().get('material_embedding.dim') + 1))
         return Coating(encoding)
 
     def compute_loss_guided(self, batch: (torch.Tensor, torch.Tensor)):
         features, labels = batch
         features = features.float().to(CM().get('device'))
         labels = labels.float().to(CM().get('device'))
-        preds = self.model(features).reshape((features.shape[0], CM().get('layers.max'), CM().get('material_embedding.dim') + 1))
+        preds = self.model(features).reshape((features.shape[0], (CM().get('layers.max') + 2), CM().get('material_embedding.dim') + 1))
         return torch.sum((preds - labels)**2)**0.5
 
     def compute_loss_free(self, batch: torch.Tensor):
         features = batch[0].float().to(CM().get('device'))
         lower_bound, upper_bound = features.chunk(2, dim=1)
         pattern = ReflectivePropsPattern(lower_bound, upper_bound)
-        encoding = self.model(features).reshape((features.shape[0], CM().get('layers.max'), CM().get('material_embedding.dim') + 1))
+        encoding = self.model(features).reshape((features.shape[0], (CM().get('layers.max') + 2), CM().get('material_embedding.dim') + 1))
         coating = Coating(encoding)
         preds = coating_to_reflective_props(coating)
         return match(preds, pattern)
+
+    def load(self, filename: str):
+        self.model = torch.load(filename)
+        self.model.to(CM().get('device'))
 
     def set_to_train(self):
         self.model.train()
@@ -96,3 +99,4 @@ class BaseTrainableModel(BaseModel, ABC):
     @abstractmethod
     def scale_gradients(self):
         pass
+

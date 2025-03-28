@@ -164,7 +164,7 @@ class EmbeddingManager:
 
     def load_embeddings(self):
         try:
-            self.model = torch.load(self.SAVEPATH)
+            self.model = torch.load(self.SAVEPATH, map_location = CM().get('device'))
         except FileNotFoundError:
             print(f"Saved embeddings not found. Training model.")
             self.train()
