@@ -7,6 +7,7 @@ sys.path.append(sys.path[0] + '/../..')
 from data.dataloaders.BaseDataloader import BaseDataloader
 from utils.ConfigManager import ConfigManager as CM
 from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
+from utils.data_utils import get_dataset_name
 
 class DynamicDataloader(BaseDataloader):
     def __init__(self, batch_size: int, shuffle: bool = True):
@@ -22,11 +23,23 @@ class DynamicDataloader(BaseDataloader):
         self.epoch = 0
 
     def load_data(self, dataset_paths: list = []):
-        for name in dataset_paths:
+        guidace = CM().get('training.guidance')
+        if CM().get('training.dataset_switching'):
+            if guidace == "free":
+                densities = ["complete", "masked", "explicit"]
+            elif guidace == "guided":
+                densities = ["complete", "masked"]
+            else:
+                raise ValueError(f"Guidance {guidace} not supported.")
+        else:
+            densities = ["complete"]
+        for density in densities:
             try:
-                filepath = "data/datasets/" + name + f"_{EM().hash_materials()}.pt"
+                filepath = get_dataset_name("training", density)
                 dataset = torch.load(filepath)
                 self.datasets.extend(dataset)
+            except AttributeError:
+                raise FileNotFoundError("Dataset in current configuration not found. Please run generate_dataset.py first.")
             except FileNotFoundError:
                 raise FileNotFoundError("Dataset in current configuration not found. Please run generate_dataset.py first.")
             dataloader = DataLoader(dataset, batch_size = self.batch_size, shuffle = self.shuffle, drop_last = True)

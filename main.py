@@ -24,8 +24,7 @@ from tmm_clean.tmm_core import compute_multilayer_optics
 def notify():
     os.system("echo -ne '\007'")
 
-if __name__ == "__main__":
-
+def main():
     models = {
         "gradient": GradientModel,
         "mlp": MLP,
@@ -41,11 +40,16 @@ if __name__ == "__main__":
 
     Model = models[CM().get('architecture')]
 
-    dataloader = DynamicDataloader(batch_size = CM().get('training.batch_size'), shuffle = False)
-    dataloader.load_data(CM().get('dataset_files'))
+    dataloader = DynamicDataloader(batch_size=CM().get('training.batch_size'), shuffle=False)
+    try:
+        dataloader.load_data(CM().get('dataset_files'))
+    except FileNotFoundError:
+        # TODO: incorporate print of missing densities (or at least one)
+        print("Dataset in current configuration not found. Please run generate_dataset.py first.")
+        return
 
     model = Model(dataloader)
-    model.load("out/models/model_guided_switch_1000_3_guided_mlp_single.pt")
+    # model.load("out/models/model_guided_switch_1000_3_guided_mlp_single.pt")
 
     if isinstance(model, BaseTrainableModel):
         model.train()
@@ -54,6 +58,7 @@ if __name__ == "__main__":
         evaluate_model(model)
         test_model(model)
 
-
     notify()
 
+if __name__ == "__main__":
+    main()
