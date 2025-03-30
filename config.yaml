@@ -13,8 +13,11 @@ wavelengths:
   end: 1499.e-3
   steps: 1400
 
-polarisation: 's' # accepted values: "s", "p"
+polarisation: 's' # accepte d values: "s", "p"
 
+thicknesses_bounds:
+  min: 1.e-9
+  max: 1.e-6
 
 materials:
   substrate: "DC_Substrate" # accepted values: "Suprasil Heraeus", "Suprasil", "BK7", "DC_Substrate"
@@ -62,6 +65,7 @@ data_generation:
   density: "complete" # accepted values: "complete", "masked", "explicit"
   guidance: *guidance
   dataset_size: 100
+  partition: "training" # accepted values: "training", "validation"
 
 wandb:
   log: false

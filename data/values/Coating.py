@@ -35,8 +35,10 @@ class Coating():
         return self.em.decode(self.material_encodings)
 
     def get_batch(self, index: int):
-        assert index < len(self.layers)
-        return Coating(torch.cat([self.thicknesses[index][None], self.material_encodings[index][None]], dim = 2))
+        assert index < len(self.thicknesses)
+        return Coating(torch.cat([self.thicknesses[index][None, :, None], self.material_encodings[index][None]], dim = 2))
+
+    # TODO: implement __getitem__
 
     def __str__(self):
         materials = self.get_materials()
