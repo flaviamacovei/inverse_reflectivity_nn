@@ -51,6 +51,7 @@ def generate_dataset(generator, save_function):
         "density": CM().get('data_generation.density'),
         "num_points": num_points
     }
+    # TODO: remove entry if dataset generation fails
     dataset_hash = short_hash(props_dict)
     dataset_filename = get_unique_filename(f"data/datasets/dataset_{dataset_hash}.pt")
     if not os.path.exists(FILEPATH_METADATA):

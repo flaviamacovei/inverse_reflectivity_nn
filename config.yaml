@@ -50,12 +50,19 @@ material_embedding:
 
 tolerance: 1.0e-3
 
-architecture: &architecture "mlp" # accepted values: "mlp", "cnn"
+architecture: &architecture "transformer" # accepted values: "gradient", "mlp", "cnn", "transformer"
+
+transformer:
+  model_dim: 4
+  num_heads: 2
+  num_layers: 2
+  d_ff: 8
+  dropout: 0.1
 
 training:
   learning_rate: &lr 0.001 # default: 0.001
-  num_epochs: &epochs 10
-  batch_size: &batch_size 50
+  num_epochs: &epochs 1
+  batch_size: &batch_size 2
   guidance: &guidance "free" # accepted values: "free", "guided"
   dataset_switching: false
   dataset_size: 100

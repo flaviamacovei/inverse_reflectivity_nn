@@ -7,6 +7,7 @@ from forward.forward_tmm import coating_to_reflective_props
 from prediction.BaseTrainableModel import BaseTrainableModel
 from prediction.CNN import CNN
 from prediction.MLP import MLP
+from prediction.Transformer import Transformer
 from data.dataloaders.DynamicDataloader import DynamicDataloader
 from data.values.Coating import Coating
 from ui.visualise import visualise
@@ -26,7 +27,8 @@ def notify():
 def main():
     models = {
         "mlp": MLP,
-        "cnn": CNN
+        "cnn": CNN,
+        "transformer": Transformer
     }
 
     if CM().get('wandb.log'):
@@ -52,9 +54,9 @@ def main():
     # if isinstance(model, BaseTrainableModel):
     #     model.train()
 
-    if CM().get('training.evaluate'):
-        evaluate_model(model)
-        test_model(model)
+    # if CM().get('training.evaluate'):
+    #     evaluate_model(model)
+    #     test_model(model)
 
     notify()
 
