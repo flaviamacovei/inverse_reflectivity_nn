@@ -5,7 +5,6 @@ import wandb
 from data.values.Material import Material
 from forward.forward_tmm import coating_to_reflective_props
 from prediction.BaseTrainableModel import BaseTrainableModel
-from prediction.GradientModel import GradientModel
 from prediction.CNN import CNN
 from prediction.MLP import MLP
 from data.dataloaders.DynamicDataloader import DynamicDataloader
@@ -26,7 +25,6 @@ def notify():
 
 def main():
     models = {
-        "gradient": GradientModel,
         "mlp": MLP,
         "cnn": CNN
     }
@@ -40,19 +38,19 @@ def main():
 
     Model = models[CM().get('architecture')]
 
-    dataloader = DynamicDataloader(batch_size=CM().get('training.batch_size'), shuffle=False)
-    try:
-        dataloader.load_data(CM().get('dataset_files'))
-    except FileNotFoundError:
-        # TODO: incorporate print of missing densities (or at least one)
-        print("Dataset in current configuration not found. Please run generate_dataset.py first.")
-        return
+    # dataloader = DynamicDataloader(batch_size=CM().get('training.batch_size'), shuffle=False)
+    # try:
+    #     dataloader.load_data(CM().get('dataset_files'))
+    # except FileNotFoundError:
+    #     # TODO: incorporate print of missing densities (or at least one)
+    #     print("Dataset in current configuration not found. Please run generate_dataset.py first.")
+    #     return
 
-    model = Model(dataloader)
+    model = Model()
     # model.load("out/models/model_guided_switch_1000_3_guided_mlp_single.pt")
 
-    if isinstance(model, BaseTrainableModel):
-        model.train()
+    # if isinstance(model, BaseTrainableModel):
+    #     model.train()
 
     if CM().get('training.evaluate'):
         evaluate_model(model)

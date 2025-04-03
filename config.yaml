@@ -50,7 +50,7 @@ material_embedding:
 
 tolerance: 1.0e-3
 
-architecture: &architecture "mlp" # accepted values: "gradient", "mlp", "cnn"
+architecture: &architecture "mlp" # accepted values: "mlp", "cnn"
 
 training:
   learning_rate: &lr 0.001 # default: 0.001
