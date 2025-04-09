@@ -52,11 +52,12 @@ class BaseTrainableModel(BaseModel, ABC):
             if epoch % max(1, CM().get('training.num_epochs') / 10) == 0:
                 print(f"Loss in epoch {epoch + 1}: {epoch_loss.item()}")
         print("Training complete.")
-        model_filename = get_unique_filename(f"out/models/model_{CM().get('training.guidance')}_{'switch' if CM().get('training.dataset_switching') else 'no-switch'}_{CM().get('wavelengths').size()[0]}.pt")
-        print(f"Saving model to {model_filename}")
-        torch.save(self.model, model_filename)
-        if CM().get('wandb.log'):
-            wandb.log({"saved under": model_filename})
+        if CM().get('training.save_model'):
+            model_filename = get_unique_filename(f"out/models/model_{CM().get('training.guidance')}_{'switch' if CM().get('training.dataset_switching') else 'no-switch'}_{CM().get('wavelengths').size()[0]}.pt")
+            print(f"Saving model to {model_filename}")
+            torch.save(self.model, model_filename)
+            if CM().get('wandb.log'):
+                wandb.log({"saved under": model_filename})
 
     def initialise_weights(self, model: nn.Module):
         if isinstance(model, nn.Linear):

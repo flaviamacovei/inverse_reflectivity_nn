@@ -175,11 +175,7 @@ class TrainableTransformer(nn.Module):
             decoder_output = decoder_layer(decoder_output, encoder_output, source_mask, target_mask)
 
         decoder_output = decoder_output.sum(dim = 1)
-
-        print(f"decoder output shape: {decoder_output.shape}")
-
         output = self.fc(decoder_output)
-        print(f"output shape: {output.shape}")
         return output
 
 

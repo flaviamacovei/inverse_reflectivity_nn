@@ -32,7 +32,7 @@ def main():
     }
 
     if CM().get('wandb.log'):
-        print("initialising")
+        print("initialising weights and biases")
         wandb.init(
             project=CM().get('wandb.project'),
             config=CM().get('wandb.config')
@@ -40,23 +40,23 @@ def main():
 
     Model = models[CM().get('architecture')]
 
-    # dataloader = DynamicDataloader(batch_size=CM().get('training.batch_size'), shuffle=False)
-    # try:
-    #     dataloader.load_data(CM().get('dataset_files'))
-    # except FileNotFoundError:
-    #     # TODO: incorporate print of missing densities (or at least one)
-    #     print("Dataset in current configuration not found. Please run generate_dataset.py first.")
-    #     return
+    dataloader = DynamicDataloader(batch_size=CM().get('training.batch_size'), shuffle=False)
+    try:
+        dataloader.load_data(CM().get('dataset_files'))
+    except FileNotFoundError:
+        # TODO: incorporate print of missing densities (or at least one)
+        print("Dataset in current configuration not found. Please run generate_dataset.py first.")
+        return
 
-    model = Model()
+    model = Model(dataloader)
     # model.load("out/models/model_guided_switch_1000_3_guided_mlp_single.pt")
 
-    # if isinstance(model, BaseTrainableModel):
-    #     model.train()
+    if isinstance(model, BaseTrainableModel):
+        model.train()
 
-    # if CM().get('training.evaluate'):
-    #     evaluate_model(model)
-    #     test_model(model)
+    if CM().get('training.evaluate'):
+        evaluate_model(model)
+        test_model(model)
 
     notify()
 
