@@ -49,7 +49,6 @@ def evaluate_per_density(model: BaseModel, dataloader: DataLoader, save_visualis
         lower_bound, upper_bound = features.chunk(2, dim=1)
         pattern = ReflectivePropsPattern(lower_bound, upper_bound)
         coating = model.predict(pattern)
-        print(f"coating:\n{coating.get_batch(0)}")
         preds = coating_to_reflective_props(coating)
         if save_visualisation:
             visualise(refs = pattern, preds = preds, filename = f"evaluation_{i}")

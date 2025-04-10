@@ -33,45 +33,53 @@ def save_tensors_guided(generated):
     label_tensors = torch.stack(label_tensors)
     return TensorDataset(feature_tensors, label_tensors)
 
-def generate_dataset(generator, save_function):
-
-    num_points = CM().get('data_generation.dataset_size')
+def write_to_metadata(dataset_filename, props_dict):
     FILEPATH_METADATA = "data/datasets/metadata.yaml"
-    props_dict = {
-        "partition": CM().get('data_generation.partition'),
-        "num_layers": CM().get('num_layers'),
-        "min_wl": CM().get('wavelengths')[0].item(),
-        "max_wl": CM().get('wavelengths')[-1].item(),
-        "wl_step": len(CM().get('wavelengths')),
-        "polarisation": CM().get('polarisation'),
-        "materials_hash": EM().hash_materials(),
-        "theta": CM().get('theta').item(),
-        "tolerance": CM().get('tolerance'),
-        "guidance": CM().get('data_generation.guidance'),
-        "density": CM().get('data_generation.density'),
-        "num_points": num_points
-    }
-    # TODO: remove entry if dataset generation fails
-    dataset_hash = short_hash(props_dict)
-    dataset_filename = get_unique_filename(f"data/datasets/dataset_{dataset_hash}.pt")
     if not os.path.exists(FILEPATH_METADATA):
         with open(FILEPATH_METADATA, "w") as f:
-            f.write("datasets:\n")
-    with open(FILEPATH_METADATA, "r+") as f:
-        content = yaml.safe_load(f)
-        content["datasets"].append({**{"title": dataset_filename}, **{"properties": props_dict}})
-        f.seek(0)
-        yaml.dump(content, f, sort_keys = False, default_flow_style=False, indent = 2)
-    print(f"Generating dataset with {num_points} points")
+            yaml.dump({"datasets": [{**{'title': dataset_filename}, **{'properties': props_dict}}]}, f, sort_keys=False,
+                      default_flow_style=False, indent=2)
+    else:
+        with open(FILEPATH_METADATA, "r+") as f:
+            content = yaml.safe_load(f)
+            content["datasets"].append({**{"title": dataset_filename}, **{"properties": props_dict}})
+            f.seek(0)
+            yaml.dump(content, f, sort_keys=False, default_flow_style=False, indent=2)
 
-    dataset_generator = generator(num_points)
+def generate_dataset(generators, save_function, split):
+    num_points = CM().get('training.dataset_size') if split == "training" else 100
+    for density in ["complete", "masked", "explicit"]:
+        props_dict = {
+            "split": split,
+            "num_layers": CM().get('num_layers'),
+            "min_wl": CM().get('wavelengths')[0].item(),
+            "max_wl": CM().get('wavelengths')[-1].item(),
+            "wl_step": len(CM().get('wavelengths')),
+            "polarisation": CM().get('polarisation'),
+            "materials_hash": EM().hash_materials(),
+            "theta": CM().get('theta').item(),
+            "tolerance": CM().get('tolerance'),
+            "guidance": CM().get('training.guidance'),
+            "density": density,
+            "num_points": num_points
+        }
+        dataset_hash = short_hash(props_dict)
+        dataset_filename = get_unique_filename(f"data/datasets/dataset_{dataset_hash}.pt")
 
-    generated_data = dataset_generator.generate()
-    dataset = save_function(generated_data)
-    torch.save(dataset, dataset_filename)
-    print(f"Dataset saved to {dataset_filename}")
+        print(f"Generating {density} dataset with {num_points} points")
+
+        Generator = generators[density]
+
+        dataset_generator = Generator(num_points)
+
+        generated_data = dataset_generator.generate()
+        dataset = save_function(generated_data)
+        torch.save(dataset, dataset_filename)
+        write_to_metadata(dataset_filename, props_dict)
+        print(f"Dataset saved to {dataset_filename}")
 
 if __name__ == "__main__":
+    split = "training" if len(sys.argv) == 1 else sys.argv[1]
     generators = {
         "complete": CompletePropsGenerator,
         "masked": MaskedPropsGenerator,
@@ -81,7 +89,6 @@ if __name__ == "__main__":
         "free": save_tensors_free,
         "guided": save_tensors_guided
     }
-    generator = generators[CM().get('data_generation.density')]
-    save_function = save_functions[CM().get('data_generation.guidance')]
-    generate_dataset(generator, save_function)
+    save_function = save_functions[CM().get('training.guidance')]
+    generate_dataset(generators, save_function, split)
 

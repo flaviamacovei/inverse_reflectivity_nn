@@ -9,9 +9,9 @@ layers:
   max: &max_layers 50
 
 wavelengths:
-  start: 100.e-3
+  start: 300.e-3
   end: 1499.e-3
-  steps: 1400
+  steps: 1200
 
 polarisation: 's' # accepted values: "s", "p"
 
@@ -63,17 +63,11 @@ training:
   learning_rate: &lr 0.0005 # default: 0.001
   num_epochs: &epochs 100
   batch_size: &batch_size 30
-  guidance: &guidance "free" # accepted values: "free", "guided"
+  guidance: "free" # accepted values: "free", "guided"
   dataset_switching: false
   dataset_size: 100
   save_model: false
   evaluate: true
-
-data_generation:
-  density: "complete" # accepted values: "complete", "masked", "explicit"
-  guidance: *guidance
-  dataset_size: 5000
-  partition: "training" # accepted values: "training", "validation"
 
 wandb:
   log: false

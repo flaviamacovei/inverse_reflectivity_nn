@@ -16,7 +16,7 @@ from evaluation.loss import match
 from utils.ConfigManager import ConfigManager as CM
 
 class BaseTrainableModel(BaseModel, ABC):
-    def __init__(self, dataloader: BaseDataloader, model: nn.Module):
+    def __init__(self, model: nn.Module, dataloader: BaseDataloader = None):
         super().__init__()
         self.dataloader = dataloader
         self.model = model
@@ -30,6 +30,7 @@ class BaseTrainableModel(BaseModel, ABC):
 
 
     def train(self):
+        assert self.dataloader is not None, "No dataloader provided, model can only be used in evaluation mode."
         print("Training model...")
         self.model.apply(self.initialise_weights)
         self.set_to_train()

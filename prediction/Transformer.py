@@ -157,13 +157,10 @@ class TrainableTransformer(nn.Module):
         x = self.scale_input(x)
         source = x
         target = x
-        # print(f"type of source: {type(source)}")
-        # print(f"dtype of source: {source.dtype}")
         source_mask, target_mask = self.generate_mask(source, target)
         source_embedded = self.encoder_embedding(source)
         source_positioned = self.positional_encoding(source_embedded)
         source_embedded = self.dropout(source_positioned)
-        # source_embedded = self.dropout(self.positional_encoding(self.encoder_embedding(source)))
         target_embedded = self.dropout(self.positional_encoding(self.decoder_embedding(target)))
 
         encoder_output = source_embedded
@@ -185,7 +182,7 @@ class TrainableTransformer(nn.Module):
 
 
 class Transformer(BaseTrainableModel):
-    def __init__(self, dataloader: BaseDataloader):
+    def __init__(self, dataloader: BaseDataloader = None):
         torch.autograd.set_detect_anomaly(True)
         source_vocab_size = int(1e3)
         target_vocab_size = (CM().get('layers.max') + 2) * (CM().get('material_embedding.dim') + 1)
@@ -196,7 +193,7 @@ class Transformer(BaseTrainableModel):
         d_ff = CM().get('transformer.d_ff')
         max_sequence_length = CM().get('wavelengths').shape[0] * 2
         dropout = CM().get('transformer.dropout')
-        super().__init__(dataloader, TrainableTransformer(
+        super().__init__(TrainableTransformer(
             source_vocab_size,
             target_vocab_size,
             model_dim,
@@ -205,7 +202,7 @@ class Transformer(BaseTrainableModel):
             d_ff,
             max_sequence_length,
             dropout
-        ).to(CM().get('device')))
+        ).to(CM().get('device')), dataloader)
 
     def scale_gradients(self):
         pass

@@ -45,8 +45,8 @@ class TrainableCNN(nn.Module):
         return self.output_size
 
 class CNN(BaseTrainableModel):
-    def __init__(self, dataloader: BaseDataloader):
-        super().__init__(dataloader, TrainableCNN().to(CM().get('device')))
+    def __init__(self, dataloader: BaseDataloader = None):
+        super().__init__(TrainableCNN().to(CM().get('device')), dataloader)
 
     def scale_gradients(self):
         pass

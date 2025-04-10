@@ -4,15 +4,15 @@ sys.path.append(sys.path[0] + '/..')
 from utils.ConfigManager import ConfigManager as CM
 from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
 
-def get_dataset_name(partition: str, density: str):
-    if partition == "validation":
+def get_dataset_name(split: str, density: str):
+    if split == "validation":
         guidance = "free"
         num_points = 100
     else:
         guidance = CM().get('training.guidance')
         num_points = CM().get('training.dataset_size')
     props_dict = {
-        "partition": partition,
+        "split": split,
         "num_layers": CM().get('num_layers'),
         "min_wl": CM().get('wavelengths')[0].item(),
         "max_wl": CM().get('wavelengths')[-1].item(),
