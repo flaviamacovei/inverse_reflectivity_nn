@@ -23,11 +23,17 @@ def evaluate_model(model: BaseModel):
             return
         error = evaluate_per_density(model, dataloader, save_visualisation = False)
         total_error += error
-        if CM().get('wandb.log'):
-            wandb.log({f"{density}_error": error})
+        try:
+            if CM().get('wandb.log'):
+                wandb.log({f"{density}_error": error})
+        except:
+            pass
         print(f"{density} error: {error}")
-    if CM().get('wandb.log'):
-        wandb.log({"total_error": total_error})
+    try:
+        if CM().get('wandb.log'):
+            wandb.log({"total_error": total_error})
+    except:
+        pass
     print(f"total error: {total_error}")
     print("Evaluation complete.")
 
@@ -61,4 +67,9 @@ def test_model(model: BaseModel):
     dataset = torch.load(f"data/datasets/test_data/test_data.pt")
     dataloader = DataLoader(dataset, batch_size = batch_size, shuffle = False)
     test_error = evaluate_per_density(model, dataloader, save_visualisation = True)
+    try:
+        if CM().get('wandb.log'):
+            wandb.log({"test_error": test_error})
+    except:
+        pass
     print(f"test error: {test_error}")

@@ -62,6 +62,9 @@ class DynamicDataloader(BaseDataloader):
         for density in densities:
             try:
                 filepath = get_dataset_name("training", density)
+                if filepath is None:
+                    raise FileNotFoundError ("Dataset in current configuration not found. Please run generate_dataset.py first.")
+
                 if os.path.exists(filepath):
                     dataset = torch.load(filepath)
                 else:

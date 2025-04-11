@@ -48,14 +48,20 @@ def write_to_metadata(dataset_filename, props_dict):
             yaml.dump(content, f, sort_keys=False, default_flow_style=False, indent=2)
 
 
-def generate_dataset(generators, save_function):
-    num_points = CM().get('data_generation.dataset_size')
-    MAX_SIZE = 2_800_000
+def generate_dataset(generators, save_functions, split):
+    if split == "training":
+        num_points = CM().get('training.dataset_size')
+        guidance = CM().get('training.guidance')
+    else:
+        num_points = 100
+        guidance = "free"
+    MAX_SIZE = 2_400_000
     MAX_POINTS_PER_SEGMENT = MAX_SIZE // CM().get('wavelengths').shape[0]
-    for density in ["complete", "masked", "explicit"]:
-
+    save_function = save_functions[guidance]
+    densities = ["complete", "masked", "explicit"] if guidance == "free" else ["complete", "masked"]
+    for density in densities:
         props_dict = {
-            "partition": CM().get('data_generation.partition'),
+            "split": split,
             "num_layers": CM().get('num_layers'),
             "min_wl": CM().get('wavelengths')[0].item(),
             "max_wl": CM().get('wavelengths')[-1].item(),
@@ -64,8 +70,8 @@ def generate_dataset(generators, save_function):
             "materials_hash": EM().hash_materials(),
             "theta": CM().get('theta').item(),
             "tolerance": CM().get('tolerance'),
-            "guidance": CM().get('data_generation.guidance'),
-            "density": CM().get('data_generation.density'),
+            "guidance": guidance,
+            "density": density,
             "num_points": num_points
         }
         dataset_hash = short_hash(props_dict)
@@ -89,7 +95,7 @@ def generate_dataset(generators, save_function):
                 del dataset
                 torch.cuda.empty_cache()
         write_to_metadata(dataset_filename, props_dict)
-    print(f"Dataset saved to {dataset_filename}")
+        print(f"Dataset saved to {dataset_filename}")
 
 if __name__ == "__main__":
     split = "training" if len(sys.argv) == 1 else sys.argv[1]
@@ -102,6 +108,5 @@ if __name__ == "__main__":
         "free": save_tensors_free,
         "guided": save_tensors_guided
     }
-    save_function = save_functions[CM().get('training.guidance')]
-    generate_dataset(generators, save_function, split)
+    generate_dataset(generators, save_functions, split)
 
