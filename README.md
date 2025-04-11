@@ -21,8 +21,8 @@ You can score these models using<br>`score_model.py model_free_switch_1200.pt` a
 
 ## Requirements
 Python 3.10.12<br>
-PyTorch 2.1.1
-NumPy 1.26.2
-Matplotlib 3.10.0
-SciPy 1.15.1
+PyTorch 2.1.1<br>
+NumPy 1.26.2<br>
+Matplotlib 3.10.0<br>
+SciPy 1.15.1<br>
 WandB 0.19.7
