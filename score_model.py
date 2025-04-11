@@ -5,6 +5,10 @@ from prediction.Transformer import Transformer
 from utils.ConfigManager import ConfigManager as CM
 from evaluation.model_eval import evaluate_model, test_model
 
+def score_model(model):
+    evaluate_model(model)
+    test_model(model)
+
 if __name__ == "__main__":
     saved_model_file = sys.argv[1]
     models = {
@@ -16,6 +20,4 @@ if __name__ == "__main__":
 
     model = Model()
     model.load(f"out/models/{saved_model_file}")
-
-    evaluate_model(model)
-    test_model(model)
+    score_model(model)

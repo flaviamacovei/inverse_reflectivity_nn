@@ -21,6 +21,7 @@ from data.dataset_generation.CompletePropsGenerator import CompletePropsGenerato
 from data.dataset_generation.MaskedPropsGenerator import MaskedPropsGenerator
 from data.dataset_generation.ExplicitPropsGenerator import ExplicitPropsGenerator
 from tmm_clean.tmm_core import compute_multilayer_optics
+from score_model import score_model
 
 def train_model():
     models = {
@@ -51,8 +52,7 @@ def train_model():
         model.train()
 
     if CM().get('training.evaluate'):
-        evaluate_model(model)
-        test_model(model)
+        score_model(model)
 
 if __name__ == "__main__":
     train_model()
