@@ -33,6 +33,7 @@ def save_tensors_guided(generated):
     label_tensors = torch.stack(label_tensors)
     return TensorDataset(feature_tensors, label_tensors)
 
+
 def write_to_metadata(dataset_filename, props_dict):
     FILEPATH_METADATA = "data/datasets/metadata.yaml"
     if not os.path.exists(FILEPATH_METADATA):
@@ -46,11 +47,15 @@ def write_to_metadata(dataset_filename, props_dict):
             f.seek(0)
             yaml.dump(content, f, sort_keys=False, default_flow_style=False, indent=2)
 
-def generate_dataset(generators, save_function, split):
-    num_points = CM().get('training.dataset_size') if split == "training" else 100
+
+def generate_dataset(generators, save_function):
+    num_points = CM().get('data_generation.dataset_size')
+    MAX_SIZE = 2_800_000
+    MAX_POINTS_PER_SEGMENT = MAX_SIZE // CM().get('wavelengths').shape[0]
     for density in ["complete", "masked", "explicit"]:
+
         props_dict = {
-            "split": split,
+            "partition": CM().get('data_generation.partition'),
             "num_layers": CM().get('num_layers'),
             "min_wl": CM().get('wavelengths')[0].item(),
             "max_wl": CM().get('wavelengths')[-1].item(),
@@ -59,24 +64,32 @@ def generate_dataset(generators, save_function, split):
             "materials_hash": EM().hash_materials(),
             "theta": CM().get('theta').item(),
             "tolerance": CM().get('tolerance'),
-            "guidance": CM().get('training.guidance'),
-            "density": density,
+            "guidance": CM().get('data_generation.guidance'),
+            "density": CM().get('data_generation.density'),
             "num_points": num_points
         }
         dataset_hash = short_hash(props_dict)
         dataset_filename = get_unique_filename(f"data/datasets/dataset_{dataset_hash}.pt")
-
         print(f"Generating {density} dataset with {num_points} points")
-
         Generator = generators[density]
 
-        dataset_generator = Generator(num_points)
+        if num_points <= MAX_POINTS_PER_SEGMENT:
+            dataset_generator = Generator(num_points)
 
-        generated_data = dataset_generator.generate()
-        dataset = save_function(generated_data)
-        torch.save(dataset, dataset_filename)
+            generated_data = dataset_generator.generate()
+            dataset = save_function(generated_data)
+            torch.save(dataset, dataset_filename)
+        else:
+            for i in range(num_points // MAX_POINTS_PER_SEGMENT + 1):
+                num_points_segment = min(num_points - i * MAX_POINTS_PER_SEGMENT, MAX_POINTS_PER_SEGMENT)
+                dataset_generator = Generator(num_points_segment)
+                generated_data = dataset_generator.generate()
+                dataset = save_function(generated_data)
+                torch.save(dataset, dataset_filename[:-3] + f"_seg_{i + 1}.pt")
+                del dataset
+                torch.cuda.empty_cache()
         write_to_metadata(dataset_filename, props_dict)
-        print(f"Dataset saved to {dataset_filename}")
+    print(f"Dataset saved to {dataset_filename}")
 
 if __name__ == "__main__":
     split = "training" if len(sys.argv) == 1 else sys.argv[1]
