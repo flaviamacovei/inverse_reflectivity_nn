@@ -28,7 +28,7 @@ class TrainableCNN(nn.Module):
             nn.Conv2d(in_channels = self.output_size // 2, out_channels = self.output_size, kernel_size = 3, stride = 1, padding = 1),
             nn.MaxPool2d(kernel_size = pooling_size)
         )
-        self.final_pool = nn.MaxPool2d(kernel_size = (2, 2))
+        self.final_pool = nn.MaxPool2d(kernel_size = (2, 1))
 
 
     def forward(self, x):
