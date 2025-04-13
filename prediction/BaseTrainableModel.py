@@ -100,5 +100,6 @@ class BaseTrainableModel(BaseModel, ABC):
 
     @abstractmethod
     def scale_gradients(self):
-        pass
+        if CM().get('training.guidance') == "free":
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
 
