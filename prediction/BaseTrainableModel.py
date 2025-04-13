@@ -3,6 +3,8 @@ import torch
 import torch.nn as nn
 import torch.nn.init as init
 import wandb
+import os
+from datetime import datetime
 import sys
 sys.path.append(sys.path[0] + '/..')
 from data.dataloaders.BaseDataloader import BaseDataloader
@@ -14,6 +16,7 @@ from utils.os_utils import get_unique_filename
 from forward.forward_tmm import coating_to_reflective_props
 from evaluation.loss import match
 from utils.ConfigManager import ConfigManager as CM
+from utils.os_utils import short_hash
 
 class BaseTrainableModel(BaseModel, ABC):
     def __init__(self, model: nn.Module, dataloader: BaseDataloader = None):
@@ -35,6 +38,7 @@ class BaseTrainableModel(BaseModel, ABC):
         self.model.apply(self.initialise_weights)
         self.set_to_train()
         loss_scale = None
+        checkpoint = None
         for epoch in range(CM().get('training.num_epochs')):
             self.dataloader.next_epoch()
             self.optimiser.zero_grad()
@@ -51,14 +55,23 @@ class BaseTrainableModel(BaseModel, ABC):
                 self.scale_gradients()
                 self.optimiser.step()
             if epoch % max(1, CM().get('training.num_epochs') / 10) == 0:
+                new_checkpoint = get_unique_filename(f"out/models/checkpoint_{short_hash(self.model) + short_hash(epoch)}.pt")
+                torch.save(self.model, new_checkpoint)
+                if checkpoint:
+                    os.remove(checkpoint)
+                checkpoint = new_checkpoint
+                current_time = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                print(f"checkpoint at {current_time}: {checkpoint}")
                 print(f"Loss in epoch {epoch + 1}: {epoch_loss.item()}")
         print("Training complete.")
         if CM().get('training.save_model'):
-            model_filename = get_unique_filename(f"out/models/model_{CM().get('training.guidance')}_{'switch' if CM().get('training.dataset_switching') else 'no-switch'}_{CM().get('wavelengths').size()[0]}.pt")
+            model_filename = get_unique_filename(f"out/models/model_{short_hash(self.model)}.pt")
             print(f"Saving model to {model_filename}")
             torch.save(self.model, model_filename)
             if CM().get('wandb.log'):
                 wandb.log({"saved under": model_filename})
+        if checkpoint:
+            os.remove(checkpoint)
 
     def initialise_weights(self, model: nn.Module):
         if isinstance(model, nn.Linear):
