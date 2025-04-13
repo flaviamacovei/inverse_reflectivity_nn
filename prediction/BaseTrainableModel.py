@@ -45,6 +45,7 @@ class BaseTrainableModel(BaseModel, ABC):
             self.optimiser.zero_grad()
             epoch_loss = torch.tensor(0.0, device=CM().get('device'))
             for batch in self.dataloader:
+                print(f"loss function: {self.compute_loss}")
                 loss = self.compute_loss(batch)
                 epoch_loss += loss
 
@@ -104,6 +105,7 @@ class BaseTrainableModel(BaseModel, ABC):
 
     def compute_loss_free(self, batch: torch.Tensor):
         features = batch[0].float().to(CM().get('device'))
+        print(f"features shape: {features.shape}")
         lower_bound, upper_bound = features.chunk(2, dim=1)
         pattern = ReflectivePropsPattern(lower_bound, upper_bound)
         encoding = self.model(features).reshape((features.shape[0], (CM().get('layers.max') + 2), CM().get('material_embedding.dim') + 1))

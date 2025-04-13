@@ -6,10 +6,8 @@ from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
 
 def get_dataset_name(split: str, density: str):
     if split == "validation":
-        guidance = "free"
         num_points = 100
     else:
-        guidance = CM().get('training.guidance')
         num_points = CM().get('training.dataset_size')
     props_dict = {
         "split": split,
@@ -21,7 +19,6 @@ def get_dataset_name(split: str, density: str):
         "materials_hash": EM().hash_materials(),
         "theta": CM().get('theta').item(),
         "tolerance": CM().get('tolerance'),
-        "guidance": guidance,
         "density": density,
         "num_points": num_points
     }

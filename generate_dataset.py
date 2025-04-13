@@ -20,13 +20,16 @@ def save_tensors_free(generated):
     feature_tensors = torch.stack(feature_tensors)
     return TensorDataset(feature_tensors)
 
-def save_tensors_guided(generated):
+def save_tensors(generated):
     feature_tensors = []
     label_tensors = []
     for (reflective_props, coating) in generated:
         feature_tensor = torch.cat((reflective_props.get_lower_bound(), reflective_props.get_upper_bound()),
                                    dim=1).squeeze()
-        label_tensor = coating.get_encoding().squeeze()
+        if coating is None:
+            label_tensor = torch.zeros(1)
+        else:
+            label_tensor = coating.get_encoding().squeeze()
         feature_tensors.append(feature_tensor)
         label_tensors.append(label_tensor)
     feature_tensors = torch.stack(feature_tensors)
@@ -48,17 +51,14 @@ def write_to_metadata(dataset_filename, props_dict):
             yaml.dump(content, f, sort_keys=False, default_flow_style=False, indent=2)
 
 
-def generate_dataset(generators, save_functions, split):
+def generate_dataset(generators, split):
     if split == "training":
         num_points = CM().get('training.dataset_size')
-        guidance = CM().get('training.guidance')
     else:
         num_points = 100
-        guidance = "free"
     MAX_SIZE = 2_400_000
     MAX_POINTS_PER_SEGMENT = MAX_SIZE // CM().get('wavelengths').shape[0]
-    save_function = save_functions[guidance]
-    densities = ["complete", "masked", "explicit"] if guidance == "free" else ["complete", "masked"]
+    densities = ["complete", "masked", "explicit"]
     for density in densities:
         props_dict = {
             "split": split,
@@ -70,7 +70,6 @@ def generate_dataset(generators, save_functions, split):
             "materials_hash": EM().hash_materials(),
             "theta": CM().get('theta').item(),
             "tolerance": CM().get('tolerance'),
-            "guidance": guidance,
             "density": density,
             "num_points": num_points
         }
@@ -83,14 +82,14 @@ def generate_dataset(generators, save_functions, split):
             dataset_generator = Generator(num_points)
 
             generated_data = dataset_generator.generate()
-            dataset = save_function(generated_data)
+            dataset = save_tensors(generated_data)
             torch.save(dataset, dataset_filename)
         else:
             for i in range(num_points // MAX_POINTS_PER_SEGMENT + 1):
                 num_points_segment = min(num_points - i * MAX_POINTS_PER_SEGMENT, MAX_POINTS_PER_SEGMENT)
                 dataset_generator = Generator(num_points_segment)
                 generated_data = dataset_generator.generate()
-                dataset = save_function(generated_data)
+                dataset = save_tensors(generated_data)
                 torch.save(dataset, dataset_filename[:-3] + f"_seg_{i + 1}.pt")
                 del dataset
                 torch.cuda.empty_cache()
@@ -104,9 +103,5 @@ if __name__ == "__main__":
         "masked": MaskedPropsGenerator,
         "explicit": ExplicitPropsGenerator
     }
-    save_functions = {
-        "free": save_tensors_free,
-        "guided": save_tensors_guided
-    }
-    generate_dataset(generators, save_functions, split)
+    generate_dataset(generators, split)
 
