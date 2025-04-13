@@ -35,8 +35,8 @@ class TrainableMLP(nn.Module):
         return self.output_size
 
 class MLP(BaseTrainableModel):
-    def __init__(self, dataloader: BaseDataloader = None):
-        super().__init__(TrainableMLP().to(CM().get('device')), dataloader)
+    def __init__(self):
+        super().__init__(TrainableMLP().to(CM().get('device')))
 
     def scale_gradients(self):
         pass

@@ -182,7 +182,7 @@ class TrainableTransformer(nn.Module):
 
 
 class Transformer(BaseTrainableModel):
-    def __init__(self, dataloader: BaseDataloader = None):
+    def __init__(self):
         torch.autograd.set_detect_anomaly(True)
         source_vocab_size = int(1e3)
         target_vocab_size = (CM().get('layers.max') + 2) * (CM().get('material_embedding.dim') + 1)
@@ -202,7 +202,7 @@ class Transformer(BaseTrainableModel):
             d_ff,
             max_sequence_length,
             dropout
-        ).to(CM().get('device')), dataloader)
+        ).to(CM().get('device')))
 
     def scale_gradients(self):
         pass

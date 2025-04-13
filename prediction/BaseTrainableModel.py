@@ -17,12 +17,13 @@ from forward.forward_tmm import coating_to_reflective_props
 from evaluation.loss import match
 from utils.ConfigManager import ConfigManager as CM
 from utils.os_utils import short_hash
+from data.dataloaders.DynamicDataloader import DynamicDataloader
 
 class BaseTrainableModel(BaseModel, ABC):
-    def __init__(self, model: nn.Module, dataloader: BaseDataloader = None):
+    def __init__(self, model: nn.Module):
         super().__init__()
-        self.dataloader = dataloader
         self.model = model
+        self.dataloader = self.init_dataloader()
         self.optimiser = torch.optim.Adam(self.model.parameters(), lr=CM().get('training.learning_rate'))
 
         self.loss_functions = {
@@ -78,6 +79,15 @@ class BaseTrainableModel(BaseModel, ABC):
             init.kaiming_normal_(model.weight, nonlinearity = 'relu')
             if model.bias is not None:
                 init.zeros_(model.bias)
+
+    def init_dataloader(self):
+        dataloader = DynamicDataloader(batch_size=CM().get('training.batch_size'), shuffle=True)
+        try:
+            dataloader.load_data(CM().get('dataset_files'))
+        except FileNotFoundError:
+            print("Dataset in current configuration not found. Please run generate_dataset.py first.")
+            return
+        return dataloader
 
     def predict(self, target: ReflectivePropsPattern):
         self.set_to_eval()

@@ -38,15 +38,7 @@ def train_model():
         )
 
     Model = models[CM().get('architecture')]
-
-    dataloader = DynamicDataloader(batch_size=CM().get('training.batch_size'), shuffle = True)
-    try:
-        dataloader.load_data(CM().get('dataset_files'))
-    except FileNotFoundError:
-        print("Dataset in current configuration not found. Please run generate_dataset.py first.")
-        return
-
-    model = Model(dataloader)
+    model = Model()
 
     if isinstance(model, BaseTrainableModel):
         model.train()
