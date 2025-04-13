@@ -39,7 +39,7 @@ def train_model():
 
     Model = models[CM().get('architecture')]
 
-    dataloader = DynamicDataloader(batch_size=CM().get('training.batch_size'), shuffle=False)
+    dataloader = DynamicDataloader(batch_size=CM().get('training.batch_size'), shuffle = True)
     try:
         dataloader.load_data(CM().get('dataset_files'))
     except FileNotFoundError:
