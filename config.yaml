@@ -6,7 +6,7 @@ num_stacks: 1
 
 layers:
   min: 1 # must be >= 1
-  max: &max_layers 50
+  max: &max_layers 20
 
 wavelengths:
   start: 300.e-3
@@ -63,11 +63,28 @@ training:
   learning_rate: &lr 0.001 # default: 0.001
   num_epochs: &epochs 10
   batch_size: &batch_size 256
-  guidance: "free" # accepted values: "free", "guided"
-  dataset_switching: true
   dataset_size: 2000
   save_model: true
   evaluate: true
+  guidance_schedule:
+  # for each leg specify: guidance in {"guided", "free"}, density in {"complete", "masked", "explicit"}, percent in {0 ... 1}
+  # percent is the percentage of the epochs that will be spent training on the given density and guidance
+  # note that the combination "guided-explicit" is not allowed
+    - guidance: "guided"
+      density: "complete"
+      percent: 0.2
+    - guidance: "guided"
+      density: "masked"
+      percent: 0.2
+    - guidance: "free"
+      density: "complete"
+      percent: 0.2
+    - guidance: "free"
+      density: "masked"
+      percent: 0.2
+    - guidance: "free"
+      density: "explicit"
+      percent: 0.2
 
 wandb:
   log: false
