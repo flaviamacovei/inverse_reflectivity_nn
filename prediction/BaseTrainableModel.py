@@ -18,20 +18,46 @@ from evaluation.loss import match
 from utils.ConfigManager import ConfigManager as CM
 from utils.os_utils import short_hash
 from data.dataloaders.DynamicDataloader import DynamicDataloader
+from ui.visualise import visualise
 
 class BaseTrainableModel(BaseModel, ABC):
     def __init__(self, model: nn.Module):
         super().__init__()
         self.model = model
-        self.dataloader = self.init_dataloader()
-        self.optimiser = torch.optim.Adam(self.model.parameters(), lr=CM().get('training.learning_rate'))
+        self.init_dataloader()
+        # self.optimiser = torch.optim.Adam(self.model.parameters(), lr=CM().get('training.learning_rate'))
 
         self.loss_functions = {
             "free": self.compute_loss_free,
             "guided": self.compute_loss_guided
         }
-        self.compute_loss = self.loss_functions.get(CM().get('training.guidance'))
+        self.optimisers = {
+            "free": torch.optim.Adam(self.model.parameters(), lr=CM().get('training.learning_rate') / 200),
+            "guided": torch.optim.Adam(self.model.parameters(), lr=CM().get('training.learning_rate'))
+        }
+        self.compute_loss = None
+        self.optimiser = None
+        self.current_leg = -1
 
+    def get_current_leg(self, epoch):
+        percent_done = epoch / CM().get('training.num_epochs')
+        for leg in range(CM().get('training.num_legs')):
+            if percent_done < CM().get(f'training.guidance_schedule.{leg}.percent'):
+                return leg
+            else:
+                percent_done -= CM().get(f'training.guidance_schedule.{leg}.percent')
+
+    def update_leg(self, epoch):
+        epoch_leg = self.get_current_leg(epoch)
+        if epoch_leg != self.current_leg:
+            self.current_leg = epoch_leg
+            guidance = CM().get(f'training.guidance_schedule.{self.current_leg}.guidance')
+            density = CM().get(f'training.guidance_schedule.{self.current_leg}.density')
+            print(
+                f"{'-' * 50}\nOn leg {guidance}-{density}")
+            self.compute_loss = self.loss_functions[guidance]
+            self.optimiser = self.optimisers[guidance]
+            self.dataloader.load_leg(self.current_leg)
 
     def train(self):
         assert self.dataloader is not None, "No dataloader provided, model can only be used in evaluation mode."
@@ -41,11 +67,11 @@ class BaseTrainableModel(BaseModel, ABC):
         loss_scale = None
         checkpoint = None
         for epoch in range(CM().get('training.num_epochs')):
-            self.dataloader.next_epoch()
+            self.update_leg(epoch)
             self.optimiser.zero_grad()
+
             epoch_loss = torch.tensor(0.0, device=CM().get('device'))
             for batch in self.dataloader:
-                print(f"loss function: {self.compute_loss}")
                 loss = self.compute_loss(batch)
                 epoch_loss += loss
 
@@ -63,8 +89,18 @@ class BaseTrainableModel(BaseModel, ABC):
                     os.remove(checkpoint)
                 checkpoint = new_checkpoint
                 current_time = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-                print(f"checkpoint at {current_time}: {checkpoint}")
+                print(f"Checkpoint at {current_time}: {checkpoint}")
                 print(f"Loss in epoch {epoch + 1}: {epoch_loss.item()}")
+                features = batch[0].float().to(CM().get('device'))
+                lower_bound, upper_bound = features.chunk(2, dim=1)
+                refs = ReflectivePropsPattern(lower_bound, upper_bound)
+                encoding = self.model(features).reshape(
+                    (features.shape[0], (CM().get('layers.max') + 2), CM().get('material_embedding.dim') + 1))
+                coating = Coating(encoding)
+                preds = coating_to_reflective_props(coating)
+                print(coating.get_batch(0))
+                visualise(preds, refs, f"from_training_epoch_{epoch}")
+
         print("Training complete.")
         if CM().get('training.save_model'):
             model_filename = get_unique_filename(f"out/models/model_{short_hash(self.model)}.pt")
@@ -82,13 +118,12 @@ class BaseTrainableModel(BaseModel, ABC):
                 init.zeros_(model.bias)
 
     def init_dataloader(self):
-        dataloader = DynamicDataloader(batch_size=CM().get('training.batch_size'), shuffle=True)
+        self.dataloader = DynamicDataloader(batch_size=CM().get('training.batch_size'), shuffle=True)
         try:
-            dataloader.load_data(CM().get('dataset_files'))
+            self.dataloader.load_leg(0)
         except FileNotFoundError:
             print("Dataset in current configuration not found. Please run generate_dataset.py first.")
             return
-        return dataloader
 
     def predict(self, target: ReflectivePropsPattern):
         self.set_to_eval()
@@ -105,7 +140,6 @@ class BaseTrainableModel(BaseModel, ABC):
 
     def compute_loss_free(self, batch: torch.Tensor):
         features = batch[0].float().to(CM().get('device'))
-        print(f"features shape: {features.shape}")
         lower_bound, upper_bound = features.chunk(2, dim=1)
         pattern = ReflectivePropsPattern(lower_bound, upper_bound)
         encoding = self.model(features).reshape((features.shape[0], (CM().get('layers.max') + 2), CM().get('material_embedding.dim') + 1))
@@ -125,6 +159,6 @@ class BaseTrainableModel(BaseModel, ABC):
 
     @abstractmethod
     def scale_gradients(self):
-        if CM().get('training.guidance') == "free":
+        if CM().get(f'training.guidance_schedule.{self.current_leg}.guidance') == "free":
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
 
