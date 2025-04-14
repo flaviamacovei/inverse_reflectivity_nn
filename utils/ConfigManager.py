@@ -34,16 +34,10 @@ class ConfigManager:
             self.config['wavelengths'] = torch.linspace(self.config['wavelengths']['start'], self.config['wavelengths']['end'], self.config['wavelengths']['steps'], device = self.config['device'])
             self.config['theta'] = torch.tensor(np.linspace(self.config['theta']['start'], self.config['theta']['end'], self.config['theta']['steps']) * (np.pi / 180), dtype = torch.float32).to(self.config['device'])
 
-            # set dataset
-            if self.config['training']['guidance'] == "free":
-                self.config['dataset_files'] = [f"free_complete_{self.config['training']['dataset_size']}", f"free_masked_{self.config['training']['dataset_size']}", f"free_explicit_{self.config['training']['dataset_size']}"]
-            elif self.config['training']['guidance'] == "guided":
-                self.config['dataset_files'] = [f"guided_complete_{self.config['training']['dataset_size']}", f"guided_masked_{self.config['training']['dataset_size']}"]
-            else:
-                raise ValueError (f"Unknown loss function: {self.config['training']['loss_function']}")
-
             # set materials location
             self.config['material_embedding']['data_file'] = os.path.join(dir, self.config['material_embedding']['data_file'])
+
+            self.config['training']['num_legs'] = len(self.config['training']['guidance_schedule'])
 
         except BaseException as e:
             print(f"Error loading config: {e}")
@@ -55,6 +49,12 @@ class ConfigManager:
         for k in keys:
             if isinstance(value, dict) and k in value:
                 value = value[k]
+            elif isinstance(value, list) and k.isdigit():
+                index = int(k)
+                if index < len(value):
+                    value = value[index]
+                else:
+                    return default
             else:
                 return default
         return value
