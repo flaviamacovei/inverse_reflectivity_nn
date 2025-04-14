@@ -11,14 +11,6 @@ from data.dataset_generation.MaskedPropsGenerator import MaskedPropsGenerator
 from data.dataset_generation.ExplicitPropsGenerator import ExplicitPropsGenerator
 from utils.os_utils import short_hash, get_unique_filename
 
-def save_tensors_free(generated):
-    feature_tensors = []
-    for (reflective_props, _) in generated:
-        feature_tensor = torch.cat((reflective_props.get_lower_bound(), reflective_props.get_upper_bound()),
-                                   dim=1).squeeze()
-        feature_tensors.append(feature_tensor)
-    feature_tensors = torch.stack(feature_tensors)
-    return TensorDataset(feature_tensors)
 
 def save_tensors(generated):
     feature_tensors = []
