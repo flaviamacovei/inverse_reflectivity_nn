@@ -10,15 +10,25 @@ from utils.ConfigManager import ConfigManager as CM
 
 
 def visualise_spline(preds: ReflectivePropsValue = None, refs: ReflectivePropsPattern = None, filename: str = "visualisation"):
+    """
+    Visualise prediction using spline interpolation.
+
+    Args:
+        preds: predicted reflective props value. Optional.
+        refs: ground truth reflective props pattern. Optional.
+        filename: filename. Optional.
+    """
     assert not preds or len(preds.get_value().shape) == 2
     assert not refs or len(refs.get_lower_bound().shape) == 2
     plt.clf()
 
     wavelengths_cpu = CM().get('wavelengths').to("cpu")
 
+    # linspace of 1000 steps for smooth visualisation
     wavelengths_spline = torch.linspace(wavelengths_cpu[0], wavelengths_cpu[-1], 1000)
 
     if refs:
+        # if refs specified, convert to spline and plot
         refs = refs.to("cpu")
 
         lower_bound = refs.get_lower_bound()[0].detach().cpu()
@@ -32,6 +42,7 @@ def visualise_spline(preds: ReflectivePropsValue = None, refs: ReflectivePropsPa
         plt.plot(wavelengths_spline, upper_bound_spline, color='#C04F15')
 
     if preds:
+        # if preds specified, convert to spline and plot
         preds = preds.to("cpu")
         value = preds.get_value()[0].detach().cpu()
         wl_vl_spline = make_interp_spline(wavelengths_cpu, value)
@@ -42,6 +53,14 @@ def visualise_spline(preds: ReflectivePropsValue = None, refs: ReflectivePropsPa
     plt.savefig(f"out/{filename}.png")
 
 def visualise(preds: ReflectivePropsValue = None, refs: ReflectivePropsPattern = None, filename: str = "visualisation"):
+    """
+    Visualise prediction using linear interpolation.
+
+    Args:
+        preds: predicted reflective props value. Optional.
+        refs: ground truth reflective props pattern. Optional.
+        filename: filename. Optional.
+    """
     assert not preds or len(preds.get_value().shape) == 2
     assert not refs or len(refs.get_lower_bound().shape) == 2
     plt.clf()
@@ -49,11 +68,13 @@ def visualise(preds: ReflectivePropsValue = None, refs: ReflectivePropsPattern =
     wavelengths_cpu = CM().get('wavelengths').to("cpu")
 
     if refs:
+        # plot refs if specified
         refs = refs.to("cpu")
         plt.plot(wavelengths_cpu, refs.get_lower_bound()[0].detach().cpu(), color='#8ED973')
         plt.plot(wavelengths_cpu, refs.get_upper_bound()[0].detach().cpu(), color='#C04F15')
 
     if preds:
+        # plot preds if specified
         preds = preds.to("cpu")
         plt.plot(wavelengths_cpu, preds.get_value()[0].detach().cpu(), color='#D86ECC')
 

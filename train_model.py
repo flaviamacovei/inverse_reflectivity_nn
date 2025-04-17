@@ -24,6 +24,8 @@ from tmm_clean.tmm_core import compute_multilayer_optics
 from score_model import score_model
 
 def train_model():
+    """Instantiate and train model."""
+    # map architecture specified in config to model classes
     models = {
         "mlp": MLP,
         "cnn": CNN,
@@ -37,6 +39,7 @@ def train_model():
             config=CM().get('wandb.config')
         )
 
+    # select architecture
     Model = models[CM().get('architecture')]
     model = Model()
 

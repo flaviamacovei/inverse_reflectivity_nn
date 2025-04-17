@@ -6,7 +6,28 @@ import random
 
 
 class BaseDataloader(ABC):
+    """
+    Abstract base class for dataloaders.
+
+    This class provides a common interface for loading data.
+    It is intended to be subclassed by specific dataloaders with extended functionality.
+
+    Attributes:
+        batch_size (int): Number of samples per batch.
+        shuffle (bool): Whether to shuffle the dataset before each epoch.
+
+    Methods:
+        load_data: Load data into self.dataset. Must be implemented by subclasses.
+    """
+
     def __init__(self, batch_size: int, shuffle: bool = True):
+        """
+        Initialise a BaseDataloader instance.
+
+        Args:
+            batch_size (int): Number of samples per batch.
+            shuffle (bool): Whether to shuffle the dataset before each epoch. Defaults to True.
+        """
         self.batch_size = batch_size
         self.shuffle = shuffle
         self.dataset: Optional[Union[Dataset, List[torch.Tensor]]] = None
@@ -17,6 +38,13 @@ class BaseDataloader(ABC):
         pass
 
     def __len__(self):
+        """
+        Return the number of batches in the dataset.
+
+        Raises:
+            ValueError: If the dataset is not loaded.
+            TypeError: If the dataset type is unsupported.
+        """
         if self.dataset is None:
             raise ValueError("Dataset not loaded. Call load_data first.")
 
@@ -28,6 +56,19 @@ class BaseDataloader(ABC):
             raise TypeError("Unsupported dataset type.")
 
     def __getitem__(self, item):
+        """
+        Return the item at the given index.
+
+        Args:
+            item: The index of the item to return.
+
+        Returns:
+            The item at the given index.
+
+        Raises:
+            ValueError: If the dataset is not loaded.
+            TypeError: If the dataset type is unsupported.
+        """
         if self.dataset is None:
             raise ValueError("Dataset not loaded. Call load_data first.")
 

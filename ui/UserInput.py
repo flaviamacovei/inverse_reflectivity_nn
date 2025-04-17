@@ -10,11 +10,26 @@ from utils.ConfigManager import ConfigManager as CM
 from utils.tmm_utils import get_wavelength_index
 
 class UserInput():
+    """
+    Interface class for loading reflective properties targets from command line.
+
+    Attributes:
+        regions: List of regions with specified values.
+
+    Methods:
+        read_int_from_input: Convert user input to integer.
+        read_float_from_input: Convert user input to float.
+        read_regions: Read regions from user input.
+        run: Run script.
+        to_reflective_props_pattern: Convert internally stored regions to ReflectivePropsPattern object.
+    """
     def __init__(self):
+        """Initialise a UserInput instance."""
         self.regions = ObservableList()
         self.regions.append_action = self.append_action
 
     def append_action(self, region: Region):
+        """Append region after validating it against existing regions."""
         assert region, "Region must not be None."
         assert CM().get('wavelengths')[0] <= region.get_start_wl() and CM().get('wavelengths')[-1] >= region.get_end_wl(), "Region must be within frame."
         assert isinstance(get_wavelength_index(region.get_start_wl()), int) and isinstance(get_wavelength_index(region.get_end_wl()), int), "Region must be interval of frame."
@@ -24,6 +39,7 @@ class UserInput():
                 raise AssertionError("New region overlaps with an existing region.")
 
     def read_int_from_input(self, prompt):
+        """Convert user input to integer."""
         user_input = input(prompt)
         try:
             return int(user_input)
@@ -32,6 +48,7 @@ class UserInput():
             return self.read_int_from_input(prompt)
 
     def read_float_from_input(self, prompt):
+        """Convert user input to float."""
         user_input = input(prompt)
         try:
             return float(user_input)
@@ -41,9 +58,12 @@ class UserInput():
 
 
     def read_regions(self):
+        """Read regions from user input."""
         print("Please specify regions by start wavelength (in nm), end wavelength (in nm), and target reflectivity.")
+        # interrupt script when user wants to stop
         cont = True
         while cont:
+            # specify region by start wavelength, end wavelength, and target reflectivity
             region_start_idx = self.read_int_from_input("Start wavelength: ") * 1.e-3
             region_end_idx = self.read_int_from_input("End wavelength: ") * 1.e-3
             region_value = self.read_float_from_input("Target reflectivity: ")
@@ -54,6 +74,7 @@ class UserInput():
                 print(f"Provided region is invalid: {e}\nPlease try again.\n")
             cont = input("Specify another region? (y/n): ") == "y"
 
+        # confirm input
         print("\nSpecified regions:")
         for region in self.regions:
             print(region)
@@ -64,12 +85,15 @@ class UserInput():
 
 
     def run(self):
+        """Run script."""
         self.read_regions()
 
     def to_reflective_props_pattern(self):
+        """Convert internally stored regions to ReflectivePropsPattern object."""
         lower_bound = torch.zeros((1, CM().get('wavelengths').shape[0]), device = CM().get('device'))
         upper_bound = torch.ones((1, CM().get('wavelengths').shape[0]), device = CM().get('device'))
 
+        # apply region values to lower and upper bounds
         for region in self.regions:
             lower_bound[:, get_wavelength_index(region.get_start_wl()):get_wavelength_index(region.get_end_wl())] = region.get_value()
             upper_bound[:, get_wavelength_index(region.get_start_wl()):get_wavelength_index(region.get_end_wl())] = region.get_value()

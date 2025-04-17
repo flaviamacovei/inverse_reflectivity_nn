@@ -12,6 +12,12 @@ from utils.data_utils import get_dataset_name
 from ui.visualise import visualise
 
 def evaluate_model(model: BaseModel):
+    """
+    Evaluate model on validation dataset.
+
+    Args:
+        model: Prediction model to evaluate.
+    """
     print("Evaluating model...")
     densities = ["complete", "masked", "explicit"]
     total_error = 0
@@ -38,6 +44,12 @@ def evaluate_model(model: BaseModel):
     print("Evaluation complete.")
 
 def init_dataloader(density: str):
+    """
+    Initialise validation dataloader for specified density.
+
+    Args:
+        density: Density for which to load dataset.
+    """
     batch_size = 10
     filename = get_dataset_name("validation", density)
     try:
@@ -49,6 +61,14 @@ def init_dataloader(density: str):
     return DataLoader(dataset, batch_size = batch_size, shuffle = False)
 
 def evaluate_per_density(model: BaseModel, dataloader: DataLoader, save_visualisation = False):
+    """
+    Evaluate model for specified density.
+
+    Args:
+        model: Prediction model to evaluate.
+        dataloader: Evaluation dataloader.
+        save_visualisation: Whether to save visualisation of predictions.
+    """
     error = 0
     for i, batch in enumerate(dataloader):
         features = batch[0].float().to(CM().get('device'))
@@ -58,10 +78,17 @@ def evaluate_per_density(model: BaseModel, dataloader: DataLoader, save_visualis
         preds = coating_to_reflective_props(coating)
         if save_visualisation:
             visualise(refs = pattern, preds = preds, filename = f"evaluation_{i}")
+        # evaluation uses free loss
         error += match(preds, pattern).item()
     return error
 
 def test_model(model: BaseModel):
+    """
+    Evaluate model on test dataset.
+
+    Args:
+        model: Prediction model to evaluate.
+    """
     print("Testing model...")
     batch_size = 1
     dataset = torch.load(f"data/datasets/test_data/test_data.pt")

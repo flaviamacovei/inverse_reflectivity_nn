@@ -7,7 +7,22 @@ from data.dataloaders.BaseDataloader import BaseDataloader
 from utils.ConfigManager import ConfigManager as CM
 
 class TrainableMLP(nn.Module):
+    """
+    Trainable multilayer perceptron. Extends nn.Module.
+
+    Architecture:
+        2 x |wavelengths| --> 128 --> 512 --> 64 --> output_size
+    See readme for details.
+
+    Attributes:
+        output_size: Output size of the network. Equal to |coating| * (embedding_dim + 1)
+
+    Methods:
+        forward: Propagate input through the model.
+        get_output_size: Return output size of the network.
+    """
     def __init__(self):
+        """Initialise a TrainableMLP instance."""
         super().__init__()
         in_dim = 2 * CM().get('wavelengths').size()[0]
         layer_1_features = 128
@@ -29,13 +44,22 @@ class TrainableMLP(nn.Module):
         )
 
     def forward(self, x):
+        """Propagate input through the model."""
         return torch.abs(self.net(x))
 
     def get_output_size(self):
+        """Return output size of the network."""
         return self.output_size
 
 class MLP(BaseTrainableModel):
+    """
+    Trainable prediction model using an MLP as base.
+
+    Attributes:
+        model: Instance of TrainableMLP.
+    """
     def __init__(self):
+        """Initialise an MLP instance."""
         super().__init__(TrainableMLP().to(CM().get('device')))
 
     def scale_gradients(self):

@@ -6,6 +6,13 @@ from data.values.ReflectivePropsValue import ReflectivePropsValue
 
 
 def match(input: ReflectivePropsValue, target: ReflectivePropsPattern):
+    """
+    Match a reflective properties value to a reflective properties pattern.
+
+    Args:
+        input: reflective properties value object.
+        target: reflective properties pattern object.
+    """
     upper_error = input.get_value() - target.get_upper_bound()
     lower_error = target.get_lower_bound() - input.get_value()
 

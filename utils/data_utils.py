@@ -5,10 +5,20 @@ from utils.ConfigManager import ConfigManager as CM
 from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
 
 def get_dataset_name(split: str, density: str):
+    """
+    Return filename for dataset with specified split and density and settings matching config file, if it exists.
+
+    Args:
+        split: "training" or "validation".
+        density: "complete", "masked", or "explicit".
+    """
     if split == "validation":
+        # all validation datasets have 100 points
         num_points = 100
     else:
+        # number of points in training dataset specified in config file
         num_points = CM().get('training.dataset_size')
+    # create properties dictionary by which to identify dataset
     props_dict = {
         "split": split,
         "num_layers": CM().get('num_layers'),
@@ -24,6 +34,7 @@ def get_dataset_name(split: str, density: str):
     }
     with open("data/datasets/metadata.yaml", "r") as f:
         content = yaml.safe_load(f)
+        # search for properties dictionary match in metadata
         for dataset in content["datasets"]:
             if dataset["properties"] == props_dict:
                 return dataset["title"]

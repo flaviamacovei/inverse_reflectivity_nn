@@ -6,11 +6,24 @@ from utils.ConfigManager import ConfigManager as CM
 from utils.tmm_utils import get_wavelength_index
 
 class FileInput():
+    """
+    Interface class for loading reflective properties targets from a file.
+
+    Attributes:
+        wavelengths: list of wavelengths
+        values: list of target values
+
+    Methods:
+        read_from_csv: Read reflective properties target from CSV file and store values internally.
+        to_reflective_props_pattern: Convert internally stored wavelengths and values to ReflectivePropsPattern object.
+    """
     def __init__(self):
+        """Initialise a FileInput instance."""
         self.wavelengths = None
         self.values = None
 
     def read_from_csv(self, file: str):
+        """Read reflective properties target from CSV file and store values internally."""
         assert file is not None
         assert file.endswith(".csv")
 
@@ -23,6 +36,7 @@ class FileInput():
 
 
     def to_reflective_props_pattern(self):
+        """Convert internally stored wavelengths and values to ReflectivePropsPattern object."""
         # FIXME: use torch
         lower_bound = torch.zeros((1, CM().get('wavelengths').shape[0]), device=CM().get('device'))
         upper_bound = torch.ones((1, CM().get('wavelengths').shape[0]), device=CM().get('device'))
