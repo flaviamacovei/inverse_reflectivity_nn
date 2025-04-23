@@ -211,9 +211,9 @@ class EmbeddingManager:
         Returns:
             Refractive indices tensor. Shape: (batch_size, |coating|, |wavelengths|).
         """
-        for batch in embedding:
-            for material_embedding in batch:
-                assert material_embedding in self.embeddings, f"Material embedding {material_embedding} not found in embeddings. Call get_nearest_neighbours first."
+        # for batch in embedding:
+        #     for material_embedding in batch:
+        #         assert material_embedding in self.embeddings, f"Material embedding {material_embedding} not found in embeddings. Call get_nearest_neighbours first."
         # repeat embeddings for each batch and layer
         lookup = self.embeddings.repeat(embedding.shape[0], embedding.shape[1], 1, 1)
         # repeat embedding for each known material

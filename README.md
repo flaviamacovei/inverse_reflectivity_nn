@@ -4,6 +4,8 @@ This project aims to develop a neural network-based approach to inverse the refl
 
 ## Usage
 
+### Install submodule
+Run `git submodule update --init tmm_clean` to add tmm submodule.
 ### Configure
 Specify the details of your experiment in `config.yaml`.
 ### Generate dataset

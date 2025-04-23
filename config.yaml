@@ -50,7 +50,7 @@ material_embedding:
 
 tolerance: 1.0e-3
 
-architecture: &architecture "transformer" # accepted values: "gradient", "mlp", "cnn", "transformer"
+architecture: &architecture "cnn" # accepted values: "gradient", "mlp", "cnn", "transformer"
 
 transformer:
   model_dim: 4
@@ -62,10 +62,10 @@ transformer:
 training:
   learning_rate: &lr 0.001 # default: 0.001
   num_epochs: &epochs 10
-  batch_size: &batch_size 256
-  dataset_size: 2000
-  save_model: true
-  evaluate: true
+  batch_size: &batch_size 30
+  dataset_size: 100
+  save_model: false
+  evaluate: false
   guidance_schedule:
   # for each leg specify: guidance in {"guided", "free"}, density in {"complete", "masked", "explicit"}, percent in {0 ... 1}
   # percent is the percentage of the epochs that will be spent training on the given density and guidance
