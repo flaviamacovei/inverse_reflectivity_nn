@@ -82,5 +82,21 @@ class CNN(BaseTrainableModel):
         """Initialise a CNN instance."""
         super().__init__(TrainableCNN().to(CM().get('device')))
 
+    def get_model_output(self, src, tgt = None, guidance = 'free'):
+        """
+        Get output of the model for given input.
+
+        For the CNN architecture, only src is needed. tgt and guidance are leftovers from superclass signature and not used.
+
+        Args:
+            src: Input data.
+            tgt: Target data. Ignore.
+            guidance: Guidance data. Ignore.
+
+        Returns:
+            Output of the model.
+        """
+        return self.model(src)
+
     def scale_gradients(self):
         pass

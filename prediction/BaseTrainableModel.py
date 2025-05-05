@@ -132,15 +132,16 @@ class BaseTrainableModel(BaseModel, ABC):
                 self.scale_gradients()
                 self.optimiser.step()
             if epoch % max(1, CM().get('training.num_epochs') / 10) == 0:
-                # logging at every 10% of training
-                new_checkpoint = get_unique_filename(f"out/models/checkpoint_{short_hash(self.model) + short_hash(epoch)}.pt")
-                # always save latest checkpoint
-                torch.save(self.model, new_checkpoint)
-                if checkpoint:
-                    os.remove(checkpoint)
-                checkpoint = new_checkpoint
-                current_time = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-                print(f"Checkpoint at {current_time}: {checkpoint}")
+                if CM().get('training.save_model'):
+                    # logging at every 10% of training
+                    new_checkpoint = get_unique_filename(f"out/models/checkpoint_{short_hash(self.model) + short_hash(epoch)}.pt")
+                    # always save latest checkpoint
+                    torch.save(self.model, new_checkpoint)
+                    if checkpoint:
+                        os.remove(checkpoint)
+                    checkpoint = new_checkpoint
+                    current_time = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                    print(f"Checkpoint at {current_time}: {checkpoint}")
                 print(f"Loss in epoch {epoch + 1}: {epoch_loss.item()}")
                 # visualise first item of batch
                 features = batch[0].float().to(CM().get('device'))
@@ -150,7 +151,6 @@ class BaseTrainableModel(BaseModel, ABC):
                     (features.shape[0], (CM().get('layers.max') + 2), CM().get('material_embedding.dim') + 1))
                 coating = Coating(encoding)
                 preds = coating_to_reflective_props(coating)
-                print(coating.get_batch(0))
                 visualise(preds, refs, f"from_training_epoch_{epoch}")
 
         print("Training complete.")
@@ -209,7 +209,8 @@ class BaseTrainableModel(BaseModel, ABC):
         features = features.float().to(CM().get('device'))
         # labels are encodings of ground truth coatings
         labels = labels.float().to(CM().get('device'))
-        preds = self.model(features).reshape((features.shape[0], (CM().get('layers.max') + 2), CM().get('material_embedding.dim') + 1))
+        preds = self.get_model_output(features, labels, 'guided')
+        preds = preds.reshape((features.shape[0], (CM().get('layers.max') + 2), CM().get('material_embedding.dim') + 1))
         return torch.sum((preds - labels)**2)**0.5
 
     def compute_loss_free(self, batch: torch.Tensor):
@@ -226,11 +227,29 @@ class BaseTrainableModel(BaseModel, ABC):
         lower_bound, upper_bound = features.chunk(2, dim=1)
         # create reflective properties pattern for match operation
         pattern = ReflectivePropsPattern(lower_bound, upper_bound)
-        encoding = self.model(features).reshape((features.shape[0], (CM().get('layers.max') + 2), CM().get('material_embedding.dim') + 1))
+        encoding = self.get_model_output(features, guidance = 'free')
+        encoding = encoding.reshape((features.shape[0], (CM().get('layers.max') + 2), CM().get('material_embedding.dim') + 1))
         coating = Coating(encoding)
         # convert predicted coating to reflective properties value
         preds = coating_to_reflective_props(coating)
         return match(preds, pattern)
+
+    @abstractmethod
+    def get_model_output(self, src, tgt = None, guidance = 'free'):
+        """
+        Get output of the model for given input. Must be implemented by subclasses.
+
+        Inputs can be specified by src only or src and tgt.
+
+        Args:
+            src: Model input.
+            tgt: Model target.
+            guidance: Guidance type. Accepted values: "free" and "guided".
+
+        Returns:
+            Output of the model.
+        """
+        pass
 
     def load(self, filename: str):
         """Load the model from a file."""

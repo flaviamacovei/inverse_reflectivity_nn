@@ -10,7 +10,7 @@ def coating_to_reflective_props(coating: Coating):
     """
     Run forward tmm function on coating object to obtain reflective properties value object.
 
-    The tmm function the reflectivity and transmission given
+    The tmm function computes the reflectivity and transmission given
         - a polarisation.
         - a tensor of refractive indices. Shape: (|coating|, |wavelengths|)
         - a tensor of thicknesses. Shape: (|coating|)
