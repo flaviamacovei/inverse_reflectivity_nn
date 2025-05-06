@@ -1,4 +1,4 @@
-device: 'auto' # accepted values: "auto", "cpu"
+device: 'cpu' # accepted values: "auto", "cpu"
 
 seed: null # <value> or null
 
@@ -46,26 +46,28 @@ material_embedding:
   data_file: "data/material_embedding/materials.yaml"
   dim: 2
   num_epochs: 200
-  learning_rate: 0.01
+  guided_learning_rate: 0.01
+  free_learning_rate: 1.e-5
 
 tolerance: 1.0e-3
 
-architecture: &architecture "cnn" # accepted values: "gradient", "mlp", "cnn", "transformer"
+architecture: &architecture "transformer" # accepted values: "gradient", "mlp", "cnn", "transformer"
 
 transformer:
-  model_dim: 4
-  num_heads: 1
-  num_layers: 2
-  d_ff: 4
+  model_dim: 256 # 256 or maybe even 1024
+  num_heads: 8 # 8
+  num_layers: 6 # 6
+  d_ff: 1024 # 1024
   dropout: 0.1
 
 training:
-  learning_rate: &lr 0.001 # default: 0.001
-  num_epochs: &epochs 10
-  batch_size: &batch_size 30
-  dataset_size: 100
-  save_model: false
-  evaluate: false
+  guided_learning_rate: &glr 0.001 # default: 0.001
+  free_learning_rate: &flr 1.e-4
+  num_epochs: &epochs 500
+  batch_size: &batch_size 256
+  dataset_size: 5000
+  save_model: true
+  evaluate: true
   guidance_schedule:
   # for each leg specify: guidance in {"guided", "free"}, density in {"complete", "masked", "explicit"}, percent in {0 ... 1}
   # percent is the percentage of the epochs that will be spent training on the given density and guidance
@@ -87,10 +89,11 @@ training:
       percent: 0.2
 
 wandb:
-  log: false
+  log: true
   project: "inverse-mirrors-nn"
   config:
     architecture: *architecture
-    learning_rate: *lr
+    guided_learning_rate: *glr
+    free_learning_rate: *flr
     epochs: *epochs
     batch_size: *batch_size

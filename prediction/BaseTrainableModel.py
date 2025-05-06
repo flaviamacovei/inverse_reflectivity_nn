@@ -68,8 +68,8 @@ class BaseTrainableModel(BaseModel, ABC):
         }
         # learning rate (and by extension optimiser) depends on guidance of current leg
         self.optimisers = {
-            "free": torch.optim.Adam(self.model.parameters(), lr=CM().get('training.learning_rate') / 200),
-            "guided": torch.optim.Adam(self.model.parameters(), lr=CM().get('training.learning_rate'))
+            "free": torch.optim.Adam(self.model.parameters(), lr=CM().get('training.free_learning_rate')),
+            "guided": torch.optim.Adam(self.model.parameters(), lr=CM().get('training.guided_learning_rate'))
         }
         self.compute_loss = None
         self.optimiser = None
@@ -126,8 +126,8 @@ class BaseTrainableModel(BaseModel, ABC):
 
                 if CM().get('wandb.log'):
                     if not loss_scale:
-                        loss_scale = loss
-                    wandb.log({"loss": loss.item() / loss_scale})
+                        loss_scale = loss / len(batch)
+                    wandb.log({"loss": loss.item() / (loss_scale * len(batch))})
                 loss.backward()
                 self.scale_gradients()
                 self.optimiser.step()
