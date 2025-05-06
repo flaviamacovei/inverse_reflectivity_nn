@@ -11,7 +11,6 @@ class TrainableTransformer(nn.Module):
 
         input_dim = 2
         target_dim = CM().get('material_embedding.dim') + 1
-        print(f"target dim: {target_dim}")
         d_model = CM().get('transformer.model_dim')
         nhead = CM().get('transformer.num_heads')
         num_layers = CM().get('transformer.num_layers')
@@ -61,7 +60,6 @@ class PositionalEncoding(nn.Module):
     def __init__(self, d_model, max_len=500):
         super().__init__()
         self.pos_embedding = nn.Parameter(torch.randn(1, max_len, d_model))
-        print(f"pos embedding shape: {self.pos_embedding.shape}")
 
     def forward(self, x):
         # x: (B, T, D)
