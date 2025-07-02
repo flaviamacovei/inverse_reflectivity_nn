@@ -20,9 +20,9 @@ class ExplicitPropsGenerator(BaseGenerator):
         make_point: Generate an 'explicit' point.
     """
 
-    def __init__(self, num_points = 1):
+    def __init__(self, num_points = 1, batch_size: int = 256):
         """Initialise a MaskedPropsGenerator instance."""
-        super().__init__(num_points)
+        super().__init__(num_points, batch_size)
         self.MIN_NUM_REGIONS = 1
         self.MAX_NUM_REGIONS = 7
 
@@ -41,32 +41,43 @@ class ExplicitPropsGenerator(BaseGenerator):
         else:
             return random.random()
 
-    def make_point(self):
+    def make_points(self, num_points: int):
         """
-        Generate an 'explicit' point.
+        Generate 'explicit' points.
 
         Returns:
+            set of
             pattern: ReflectivePropsPattern instance with regions with explicit values.
             coating: corresponding Coating instance.
         """
-        num_regions = random.randint(self.MIN_NUM_REGIONS, self.MAX_NUM_REGIONS)
-        # intervals of masking are determined by randomly sampling indices and in sorted order, selecting pairs
-        # this ensures that the masked intervals are non-overlapping
-        region_indices = sorted(random.sample(range(CM().get('wavelengths').size()[0]), num_regions * 2))
-        values = [self.generate_random_value() for _ in range(num_regions)]
+        lower_bounds = []
+        upper_bounds = []
+        for _ in range(num_points):
+            num_regions = random.randint(self.MIN_NUM_REGIONS, self.MAX_NUM_REGIONS)
+            # intervals of masking are determined by randomly sampling indices and in sorted order, selecting pairs
+            # this ensures that the masked intervals are non-overlapping
+            region_indices = sorted(random.sample(range(CM().get('wavelengths').size()[0]), num_regions * 2))
+            values = [self.generate_random_value() for _ in range(num_regions)]
 
-        # bound initialisation: lower bound is 0, upper bound is 1
-        lower_bound = torch.zeros((1, CM().get('wavelengths').size()[0]), device = CM().get('device'))
-        upper_bound = torch.ones((1, CM().get('wavelengths').size()[0]), device = CM().get('device'))
+            # bound initialisation: lower bound is 0, upper bound is 1
+            lower_bound = torch.zeros((1, CM().get('wavelengths').size()[0]), device = CM().get('device'))
+            upper_bound = torch.ones((1, CM().get('wavelengths').size()[0]), device = CM().get('device'))
 
-        # set explicit values
-        for i in range(num_regions):
-            lower_bound[:, region_indices[i * 2]:region_indices[i * 2 + 1]] = values[i]
-            upper_bound[:, region_indices[i * 2]:region_indices[i * 2 + 1]] = values[i]
+            # set explicit values
+            for i in range(num_regions):
+                lower_bound[:, region_indices[i * 2]:region_indices[i * 2 + 1]] = values[i]
+                upper_bound[:, region_indices[i * 2]:region_indices[i * 2 + 1]] = values[i]
 
-        lower_bound = torch.clamp(lower_bound - self.TOLERANCE / 2, 0, 1)
-        upper_bound = torch.clamp(upper_bound + self.TOLERANCE / 2, 0, 1)
+            lower_bound = torch.clamp(lower_bound - self.TOLERANCE / 2, 0, 1)
+            upper_bound = torch.clamp(upper_bound + self.TOLERANCE / 2, 0, 1)
 
-        pattern = ReflectivePropsPattern(lower_bound, upper_bound)
+            lower_bounds.append(lower_bound)
+            upper_bounds.append(upper_bound)
 
-        return pattern.to('cpu'), None
+        lower_bounds = torch.cat(lower_bounds, dim = 0)
+        upper_bounds = torch.cat(upper_bounds, dim = 0)
+
+
+        pattern = ReflectivePropsPattern(lower_bounds, upper_bounds)
+
+        return pattern, None
