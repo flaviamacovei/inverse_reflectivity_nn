@@ -1,7 +1,10 @@
 from abc import ABC, abstractmethod
 import random
 import torch
+import numpy as np
+import math
 import sys
+
 sys.path.append(sys.path[0] + '/../..')
 from data.values.Coating import Coating
 from utils.ConfigManager import ConfigManager as CM
@@ -20,7 +23,7 @@ class BaseGenerator(ABC):
         make_point: Generate a single point. Must be implemented by subclasses.
     """
 
-    def __init__(self, num_points: int = 1):
+    def __init__(self, num_points: int = 1, batch_size: int = 256):
         """
         Initialise a BaseGenerator instance.
 
@@ -28,50 +31,89 @@ class BaseGenerator(ABC):
             num_points: Number of points to generate. Defaults to 1.
         """
         self.num_points = num_points
+        self.batch_size = min(num_points, batch_size)
         self.TOLERANCE = CM().get('tolerance')
 
-    def make_random_coating(self):
-        """
-        Generate a coating with random materials and thicknesses.
+    def make_materials_mask(self, num_points: int, num_thin_films: int):
+        # create mask
+        # random number of thin films per point
+        ones_count = torch.randint(low=CM().get('layers.min'), high=CM().get('layers.max') + 1, size=(num_points,),
+                                   device=CM().get('device'))
+        # index grid for columns
+        col_idx = torch.arange(num_thin_films, device=CM().get('device')).unsqueeze(0)
+        # compare with ones count
+        materials_mask = col_idx < ones_count.unsqueeze(1)
+        return materials_mask.int()
 
-        Selects up to config.layers.max layers and returns a Coating object consisting of
-            Substrate
-            n thin films (config.layers.min <= n <= config.layers.max)
-            Air
-        If number of layers is less than config.layers.max, the rest is filled with air.
-        Thicknesses are selected randomly between 0 and 0.2.
+    def make_air_mask(self, num_points: int, num_thin_films: int):
+        base_mask = self.make_materials_mask(num_points, num_thin_films)
+        # extend mask by 2: substrate at the start and (final) air film at the end
+        extended_mask = torch.cat([torch.ones((num_points, 1), device = CM().get('device')), base_mask, torch.zeros((num_points, 1), device = CM().get('device'))], dim=1)
+        # invert mask for air
+        return (~(extended_mask.bool()))
 
-        Returns:
-            Coating object.
-        """
-        num_layers = random.randint(CM().get('layers.min'), CM().get('layers.max'))
+    def make_thicknesses(self, num_points: int):
+        num_thin_films = CM().get('num_layers')
+        thicknesses = torch.rand((num_points, num_thin_films), device = CM().get('device')) * 0.2
+        materials_mask = self.make_materials_mask(num_points, num_thin_films)
 
-        substrate = EM().get_material(CM().get('materials.substrate'))
-        air = EM().get_material(CM().get('materials.air'))
-        # select materials
-        thin_film_materials = list(filter(lambda x: x != substrate and x != air, EM().get_materials()))
-        thin_films = random.choices(thin_film_materials, k = num_layers)
+        # append substrate with thickness 1
+        substrate_thicknesses = torch.ones((num_points, 1), device = CM().get('device'))
+        thicknesses = torch.cat([substrate_thicknesses, thicknesses], dim=1)
 
-        coating_materials = [substrate] + thin_films + [air]
-        coating_materials.extend([air] * (CM().get('layers.max') - num_layers))
+        # append air
+        air_thicknesses = torch.zeros((num_points, num_thin_films + 2), device = CM().get('device'))
+        extended_mask = self.make_air_mask(num_points, num_thin_films)
+        # add air to thicknesses: first air film has thickness 1, the rest 0
+        first_true_idx = extended_mask.float().argmax(dim=1)
+        air_thicknesses_mask = torch.zeros_like(extended_mask, dtype=torch.bool, device = CM().get('device'))
+        air_thicknesses_mask[torch.arange(extended_mask.size(0)), first_true_idx] = extended_mask[
+            torch.arange(extended_mask.size(0)), first_true_idx]  # only if there was a True
+        air_thicknesses[air_thicknesses_mask] = 1
+        # extend thicknesses to add (final) air film
+        thicknesses = torch.cat([thicknesses, torch.zeros((num_points, 1), device = CM().get('device'))], dim=1)
+        thicknesses[extended_mask] = air_thicknesses[extended_mask]
+        return thicknesses
 
-        thicknesses = torch.zeros((1, CM().get('layers.max') + 2), device = CM().get('device'))
-        thicknesses[0, :num_layers] = torch.rand((1, num_layers), device = CM().get('device')) * 0.2
+    def make_materials_choice(self, num_points: int):
+        num_thin_films = CM().get('num_layers')
+        num_materials = len(CM().get('materials.thin_films'))
+        # indices of thin film materials
+        # index 0 and 1 reserved for substrate and air
+        # as soon as torch supports random choice, change this to torch
+        materials_choice = np.random.choice(num_materials, size=(num_points, num_thin_films), replace=True) + 2
+        materials_choice = torch.from_numpy(materials_choice).int()
+        materials_choice = materials_choice.to(CM().get('device'))
 
-        encoding = torch.cat([thicknesses[:, :, None], EM().encode(coating_materials)[None]], dim = 2)
-        return Coating(encoding)
+        # mask array
+        materials_mask = self.make_materials_mask(num_points, num_thin_films)
+        materials_choice = materials_choice * materials_mask
+
+        # append substrate with index 0
+        substrate = torch.zeros((num_points, 1), device = CM().get('device'))
+        materials_choice = torch.cat([substrate, materials_choice], dim=1)
+
+        # append air with index 1
+        air = torch.ones((num_points, num_thin_films + 2), device = CM().get('device'))
+        extended_mask = self.make_air_mask(num_points, num_thin_films)
+        # extend materials choice to add (final) air film
+        materials_choice = torch.cat([materials_choice, torch.ones((num_points, 1), device = CM().get('device'))], dim=1)
+        materials_choice[extended_mask] = air[extended_mask]
+        return materials_choice.int()
+
+    def get_materials_embeddings(self, materials_indices: torch.Tensor):
+        embeddings = EM().get_embeddings_lookup()
+        return embeddings[materials_indices]
 
     @abstractmethod
-    def make_point(self):
-        """Generate a single point. Must be implemented by subclasses."""
+    def make_points(self, num_points: int):
+        """Generate points. Must be implemented by subclasses."""
         pass
 
     def generate(self):
-        """Generate points."""
         points = []
-        for i in range(self.num_points):
-            if i % (max(self.num_points // 10, 1)) == 0:
-                print(f"{i}/{self.num_points}")
-            points.append(self.make_point())
-            torch.cuda.empty_cache()
+        for batch in range(math.ceil(self.num_points / self.batch_size)):
+            num_points = min(self.batch_size, self.num_points - batch * self.batch_size)
+            gen = self.make_points(num_points)
+            points.append(gen)
         return points

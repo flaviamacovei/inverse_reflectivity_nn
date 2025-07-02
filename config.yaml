@@ -1,4 +1,4 @@
-device: 'cpu' # accepted values: "auto", "cpu"
+device: 'auto' # accepted values: "auto", "cpu"
 
 seed: null # <value> or null
 
@@ -44,6 +44,8 @@ num_layers: *max_layers
 
 material_embedding:
   data_file: "data/material_embedding/materials.yaml"
+  # use pca
+  # for constantrimaterials: embedding = ri
   dim: 2
   num_epochs: 200
   learning_rate: 0.01
@@ -53,17 +55,19 @@ tolerance: 1.0e-3
 architecture: &architecture "transformer" # accepted values: "gradient", "mlp", "cnn", "transformer"
 
 transformer:
-  model_dim: 256 # 256 or maybe even 1024
-  num_heads: 8 # 8
-  num_layers: 6 # 6
+  model_dim: 16 # 256 or maybe even 1024
+  num_heads: 4 # 8
+  num_layers: 5 # 6
   d_ff: 1024 # 1024
   dropout: 0.1
 
+# possibly: different optimiser (numpy linesearch without parameters)
+
 training:
-  guided_learning_rate: &glr 0.001 # default: 0.001
-  free_learning_rate: &flr 1.e-4
+  guided_learning_rate: &glr 0.0001 # default: 0.001
+  free_learning_rate: &flr 1.e-5
   num_epochs: &epochs 500
-  batch_size: &batch_size 256
+  batch_size: &batch_size 64 # should be <= size of dataset
   dataset_size: 5000
   save_model: true
   evaluate: true
