@@ -114,7 +114,9 @@ class EmbeddingManager:
 
     def __init__(self):
         """Initialise EmbeddingManager instance."""
-        self.materials = self.load_materials()
+        self.materials = []
+        self.materials_indices = dict()
+        self.load_materials()
         self.num_materials = len(self.materials)
         self.LOSS_SCALE = torch.cat([m.get_coeffs() for m in self.materials]).abs().max().item()
         self.materials_refractive_indices = torch.stack([m.get_refractive_indices() for m in self.materials])
@@ -154,10 +156,10 @@ class EmbeddingManager:
         if len(thin_films) == 0:
             raise ValueError("No thin films specified")
 
-        allowed_titles = thin_films + [CM().get('materials.substrate'), CM().get('materials.air')]
+        # allowed_titles = thin_films + [CM().get('materials.substrate'), CM().get('materials.air')]
         materials = []
         for m in data['materials']:
-            if m['title'] not in allowed_titles:
+            if m['title'] not in thin_films:
                 continue
             if 'B' in m and 'C' in m:
                 # material has Sellmeier coefficients B and C
@@ -167,13 +169,33 @@ class EmbeddingManager:
                 materials.append(ConstantRIMaterial(m['title'], m['R']))
             else:
                 raise ValueError(f"Material {m['title']} must have either 'B' and 'C' or 'R'")
+        # sort so that all features have the same material order
+        materials.sort()
+        # prepend substrate and air
+        for m in data['materials']:
+            if m['title'] == CM().get('materials.substrate'):
+                if 'B' in m and 'C' in m:
+                    substrate = SellmeierMaterial(m['title'], m['B'], m['C'])
+                elif 'R' in m:
+                    substrate = ConstantRIMaterial(m['title'], m['R'])
+                else:
+                    raise ValueError(f"Material {m['title']} must have either 'B' and 'C' or 'R'")
+            if m['title'] == CM().get('materials.air'):
+                if 'B' in m and 'C' in m:
+                    air = SellmeierMaterial(m['title'], m['B'], m['C'])
+                elif 'R' in m:
+                    air = ConstantRIMaterial(m['title'], m['R'])
+                else:
+                    raise ValueError(f"Material {m['title']} must have either 'B' and 'C' or 'R'")
+        materials = [substrate, air] + materials
 
         # ensure all materials have same type
         material_type = type(materials[0])
         for m in materials:
             assert isinstance(m, material_type), f"All materials must be of same type."
-        materials.sort()
-        return materials
+
+        self.materials = materials
+        self.materials_indices = {materials[i].get_title(): i for i in range(len(materials))}
 
     def hash_materials(self):
         """Hash materials to use as filename for saving / loading embeddings."""
@@ -195,11 +217,40 @@ class EmbeddingManager:
         # find index of nearest neighbour for look-up
         indices = torch.argmin(distances, dim = -1)
         # compute embedding of nearest neighbour
+        # line below is super slow
         nearest_neighbours = self.model(torch.stack([self.materials[i].get_coeffs() for batch in indices for i in batch]))
         nearest_neighbours = nearest_neighbours.view(embedding.shape[0], embedding.shape[1], -1)
         return nearest_neighbours
 
+    def get_material_indices(self, embedding: torch.Tensor):
+        """
+        Turn embedding tensor into index tensor to use in lookup table.
+
+        Embeddings must exactly match known material embeddings. If no exact match is found, an exception is raised.
+
+        Args:
+            embedding: Input tensor. Shape: (batch_size, |coating|, embedding_dim). Must correspond to known materials.
+        Returns:
+            Tensor containing material indices. Shape: (batch_size, |coating|)
+        """
+        # repeat embeddings for each batch and layer
+        lookup = self.embeddings.repeat(embedding.shape[0], embedding.shape[1], 1, 1)
+        # repeat embedding for each known material
+        embedding = embedding[:, :, None].repeat(1, 1, self.num_materials, 1)
+        # compute soft probabilities of nearest neighbours
+        # this vector remains connected to the computational graph to maintain differentiability
+        mask_soft = torch.exp(-torch.abs(embedding - lookup)).prod(dim=-1)
+        # compute hard probabilities of nearest neighbours
+        # this is a one-hot vector but disconnected from the computational graph
+        mask_hard = torch.zeros_like(mask_soft).scatter_(-1, mask_soft.argmax(dim=-1, keepdim=True), 1.0)
+        # attach computational graph from soft probabilities to hard probabilities
+        mask = mask_hard + (mask_soft - mask_soft.detach())
+        # argmax chooses index at which mask is 1
+        indices = mask.argmax(dim = 2)
+        return indices
+
     def embedding_to_refractive_indices(self, embedding: torch.Tensor):
+        # TODO: redo with lookup
         """
         Compute refractive indices from embedding.
 
@@ -211,30 +262,13 @@ class EmbeddingManager:
         Returns:
             Refractive indices tensor. Shape: (batch_size, |coating|, |wavelengths|).
         """
-        # for batch in embedding:
-        #     for material_embedding in batch:
-        #         assert material_embedding in self.embeddings, f"Material embedding {material_embedding} not found in embeddings. Call get_nearest_neighbours first."
-        # repeat embeddings for each batch and layer
-        lookup = self.embeddings.repeat(embedding.shape[0], embedding.shape[1], 1, 1)
-        # repeat embedding for each known material
-        embedding = embedding[:, :, None].repeat(1, 1, self.num_materials, 1)
-        # i don't actually know what this is doing
-        # compute soft probabilities of nearest neighbours
-        # this vector remains connected to the computational graph to maintain differentiability
-        mask_soft = torch.exp(-torch.abs(embedding - lookup)).prod(dim = -1)
-        # compute hard probabilities of nearest neighbours
-        # this is a one-hot vector but disconnected from the computational graph
-        mask_hard = torch.zeros_like(mask_soft).scatter_(-1, mask_soft.argmax(dim = -1, keepdim = True), 1.0)
-        # attach computational graph from soft probabilities to hard probabilities
-        mask = mask_hard + (mask_soft - mask_soft.detach())
-        # repeat refractive indices of known materials for each batch and layer
-        all_refractive_indices = self.materials_refractive_indices.repeat(embedding.shape[0], embedding.shape[1], 1, 1)
-        # compute refractive indices of input
-        # one-hot mask sets incorrect refractive indices to zero therefore the summation results in refractive indices aligned in correct shape
-        refractive_indices = (all_refractive_indices * mask[:, :, :, None]).sum(dim = -2)
+        material_indices = self.get_material_indices(embedding)
+        all_refractive_indices = self.get_refractive_indices_lookup()
+        refractive_indices = all_refractive_indices[material_indices]
         return refractive_indices
 
     def encode(self, materials: list[Material]):
+        # TODO: redo with lookup
         """
         Map materials to embeddings.
 
@@ -246,8 +280,8 @@ class EmbeddingManager:
         """
         assert len(materials) > 0, "No materials provided"
         assert isinstance(materials[0], Material), "Materials must be of type Material"
-        input_features = torch.stack([material.get_coeffs() for material in materials])
-        return self.model(input_features)
+        materials_indices = [self.materials_indices[material.get_title()] for material in materials]
+        return self.embeddings[materials_indices]
 
     def decode(self, embedding: torch.Tensor):
         """
@@ -267,6 +301,12 @@ class EmbeddingManager:
     def euclidean_distance(self, x, y):
         """Compute euclidean distance between two tensors."""
         return torch.norm(x - y, p = 2, dim = -1)
+
+    def get_refractive_indices_lookup(self):
+        return self.materials_refractive_indices
+
+    def get_embeddings_lookup(self):
+        return self.embeddings
 
     def compute_loss(self):
         """
@@ -313,7 +353,7 @@ class EmbeddingManager:
     def load_embeddings(self):
         """Load embeddings model from file or train if file not found."""
         try:
-            self.model = torch.load(self.SAVEPATH, map_location = CM().get('device'))
+            self.model = torch.load(self.SAVEPATH, map_location = CM().get('device'), weights_only = False)
         except FileNotFoundError:
             print(f"Saved embeddings not found. Training model.")
             self.train()
