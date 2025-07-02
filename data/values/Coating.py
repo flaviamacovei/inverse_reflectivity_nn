@@ -2,7 +2,7 @@ import torch
 import sys
 sys.path.append(sys.path[0] + '/..')
 from data.values.Material import Material
-from data.material_embedding.EmbeddingManager import EmbeddingManager
+from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
 from utils.ConfigManager import ConfigManager as CM
 
 
@@ -39,7 +39,6 @@ class Coating():
         self.num_layers = encoding.shape[1]
         self.material_encodings = encoding[:, :, 1:]
         self.thicknesses = encoding[:, :, 0]
-        self.em = EmbeddingManager()
 
     def get_encoding(self):
         """Return encoding of Coating object."""
@@ -61,13 +60,13 @@ class Coating():
         Returns:
             Refractive indices tensor. Shape: (batch_size, |coating|, |config.wavelengths|)
         """
-        nearest_neighbours = self.em.get_nearest_neighbours(self.material_encodings)
-        refractive_indices = self.em.embedding_to_refractive_indices(nearest_neighbours)
+        nearest_neighbours = EM().get_nearest_neighbours(self.material_encodings)
+        refractive_indices = EM().embedding_to_refractive_indices(nearest_neighbours)
         return refractive_indices
 
     def get_materials(self):
         """Return list of materials."""
-        return self.em.decode(self.material_encodings)
+        return EM().decode(self.material_encodings)
 
     def get_batch(self, index: int):
         """Return batch at specified index."""

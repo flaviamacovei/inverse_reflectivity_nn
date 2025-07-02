@@ -27,14 +27,14 @@ def save_tensors(generated):
                                    dim=1).squeeze()
         if coating is None:
             # for explicit dataset, no coating is provided so use dummy data
-            label_tensor = torch.zeros(1)
+            label_tensor = torch.zeros(feature_tensor.shape[0])
         else:
             # for complete and masked datasets, coating is provided
             label_tensor = coating.get_encoding().squeeze()
         feature_tensors.append(feature_tensor)
         label_tensors.append(label_tensor)
-    feature_tensors = torch.stack(feature_tensors)
-    label_tensors = torch.stack(label_tensors)
+    feature_tensors = torch.cat(feature_tensors, dim = 0)
+    label_tensors = torch.cat(label_tensors, dim = 0)
     return TensorDataset(feature_tensors, label_tensors)
 
 
@@ -73,7 +73,7 @@ def generate_dataset(generators, split):
     MAX_SIZE = 2_400_000
     # maximum number of points that cuda memory can handle
     MAX_POINTS_PER_SEGMENT = MAX_SIZE // CM().get('wavelengths').shape[0]
-    densities = ["complete", "masked", "explicit"]
+    densities = list(generators.keys())
     for density in densities:
         # create properties dictionary by which to identify dataset
         props_dict = {
