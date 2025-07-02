@@ -1,5 +1,6 @@
 import random
 import torch
+import numpy as np
 import sys
 sys.path.append(sys.path[0] + '/../..')
 from data.values.ReflectivePropsPattern import ReflectivePropsPattern
@@ -20,35 +21,57 @@ class MaskedPropsGenerator(BaseGenerator):
     Methods:
         make_point: Generate a 'masked' point.
     """
-    def __init__(self, num_points = 1):
+    def __init__(self, num_points = 1, batch_size: int = 256):
         """Initialise a MaskedPropsGenerator instance."""
-        super().__init__(num_points)
+        super().__init__(num_points, batch_size)
         self.MIN_NUM_MASKS = 1
         self.MAX_NUM_MASKS = 7
 
-    def make_point(self):
+    def make_mask(self, num_points: int):
+        length = CM().get('wavelengths').shape[0]
+        # random number of marks for each point
+        num_marks = torch.randint(self.MIN_NUM_MASKS, self.MAX_NUM_MASKS + 1, (num_points, 1), device = CM().get('device'))
+        # set the first num_marks elements of marks to 1, the rest to 0
+        marks = torch.linspace(0, length - 1, length, device = CM().get('device'))[None, :].repeat(num_points, 1)
+        marks = (marks <= num_marks).float()
+        # shuffle positions along row dimension
+        shuffle_indices = torch.argsort(torch.rand(*marks.shape), dim=1)
+        marks = marks[torch.arange(marks.shape[0], device = CM().get('device')).unsqueeze(-1), shuffle_indices]
+
+        # 1d convolution
+        # ensure odd kernel size
+        kernel_size = 2 * (length // 16) + 1
+        kernel = torch.ones((kernel_size,), device = CM().get('device')) / kernel_size
+
+        blurred = torch.nn.functional.conv1d(marks[:, None, :], kernel[None, None, :], padding='same').squeeze()
+
+        # cut off at threshold
+        threshold = kernel[0]
+        mask = (~torch.isclose(blurred, threshold)).int()
+        return mask
+
+    def make_points(self, num_points: int):
         """
-        Generate a 'masked' point.
+        Generate 'masked' points.
 
         Returns:
             pattern: ReflectivePropsPattern instance with masked and unmasked intervals.
             coating: corresponding Coating instance.
         """
-        num_masks = random.randint(self.MIN_NUM_MASKS, self.MAX_NUM_MASKS)
-        # intervals of masking are determined by randomly sampling indices and in sorted order, selecting pairs
-        # this ensures that the masked intervals are non-overlapping
-        mask_indices = sorted(random.sample(range(CM().get('wavelengths').shape[0]), num_masks * 2))
+        materials_indices = self.make_materials_choice(num_points)
+        thicknesses = self.make_thicknesses(num_points)
 
-        coating = self.make_random_coating()
+        # make features
+        embedding = self.get_materials_embeddings(materials_indices)
+        coating_encoding = torch.cat([thicknesses[:, :, None], embedding], dim=2)
+        coating = Coating(coating_encoding)
+
+        mask = self.make_mask(num_points)
+
         reflective_props_tensor = coating_to_reflective_props(coating).get_value()
 
         lower_bound = reflective_props_tensor - self.TOLERANCE / 2
         upper_bound = reflective_props_tensor + self.TOLERANCE / 2
-
-        mask = torch.zeros(CM().get('wavelengths').size()[0], device = CM().get('device'))
-        # set mask to 1 in every masked interval
-        for i in range(num_masks):
-            mask[mask_indices[i * 2]:mask_indices[i * 2 + 1]] = 1
 
         lower_bound = torch.clamp(lower_bound - mask, 0, 1)
         upper_bound = torch.clamp(upper_bound + mask, 0, 1)
