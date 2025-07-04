@@ -6,7 +6,7 @@ num_stacks: 1
 
 layers:
   min: 1 # must be >= 1
-  max: &max_layers 20
+  max: &max_layers 1
 
 wavelengths:
   start: 300.e-3
@@ -26,14 +26,14 @@ materials:
 #    - "SiO2 IBS"
 #    - "TiO2 IBS"
     - "H"
-    - "L"
-    - "A"
-    - "F"
-    - "M"
-    - "T"
-    - "Ag"
-    - "Au"
-    - "Ni"
+#    - "L"
+#    - "A"
+#    - "F"
+#    - "M"
+#    - "T"
+#    - "Ag"
+#    - "Au"
+#    - "Ni"
 
 theta:
   start: 0.
@@ -52,7 +52,7 @@ material_embedding:
 
 tolerance: 1.0e-3
 
-architecture: &architecture "transformer" # accepted values: "gradient", "mlp", "cnn", "transformer"
+architecture: &architecture "mlp" # accepted values: "gradient", "mlp", "cnn", "transformer"
 
 transformer:
   model_dim: 16 # 256 or maybe even 1024
@@ -67,32 +67,32 @@ training:
   guided_learning_rate: &glr 0.0001 # default: 0.001
   free_learning_rate: &flr 1.e-5
   num_epochs: &epochs 500
-  batch_size: &batch_size 64 # should be <= size of dataset
+  batch_size: &batch_size 32 # should be <= size of dataset
   dataset_size: 5000
   save_model: true
   evaluate: true
   guidance_schedule:
   # for each leg specify: guidance in {"guided", "free"}, density in {"complete", "masked", "explicit"}, percent in {0 ... 1}
-  # percent is the percentage of the epochs that will be spent training on the given density and guidance
+  # percent refers to the percentage of the epochs that will be spent training on the given density and guidance
   # note that the combination "guided-explicit" is not allowed
     - guidance: "guided"
       density: "complete"
-      percent: 0.2
-    - guidance: "guided"
-      density: "masked"
-      percent: 0.2
-    - guidance: "free"
-      density: "complete"
-      percent: 0.2
-    - guidance: "free"
-      density: "masked"
-      percent: 0.2
-    - guidance: "free"
-      density: "explicit"
-      percent: 0.2
+      percent: 1.0
+#    - guidance: "guided"
+#      density: "masked"
+#      percent: 0.2
+#    - guidance: "free"
+#      density: "complete"
+#      percent: 0.2
+#    - guidance: "free"
+#      density: "masked"
+#      percent: 0.2
+#    - guidance: "free"
+#      density: "explicit"
+#      percent: 0.2
 
 wandb:
-  log: true
+  log: false
   project: "inverse-mirrors-nn"
   config:
     architecture: *architecture
