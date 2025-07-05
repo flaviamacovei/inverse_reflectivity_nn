@@ -146,6 +146,7 @@ class DecoderLayer(nn.Module):
 class Transformer(BaseTrainableModel):
     def __init__(self):
         model = TrainableTransformer()
+        print(f"number of trainable parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
         super().__init__(model.to(CM().get('device')))
 
     def get_model_output(self, src, tgt = None, guidance = 'free'):

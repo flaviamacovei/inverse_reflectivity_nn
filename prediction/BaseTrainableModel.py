@@ -122,7 +122,7 @@ class BaseTrainableModel(BaseModel, ABC):
             # training loop
             for batch in self.dataloader:
                 loss = self.compute_loss(batch)
-                epoch_loss += loss
+                epoch_loss += loss.item()
 
                 if CM().get('wandb.log'):
                     if not loss_scale:
@@ -134,6 +134,7 @@ class BaseTrainableModel(BaseModel, ABC):
             if epoch % max(1, CM().get('training.num_epochs') / 10) == 0:
                 if CM().get('training.save_model'):
                     # logging at every 10% of training
+                    # TODO: make separate function from here
                     new_checkpoint = get_unique_filename(f"out/models/checkpoint_{short_hash(self.model) + short_hash(epoch)}.pt")
                     # always save latest checkpoint
                     torch.save(self.model, new_checkpoint)
@@ -142,6 +143,7 @@ class BaseTrainableModel(BaseModel, ABC):
                     checkpoint = new_checkpoint
                     current_time = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
                     print(f"Checkpoint at {current_time}: {checkpoint}")
+                    # to here
                 print(f"Loss in epoch {epoch + 1}: {epoch_loss.item()}")
                 # visualise first item of batch
                 features = batch[0].float().to(CM().get('device'))
@@ -151,6 +153,7 @@ class BaseTrainableModel(BaseModel, ABC):
                     (features.shape[0], (CM().get('layers.max') + 2), CM().get('material_embedding.dim') + 1))
                 coating = Coating(encoding)
                 preds = coating_to_reflective_props(coating)
+                print(coating.get_batch(0))
                 visualise(preds, refs, f"from_training_epoch_{epoch}")
 
         print("Training complete.")
