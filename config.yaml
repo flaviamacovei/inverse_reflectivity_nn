@@ -6,7 +6,7 @@ num_stacks: 1
 
 layers:
   min: 1 # must be >= 1
-  max: &max_layers 1
+  max: &max_layers 1 # must be >= min
 
 wavelengths:
   start: 300.e-3

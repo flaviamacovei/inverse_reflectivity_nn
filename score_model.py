@@ -1,4 +1,6 @@
 import sys
+sys.path.append(sys.path[0] + '/..')
+from prediction.GradientModel import GradientModel
 from prediction.MLP import MLP
 from prediction.CNN import CNN
 from prediction.Transformer import Transformer
@@ -15,6 +17,7 @@ if __name__ == "__main__":
     saved_model_file = sys.argv[1]
     # map architecture specified in config to model classes
     models = {
+        "gradient": GradientModel,
         "mlp": MLP,
         "cnn": CNN,
         "transformer": Transformer
