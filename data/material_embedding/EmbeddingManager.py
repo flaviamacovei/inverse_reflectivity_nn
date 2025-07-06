@@ -3,6 +3,7 @@ import torch.nn as nn
 import itertools
 import yaml
 from torch_pca import PCA
+from sklearn.preprocessing import MinMaxScaler
 from pickle import load, dump
 import sys
 sys.path.append(sys.path[0] + '/..')
@@ -55,10 +56,14 @@ class EmbeddingManager:
         self.pca = PCA(n_components = CM().get('material_embedding.dim'))
         self.SAVEPATH = f'data/material_embedding/embeddings_{self.hash_materials()}.pt'
         self.load_pca()
+        self.pca_scaler = MinMaxScaler(feature_range = (0, 1))
 
         self.embeddings = self.refractive_indices_to_embeddings(self.materials_refractive_indices)
+        print(f"init embeddings: {self.embeddings}")
+        print(f"test_ris: {self.embeddings_to_refractive_indices(self.embeddings)}")
 
     def load_materials(self) -> list[Material]:
+        # TODO: map benutzen und filter wenn nötig (wie in CM)
         """
         Load materials from data file.
 
@@ -124,11 +129,34 @@ class EmbeddingManager:
         return short_hash(tuple(material_hashes))
 
     def refractive_indices_to_embeddings(self, refractive_indices: torch.Tensor):
+        assert len(refractive_indices.shape) == 2 or len(refractive_indices.shape) == 3, \
+            f"Refractive indices must be of shape (batch_size, num_layers, |wl|) or (num_layers, |wl|)\nFound shape: {refractive_indices.shape}"
+        scaleback = None
+        if len(refractive_indices.shape) == 3:
+            scaleback = [refractive_indices.shape[0], refractive_indices.shape[1]]
+            refractive_indices = refractive_indices.view(-1, refractive_indices.shape[-1])
         embeddings = self.pca.transform(refractive_indices)
+        try:
+            embeddings = torch.tensor(self.pca_scaler.transform(embeddings.cpu().numpy()), device = CM().get('device'))
+        except:
+            embeddings = torch.tensor(self.pca_scaler.fit_transform(embeddings.cpu().numpy()), device = CM().get('device'))
+        if scaleback is not None:
+            scaleback.append(embeddings.shape[-1])
+            embeddings = embeddings.view(scaleback)
         return embeddings
 
     def embeddings_to_refractive_indices(self, embeddings: torch.Tensor):
+        assert len(embeddings.shape) == 2 or len(embeddings.shape) == 3, \
+            f"Embeddings must be of shape (batch_size, num_layers, embedding_dim) or (num_layers, embedding_dim)\nFound shape: {embeddings.shape}"
+        scaleback = None
+        if len(embeddings.shape) == 3:
+            scaleback = [embeddings.shape[0], embeddings.shape[1]]
+            embeddings = embeddings.view(-1, embeddings.shape[-1])
+        embeddings = torch.tensor(self.pca_scaler.inverse_transform(embeddings.cpu().numpy()), device = CM().get('device'))
         refractive_indices = self.pca.inverse_transform(embeddings)
+        if scaleback is not None:
+            scaleback.append(refractive_indices.shape[-1])
+            refractive_indices = refractive_indices.view(scaleback)
         return refractive_indices
 
     def encode(self, materials: list[Material]):
@@ -157,7 +185,6 @@ class EmbeddingManager:
         Returns:
             List of materials.
         """
-        print(embedding.device, self.embeddings.device)
         distances = torch.cdist(embedding, self.embeddings)
         indices = torch.argmin(distances, dim = -1)
         materials = [[self.materials[index] for index in batch] for batch in indices]
