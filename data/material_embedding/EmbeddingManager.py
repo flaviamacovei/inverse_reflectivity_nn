@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import itertools
 import yaml
+from torch_pca import PCA
+from pickle import load, dump
 import sys
 sys.path.append(sys.path[0] + '/..')
 from data.values.Material import Material
@@ -9,77 +11,6 @@ from data.values.SellmeierMaterial import SellmeierMaterial
 from data.values.ConstantRIMaterial import ConstantRIMaterial
 from utils.ConfigManager import ConfigManager as CM
 from utils.os_utils import short_hash
-
-class EmbeddingModel(nn.Module):
-    """
-    Embedding Model class that maps materials to embeddings using a feed-forward neural network.
-
-    Fixed points of type (material_coeffs, embedding) can be provided for materials that should not be trained.
-    These can e.g. be the air and substrate.
-    The mapping function retains (approximate) distances between materials in the embedded space, including distances to fixed points.
-    Model architecture: linear -> ReLU -> linear
-
-    Attributes:
-        embeddings: Embeddings model parameter.
-        net: Feed-forward neural network.
-        fixed_points: Dictionary of fixed points.
-
-    Methods:
-        forward: Compute embeddings using feed-forward net.
-        get_embeddings: Get embeddings model parameter.
-        set embeddings: Set embeddings model parameter.
-    """
-    def __init__(self, in_dim, num_materials, embedding_dim, fixed_points = None):
-        """
-        Initialise EmbeddingModel instance.
-
-        Args:
-            in_dim: Input dimension.
-            num_materials: Number of materials.
-            embedding_dim: Embedding dimension.
-            fixed_points: Dictionary of fixed points. Keys are tensors representing material coefficients, values are tensors representing embeddings. Defaults to None.
-        """
-        super().__init__()
-        hidden_dim = 4
-        self.embeddings = nn.Parameter(torch.randn(num_materials, embedding_dim))
-        self.net = nn.Sequential(
-            nn.Linear(in_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, embedding_dim)
-        )
-        self.fixed_points = fixed_points
-
-    def forward(self, x):
-        """
-        Compute embeddings using feed-forward net.
-
-        Args:
-            x: Input tensor. Shape: (batch_size, in_dim).
-
-        Returns:
-            Output tensor. Shape: (batch_size, embedding_dim).
-        """
-        # determine fixed points coefficients
-        keys = torch.stack(list(self.fixed_points.keys())).repeat(x.shape[0], 1, 1)
-        # for each material: check if it is in fixed points
-        # maximum one entry is True in each row
-        mask = (x[:, None] == keys).all(dim=-1)
-        output = torch.empty((x.shape[0], CM().get('material_embedding.dim')), device=CM().get('device'))
-        # determine fixed points values
-        fixed_points_values = torch.stack(list(self.fixed_points.values()))
-        # assign fixed points values where mask is True
-        output[mask.any(dim=-1)] = fixed_points_values.repeat(x.shape[0], 1, 1)[mask]
-        # assign computed embeddings where mask is False
-        output[~mask.any(dim=-1)] = self.net(x[~mask.any(dim=-1)])
-        return output
-
-    def get_embeddings(self):
-        """Get embeddings model parameter."""
-        return self.embeddings
-
-    def set_embeddings(self, embeddings):
-        """Set embeddings model parameter."""
-        self.embeddings = embeddings
 
 class EmbeddingManager:
     """
@@ -121,20 +52,11 @@ class EmbeddingManager:
         self.LOSS_SCALE = torch.cat([m.get_coeffs() for m in self.materials]).abs().max().item()
         self.materials_refractive_indices = torch.stack([m.get_refractive_indices() for m in self.materials])
 
-        indim = self.materials[0].get_coeffs().shape[0]
-
-        # substrate and air are special materials and are not trained
-        substrate = self.get_material(CM().get('materials.substrate')).get_coeffs()
-        air = self.get_material(CM().get('materials.air')).get_coeffs()
-        fixed_points = {
-            substrate: torch.ones((CM().get('material_embedding.dim')), device = CM().get('device')),
-            air: torch.zeros((CM().get('material_embedding.dim')), device = CM().get('device'))
-        }
-        self.model = EmbeddingModel(indim, self.num_materials, CM().get('material_embedding.dim'), fixed_points).to(CM().get('device'))
-
+        self.pca = PCA(n_components = CM().get('material_embedding.dim'))
         self.SAVEPATH = f'data/material_embedding/embeddings_{self.hash_materials()}.pt'
-        self.load_embeddings()
-        self.embeddings = self.model(torch.stack([m.get_coeffs() for m in self.materials]))
+        self.load_pca()
+
+        self.embeddings = self.refractive_indices_to_embeddings(self.materials_refractive_indices)
 
     def load_materials(self) -> list[Material]:
         """
@@ -156,7 +78,6 @@ class EmbeddingManager:
         if len(thin_films) == 0:
             raise ValueError("No thin films specified")
 
-        # allowed_titles = thin_films + [CM().get('materials.substrate'), CM().get('materials.air')]
         materials = []
         for m in data['materials']:
             if m['title'] not in thin_films:
@@ -202,69 +123,12 @@ class EmbeddingManager:
         material_hashes = [hash(material) for material in self.materials]
         return short_hash(tuple(material_hashes))
 
-    def get_nearest_neighbours(self, embedding: torch.Tensor):
-        """
-        Round embedding to nearest neighbour in embedded space.
+    def refractive_indices_to_embeddings(self, refractive_indices: torch.Tensor):
+        embeddings = self.pca.transform(refractive_indices)
+        return embeddings
 
-        Args:
-            embedding: Input tensor. Shape: (batch_size, embedding_dim).
-
-        Returns:
-            Tensor of nearest neighbours. Shape: (batch_size, embedding_dim).
-        """
-        # compute distances to each known material
-        distances = torch.cdist(embedding, self.embeddings)
-        # find index of nearest neighbour for look-up
-        indices = torch.argmin(distances, dim = -1)
-        # compute embedding of nearest neighbour
-        # line below is super slow
-        nearest_neighbours = self.model(torch.stack([self.materials[i].get_coeffs() for batch in indices for i in batch]))
-        nearest_neighbours = nearest_neighbours.view(embedding.shape[0], embedding.shape[1], -1)
-        return nearest_neighbours
-
-    def get_material_indices(self, embedding: torch.Tensor):
-        """
-        Turn embedding tensor into index tensor to use in lookup table.
-
-        Embeddings must exactly match known material embeddings. If no exact match is found, an exception is raised.
-
-        Args:
-            embedding: Input tensor. Shape: (batch_size, |coating|, embedding_dim). Must correspond to known materials.
-        Returns:
-            Tensor containing material indices. Shape: (batch_size, |coating|)
-        """
-        # repeat embeddings for each batch and layer
-        lookup = self.embeddings.repeat(embedding.shape[0], embedding.shape[1], 1, 1)
-        # repeat embedding for each known material
-        embedding = embedding[:, :, None].repeat(1, 1, self.num_materials, 1)
-        # compute soft probabilities of nearest neighbours
-        # this vector remains connected to the computational graph to maintain differentiability
-        mask_soft = torch.exp(-torch.abs(embedding - lookup)).prod(dim=-1)
-        # compute hard probabilities of nearest neighbours
-        # this is a one-hot vector but disconnected from the computational graph
-        mask_hard = torch.zeros_like(mask_soft).scatter_(-1, mask_soft.argmax(dim=-1, keepdim=True), 1.0)
-        # attach computational graph from soft probabilities to hard probabilities
-        mask = mask_hard + (mask_soft - mask_soft.detach())
-        # argmax chooses index at which mask is 1
-        indices = mask.argmax(dim = 2)
-        return indices
-
-    def embedding_to_refractive_indices(self, embedding: torch.Tensor):
-        # TODO: redo with lookup
-        """
-        Compute refractive indices from embedding.
-
-        Differentiable and vectorised computation of refractive indices using a lookup table for known materials.
-
-        Args:
-            embedding: Input tensor. Shape: (batch_size, |coating|, embedding_dim). Must correspond to known materials.
-
-        Returns:
-            Refractive indices tensor. Shape: (batch_size, |coating|, |wavelengths|).
-        """
-        material_indices = self.get_material_indices(embedding)
-        all_refractive_indices = self.get_refractive_indices_lookup()
-        refractive_indices = all_refractive_indices[material_indices]
+    def embeddings_to_refractive_indices(self, embeddings: torch.Tensor):
+        refractive_indices = self.pca.inverse_transform(embeddings)
         return refractive_indices
 
     def encode(self, materials: list[Material]):
@@ -293,14 +157,12 @@ class EmbeddingManager:
         Returns:
             List of materials.
         """
+        print(embedding.device, self.embeddings.device)
         distances = torch.cdist(embedding, self.embeddings)
         indices = torch.argmin(distances, dim = -1)
         materials = [[self.materials[index] for index in batch] for batch in indices]
         return materials
 
-    def euclidean_distance(self, x, y):
-        """Compute euclidean distance between two tensors."""
-        return torch.norm(x - y, p = 2, dim = -1)
 
     def get_refractive_indices_lookup(self):
         return self.materials_refractive_indices
@@ -308,56 +170,20 @@ class EmbeddingManager:
     def get_embeddings_lookup(self):
         return self.embeddings
 
-    def compute_loss(self):
-        """
-        Compute loss between distances in material space and embedding space.
-
-        Returns:
-            Loss tensor. Shape: ().
-        """
-        loss = torch.tensor([0.0], device=CM().get('device'))
-        num_pairs = 0
-        # compute loss between each combination of materials
-        for material_i, material_j in itertools.combinations_with_replacement(self.materials, 2):
-            embedding_i = self.model(material_i.get_coeffs()[None, :])
-            embedding_j = self.model(material_j.get_coeffs()[None, :])
-
-
-            embedding_distance = self.euclidean_distance(embedding_i, embedding_j)
-            # scale distance in material space to avoid saturation
-            bc_distance = self.euclidean_distance(material_i.get_coeffs()[None, :], material_j.get_coeffs()[None, :]) / self.LOSS_SCALE
-
-            # compare distances in material space and embedding space
-            loss += (embedding_distance - bc_distance) ** 2
-            num_pairs += 1
-
-        return loss / num_pairs if num_pairs > 0 else torch.tensor(0.0, requires_grad = True, device = CM().get('device'))
-
-    def train(self):
-        """Train embeddings model."""
-        optimiser = torch.optim.Adam(self.model.parameters(), lr = CM().get('material_embedding.learning_rate'))
-        final_loss = None
-        for _ in range(CM().get('material_embedding.num_epochs')):
-            optimiser.zero_grad()
-            loss = self.compute_loss()
-            final_loss = loss
-            loss.backward()
-            optimiser.step()
-        if final_loss:
-            print(f"Final loss value: {final_loss.item()}")
-
-    def save_embeddings(self):
+    def save_pca(self):
         """Save embeddings model."""
-        torch.save(self.model, self.SAVEPATH)
+        with open(self.SAVEPATH, 'wb') as f:
+            dump(self.pca, f, protocol = 5)
 
-    def load_embeddings(self):
+    def load_pca(self):
         """Load embeddings model from file or train if file not found."""
         try:
-            self.model = torch.load(self.SAVEPATH, map_location = CM().get('device'), weights_only = False)
+            with open(self.SAVEPATH, 'rb') as f:
+                self.pca = load(f)
         except FileNotFoundError:
-            print(f"Saved embeddings not found. Training model.")
-            self.train()
-            self.save_embeddings()
+            print(f"Saved embeddings not found. Performing PCA.")
+            self.pca.fit(self.materials_refractive_indices)
+            self.save_pca()
 
     def get_materials(self):
         """Return list of materials."""
@@ -376,6 +202,6 @@ class EmbeddingManager:
         max_title_length = max(len(material.get_title()) for material in self.materials)
         material_embeddings = ''
         for material in self.materials:
-            embedding = self.model(material.get_coeffs()).cpu().detach().numpy()
+            embedding = self.model(material.get_coeffs().to(torch.float64)).cpu().detach().numpy()
             material_embeddings += f"{material.get_title().ljust(max_title_length)}: {embedding}\n"
         return f"Embedding Manager with {len(self.materials)} materials:\n{material_embeddings}"
