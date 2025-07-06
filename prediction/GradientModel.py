@@ -1,7 +1,6 @@
 import torch
-import torch.optim as optim
 import numpy as np
-from scipy.optimize import minimize, Bounds
+from scipy.optimize import minimize, Bounds, check_grad
 import sys
 sys.path.append(sys.path[0] + '/..')
 from prediction.BaseModel import BaseModel
@@ -31,9 +30,9 @@ class GradientModel(BaseModel):
         bounds = Bounds(np.zeros_like(init_params), np.ones_like(init_params))
 
         def np_loss_function(params: np.ndarray):
-            params = torch.from_numpy(params)
+            params = torch.tensor(params, dtype=torch.float64, requires_grad=True)
             loss, grads = self.loss_function(params, target)
-            return loss.cpu().detach().numpy(), grads.cpu().detach().numpy()
+            return loss.detach().cpu().numpy(), grads.detach().cpu().numpy()
 
         result = minimize(
             fun = np_loss_function,
@@ -42,10 +41,11 @@ class GradientModel(BaseModel):
             jac = True,
             bounds = bounds
         )
+
         optimised_params = result.x
 
-        optimised_params = torch.from_numpy(optimised_params).reshape(self.coating_length, self.encoding_length)[None, :, :]
-        optimised_params = optimised_params.to(CM().get('device')).float()
+        optimised_params = torch.from_numpy(optimised_params).reshape(self.coating_length, self.encoding_length)[None]
+        optimised_params = optimised_params.to(CM().get('device')).to(torch.float64)
 
         return Coating(optimised_params)
 
@@ -56,17 +56,16 @@ class GradientModel(BaseModel):
 
 
     def loss_function(self, params: torch.Tensor, target: ReflectivePropsPattern):
-        params = params.reshape(self.coating_length, self.encoding_length)[None, :, :]
-        params = params.to(CM().get('device')).float()
-        params.requires_grad_()
-        coating = Coating(params)
-        preds = coating_to_reflective_props(coating)
+        flat_params = params.detach().clone().requires_grad_(True)
+        original = flat_params
+        params = flat_params.reshape(self.coating_length, self.encoding_length)[None]
+        params = params.to(CM().get('device'))
 
-        loss = match(preds, target)
+        coating = Coating(params)
+        loss = (coating.get_refractive_indices() ** 2).sum()
         loss.backward()
 
-        grads = params.grad.flatten()
-        print(f"loss:{loss.item()}")
+        grads = original.grad.flatten()
 
-
+        print(f"loss: {loss}, grad norm: {torch.linalg.norm(grads):.3e}")
         return loss, grads
