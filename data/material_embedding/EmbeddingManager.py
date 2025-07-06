@@ -3,7 +3,6 @@ import torch.nn as nn
 import itertools
 import yaml
 from torch_pca import PCA
-from sklearn.preprocessing import MinMaxScaler
 from pickle import load, dump
 import sys
 sys.path.append(sys.path[0] + '/..')
@@ -55,8 +54,8 @@ class EmbeddingManager:
 
         self.pca = PCA(n_components = CM().get('material_embedding.dim'))
         self.SAVEPATH = f'data/material_embedding/embeddings_{self.hash_materials()}.pt'
+        self.scale_coeffs = []
         self.load_pca()
-        self.pca_scaler = MinMaxScaler(feature_range = (0, 1))
 
         self.embeddings = self.refractive_indices_to_embeddings(self.materials_refractive_indices)
         print(f"init embeddings: {self.embeddings}")
@@ -130,33 +129,19 @@ class EmbeddingManager:
 
     def refractive_indices_to_embeddings(self, refractive_indices: torch.Tensor):
         assert len(refractive_indices.shape) == 2 or len(refractive_indices.shape) == 3, \
-            f"Refractive indices must be of shape (batch_size, num_layers, |wl|) or (num_layers, |wl|)\nFound shape: {refractive_indices.shape}"
-        scaleback = None
-        if len(refractive_indices.shape) == 3:
-            scaleback = [refractive_indices.shape[0], refractive_indices.shape[1]]
-            refractive_indices = refractive_indices.view(-1, refractive_indices.shape[-1])
+            f"Refractive indices must be of shape (batch_size, |coating|, |wl|) or (|coating|, |wl|)\nFound shape: {refractive_indices.shape}"
         embeddings = self.pca.transform(refractive_indices)
-        try:
-            embeddings = torch.tensor(self.pca_scaler.transform(embeddings.cpu().numpy()), device = CM().get('device'))
-        except:
-            embeddings = torch.tensor(self.pca_scaler.fit_transform(embeddings.cpu().numpy()), device = CM().get('device'))
-        if scaleback is not None:
-            scaleback.append(embeddings.shape[-1])
-            embeddings = embeddings.view(scaleback)
+        if len(self.scale_coeffs) == 0:
+            # first time running this function
+            self.scale_coeffs = [embeddings.min(), embeddings.max() - embeddings.min()]
+        embeddings = (embeddings - self.scale_coeffs[0]) / self.scale_coeffs[1]
         return embeddings
 
     def embeddings_to_refractive_indices(self, embeddings: torch.Tensor):
         assert len(embeddings.shape) == 2 or len(embeddings.shape) == 3, \
-            f"Embeddings must be of shape (batch_size, num_layers, embedding_dim) or (num_layers, embedding_dim)\nFound shape: {embeddings.shape}"
-        scaleback = None
-        if len(embeddings.shape) == 3:
-            scaleback = [embeddings.shape[0], embeddings.shape[1]]
-            embeddings = embeddings.view(-1, embeddings.shape[-1])
-        embeddings = torch.tensor(self.pca_scaler.inverse_transform(embeddings.cpu().numpy()), device = CM().get('device'))
+            f"Embeddings must be of shape (batch_size, |coating|, embedding_dim) or (|coating|, embedding_dim)\nFound shape: {embeddings.shape}"
+        embeddings = embeddings * self.scale_coeffs[1] + self.scale_coeffs[0]
         refractive_indices = self.pca.inverse_transform(embeddings)
-        if scaleback is not None:
-            scaleback.append(refractive_indices.shape[-1])
-            refractive_indices = refractive_indices.view(scaleback)
         return refractive_indices
 
     def encode(self, materials: list[Material]):

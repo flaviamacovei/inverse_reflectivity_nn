@@ -58,10 +58,9 @@ class Coating():
         Return tensor representing refractive indices for object materials.
 
         Returns:
-            Refractive indices tensor. Shape: (batch_size, |coating|, |config.wavelengths|)
+            Refractive indices tensor. Shape: (batch_size, |coating|, |wl|)
         """
-        refractive_indices = EM().embeddings_to_refractive_indices(self.material_encodings)
-        return refractive_indices
+        return EM().embeddings_to_refractive_indices(self.material_encodings)
 
     def get_materials(self):
         """Return list of materials."""
