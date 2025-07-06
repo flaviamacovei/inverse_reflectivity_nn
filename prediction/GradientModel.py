@@ -30,7 +30,7 @@ class GradientModel(BaseModel):
         bounds = Bounds(np.zeros_like(init_params), np.ones_like(init_params))
 
         def np_loss_function(params: np.ndarray):
-            params = torch.tensor(params, dtype=torch.float64, requires_grad=True)
+            params = torch.tensor(params, dtype=torch.float32, requires_grad=True)
             loss, grads = self.loss_function(params, target)
             return loss.detach().cpu().numpy(), grads.detach().cpu().numpy()
 
@@ -44,11 +44,10 @@ class GradientModel(BaseModel):
 
         optimised_params = result.x
 
-        optimised_params = torch.from_numpy(optimised_params).reshape(self.coating_length, self.encoding_length)[None]
-        optimised_params = optimised_params.to(CM().get('device')).to(torch.float64)
+        optimised_params = torch.from_numpy(optimised_params).reshape(self.coating_length, self.encoding_length).float()[None]
+        optimised_params = optimised_params.to(CM().get('device'))
 
         return Coating(optimised_params)
-
 
     def initialise(self):
         init_params = np.random.randn(self.coating_length, self.encoding_length).flatten()
@@ -62,7 +61,8 @@ class GradientModel(BaseModel):
         params = params.to(CM().get('device'))
 
         coating = Coating(params)
-        loss = (coating.get_refractive_indices() ** 2).sum()
+        preds = coating_to_reflective_props(coating)
+        loss = match(preds, target)
         loss.backward()
 
         grads = original.grad.flatten()

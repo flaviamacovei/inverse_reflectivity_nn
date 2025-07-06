@@ -6,7 +6,7 @@ num_stacks: 1
 
 layers:
   min: 1 # must be >= 1
-  max: &max_layers 1 # must be >= min
+  max: &max_layers 3 # must be >= min
 
 wavelengths:
   start: 300.e-3
@@ -26,14 +26,14 @@ materials:
 #    - "SiO2 IBS"
 #    - "TiO2 IBS"
     - "H"
-#    - "L"
-#    - "A"
-#    - "F"
-#    - "M"
-#    - "T"
-#    - "Ag"
-#    - "Au"
-#    - "Ni"
+    - "L"
+    - "A"
+    - "F"
+    - "M"
+    - "T"
+    - "Ag"
+    - "Au"
+    - "Ni"
 
 theta:
   start: 0.
@@ -44,8 +44,6 @@ num_layers: *max_layers
 
 material_embedding:
   data_file: "data/material_embedding/materials.yaml"
-  # use pca
-  # for constantrimaterials: embedding = ri
   dim: 2
   num_epochs: 200
   learning_rate: 0.01
@@ -75,15 +73,15 @@ training:
   # for each leg specify: guidance in {"guided", "free"}, density in {"complete", "masked", "explicit"}, percent in {0 ... 1}
   # percent refers to the percentage of the epochs that will be spent training on the given density and guidance
   # note that the combination "guided-explicit" is not allowed
-    - guidance: "guided"
-      density: "complete"
-      percent: 1.0
+#    - guidance: "guided"
+#      density: "complete"
+#      percent: 1.0
 #    - guidance: "guided"
 #      density: "masked"
 #      percent: 0.2
-#    - guidance: "free"
-#      density: "complete"
-#      percent: 0.2
+    - guidance: "free"
+      density: "complete"
+      percent: 1.0
 #    - guidance: "free"
 #      density: "masked"
 #      percent: 0.2
@@ -92,7 +90,7 @@ training:
 #      percent: 0.2
 
 wandb:
-  log: false
+  log: true
   project: "inverse-mirrors-nn"
   config:
     architecture: *architecture
