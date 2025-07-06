@@ -60,8 +60,7 @@ class Coating():
         Returns:
             Refractive indices tensor. Shape: (batch_size, |coating|, |config.wavelengths|)
         """
-        nearest_neighbours = EM().get_nearest_neighbours(self.material_encodings)
-        refractive_indices = EM().embedding_to_refractive_indices(nearest_neighbours)
+        refractive_indices = EM().embeddings_to_refractive_indices(self.material_encodings)
         return refractive_indices
 
     def get_materials(self):

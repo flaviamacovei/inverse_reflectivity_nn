@@ -3,7 +3,6 @@ import torch
 from typing import Union
 import sys
 sys.path.append(sys.path[0] + '/..')
-from utils.ConfigManager import ConfigManager as CM
 from utils.os_utils import short_hash
 
 class Material(ABC):
