@@ -6,6 +6,7 @@ import wandb
 import os
 from datetime import datetime
 import sys
+import yaml
 sys.path.append(sys.path[0] + '/..')
 from data.dataloaders.BaseDataloader import BaseDataloader
 from prediction.BaseModel import BaseModel
@@ -19,6 +20,7 @@ from utils.ConfigManager import ConfigManager as CM
 from utils.os_utils import short_hash
 from data.dataloaders.DynamicDataloader import DynamicDataloader
 from ui.visualise import visualise
+from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
 
 class BaseTrainableModel(BaseModel, ABC):
     """
@@ -74,6 +76,7 @@ class BaseTrainableModel(BaseModel, ABC):
         self.compute_loss = None
         self.optimiser = None
         self.current_leg = -1
+        self.should_scale_loss = False
 
     def get_current_leg(self, epoch):
         """Return current leg of the guidance schedule."""
@@ -101,10 +104,11 @@ class BaseTrainableModel(BaseModel, ABC):
             density = CM().get(f'training.guidance_schedule.{self.current_leg}.density')
             print(
                 f"{'-' * 50}\nOn leg {guidance}-{density}")
-            # update attributes: loss function, optimiser, dataloader
+            # update attributes: loss function, optimiser, dataloader, loss_scale
             self.compute_loss = self.loss_functions[guidance]
             self.optimiser = self.optimisers[guidance]
             self.dataloader.load_leg(self.current_leg)
+            self.should_scale_loss = True
 
     def train(self):
         """Train the model."""
@@ -113,22 +117,32 @@ class BaseTrainableModel(BaseModel, ABC):
         self.model.apply(self.initialise_weights)
         self.set_to_train()
         loss_scale = None
+        previous_loss = None
         checkpoint = None
         for epoch in range(CM().get('training.num_epochs')):
             self.update_leg(epoch)
-            self.optimiser.zero_grad()
 
-            epoch_loss = torch.tensor(0.0, device=CM().get('device'))
+            epoch_loss = torch.tensor(0.0, device=CM().get('device')) # requires grad is False
             # training loop
             for batch in self.dataloader:
+                # features, labels statt batch
+                self.optimiser.zero_grad()
+                # erst durch modell dann loss
                 loss = self.compute_loss(batch)
                 epoch_loss += loss.item()
 
                 if CM().get('wandb.log'):
                     if not loss_scale:
-                        loss_scale = loss / len(batch)
-                    wandb.log({"loss": loss.item() / (loss_scale * len(batch))})
+                        loss_scale = loss
+                    elif self.should_scale_loss and previous_loss is not None:
+                        print(f"updating: {loss.item()} from {previous_loss}")
+                        loss_scale = loss.item() / (previous_loss / loss_scale)
+                    self.should_scale_loss = False
+                    wandb.log({"loss": loss.item() / loss_scale})
+                    previous_loss = loss.item()
+
                 loss.backward()
+
                 self.scale_gradients()
                 self.optimiser.step()
             if epoch % max(1, CM().get('training.num_epochs') / 10) == 0:
@@ -145,6 +159,7 @@ class BaseTrainableModel(BaseModel, ABC):
                     print(f"Checkpoint at {current_time}: {checkpoint}")
                     # to here
                 print(f"Loss in epoch {epoch + 1}: {epoch_loss.item()}")
+                # divide by dataset size instead of loss in epoch 0?
                 # visualise first item of batch
                 features = batch[0].float().to(CM().get('device'))
                 lower_bound, upper_bound = features.chunk(2, dim=1)
@@ -159,13 +174,42 @@ class BaseTrainableModel(BaseModel, ABC):
         print("Training complete.")
         # save final trained model
         if CM().get('training.save_model'):
-            model_filename = get_unique_filename(f"out/models/model_{short_hash(self.model)}.pt")
-            print(f"Saving model to {model_filename}")
-            torch.save(self.model, model_filename)
-            if CM().get('wandb.log'):
-                wandb.log({"saved under": model_filename})
+            self.save_model()
         if checkpoint:
             os.remove(checkpoint)
+
+    def save_model(self):
+        MODEL_METADATA = "out/models/models_metadata.yaml"
+        model_filename = get_unique_filename(f"out/models/model_{short_hash(self.model)}.pt")
+
+        props_dict = {
+            "architecture": CM().get('architecture'),
+            "num_layers": CM().get('num_layers'),
+            "min_wl": CM().get('wavelengths')[0].item(),
+            "max_wl": CM().get('wavelengths')[-1].item(),
+            "wl_step": len(CM().get('wavelengths')),
+            "polarisation": CM().get('polarisation'),
+            "materials_hash": EM().hash_materials(),
+            "num_materials": len(CM().get('materials.thin_films')),
+            "theta": CM().get('theta').item(),
+            "tolerance": CM().get('tolerance'),
+            "num_points": CM().get('training.dataset_size'),
+            "epochs": CM().get('training.num_epochs')
+        }
+        if not os.path.exists(MODEL_METADATA):
+            # create file if it does not exist
+            with open(MODEL_METADATA, "w") as f:
+                yaml.dump({"models": [{**{'title': model_filename}, **{'properties': props_dict}}]}, f, sort_keys=False)
+        else:
+            with open(MODEL_METADATA, "r+") as f:
+                content = yaml.safe_load(f)
+                content['models'].append({**{'title': model_filename}, **{'properties': props_dict}})
+                f.seek(0)
+                yaml.dump(content, f, sort_keys=False, default_flow_style=False, indent=2)
+        print(f"Saving model to {model_filename}")
+        torch.save(self.model, model_filename)
+        if CM().get('wandb.log'):
+            wandb.log({"saved under": model_filename})
 
     def initialise_weights(self, model: nn.Module):
         """Initialise model linear weights using Kaiming normal initialisation."""
@@ -214,7 +258,7 @@ class BaseTrainableModel(BaseModel, ABC):
         labels = labels.float().to(CM().get('device'))
         preds = self.get_model_output(features, labels, 'guided')
         preds = preds.reshape((features.shape[0], (CM().get('layers.max') + 2), CM().get('material_embedding.dim') + 1))
-        return torch.sum((preds - labels)**2)**0.5
+        return torch.sum((preds - labels)**2)#**0.5 <- unnötig
 
     def compute_loss_free(self, batch: torch.Tensor):
         """
@@ -254,9 +298,9 @@ class BaseTrainableModel(BaseModel, ABC):
         """
         pass
 
-    def load(self, filename: str):
+    def load(self, filename: str, weights_only: bool = True):
         """Load the model from a file."""
-        self.model = torch.load(filename)
+        self.model = torch.load(filename, weights_only = weights_only)
         self.model.to(CM().get('device'))
 
     def set_to_train(self):
