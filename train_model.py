@@ -1,8 +1,11 @@
 import os
 import time
 import torch
-from torch.utils.data import DataLoader
+from itertools import product
+import yaml
 import wandb
+from torch.utils.data import DataLoader
+from generate_dataset import generate_dataset
 from data.values.Material import Material
 from forward.forward_tmm import coating_to_reflective_props
 from prediction.BaseTrainableModel import BaseTrainableModel
@@ -50,4 +53,18 @@ def train_model():
         score_model(model)
 
 if __name__ == "__main__":
-    train_model()
+    num_layers = range(1, 23)
+    for num in num_layers:
+        CM().set_layers_to(num)
+        print(f"\n\n\n{num} layer{'s' if num > 1 else ''}")
+        try:
+            train_model()
+        except FileNotFoundError:
+            split = "training"
+            generators = {
+                "complete": CompletePropsGenerator,
+                "masked": MaskedPropsGenerator,
+                "explicit": ExplicitPropsGenerator
+            }
+            generate_dataset(generators, split)
+            train_model()

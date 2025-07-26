@@ -4,3 +4,4 @@ matplotlib
 scipy
 wandb
 torch-pca
+pyyaml
