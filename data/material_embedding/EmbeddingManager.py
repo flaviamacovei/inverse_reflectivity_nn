@@ -58,8 +58,6 @@ class EmbeddingManager:
         self.load_pca()
 
         self.embeddings = self.refractive_indices_to_embeddings(self.materials_refractive_indices)
-        print(f"init embeddings: {self.embeddings}")
-        print(f"test_ris: {self.embeddings_to_refractive_indices(self.embeddings)}")
 
     def load_materials(self) -> list[Material]:
         # TODO: map benutzen und filter wenn nötig (wie in CM)
@@ -214,6 +212,6 @@ class EmbeddingManager:
         max_title_length = max(len(material.get_title()) for material in self.materials)
         material_embeddings = ''
         for material in self.materials:
-            embedding = self.model(material.get_coeffs().to(torch.float64)).cpu().detach().numpy()
+            embedding = self.embeddings.cpu().detach().numpy()
             material_embeddings += f"{material.get_title().ljust(max_title_length)}: {embedding}\n"
         return f"Embedding Manager with {len(self.materials)} materials:\n{material_embeddings}"

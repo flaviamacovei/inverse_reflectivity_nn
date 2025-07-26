@@ -39,7 +39,7 @@ class SegmentedDataset(Dataset):
         total_samples = 0
         for file in self.segment_files:
             if os.path.exists(file):
-                segment_data = torch.load(file)
+                segment_data = torch.load(file, weights_only = False)
                 self.segments.append(segment_data)
                 total_samples += len(segment_data)
         return total_samples

@@ -20,21 +20,22 @@ def evaluate_model(model: BaseModel):
     """
     print("Evaluating model...")
     densities = ["complete", "masked", "explicit"]
-    total_error = 0
+    density_errors = []
     for density in densities:
         try:
             dataloader = init_dataloader(density)
         except FileNotFoundError:
-            print("Dataset in current configuration not found. Please run generate_dataset.py first.")
+            raise FileNotFoundError("Dataset in current configuration not found. Please run generate_dataset.py first.")
             return
         error = evaluate_per_density(model, dataloader, save_visualisation = False)
-        total_error += error
         try:
             if CM().get('wandb.log'):
                 wandb.log({f"{density}_error": error})
         except:
             pass
         print(f"{density} error: {error}")
+        density_errors.append(error)
+    total_error = sum(density_errors)
     try:
         if CM().get('wandb.log'):
             wandb.log({"total_error": total_error})
@@ -42,6 +43,7 @@ def evaluate_model(model: BaseModel):
         pass
     print(f"total error: {total_error}")
     print("Evaluation complete.")
+    return density_errors
 
 def init_dataloader(density: str):
     """
@@ -53,7 +55,7 @@ def init_dataloader(density: str):
     batch_size = 10
     filename = get_dataset_name("validation", density)
     try:
-        dataset = torch.load(filename)
+        dataset = torch.load(filename, weights_only = False)
     except FileNotFoundError:
         raise FileNotFoundError("Dataset in current configuration not found. Please run generate_dataset.py first.")
     except AttributeError:
@@ -62,7 +64,7 @@ def init_dataloader(density: str):
 
 def evaluate_per_density(model: BaseModel, dataloader: DataLoader, save_visualisation = False):
     """
-    Evaluate model for specified density.
+    Evaluate model for one density.
 
     Args:
         model: Prediction model to evaluate.
@@ -79,7 +81,7 @@ def evaluate_per_density(model: BaseModel, dataloader: DataLoader, save_visualis
         if save_visualisation:
             visualise(refs = pattern, preds = preds, filename = f"evaluation_{i}")
         # evaluation uses free loss
-        error += match(preds, pattern).item()
+        error += match(preds, pattern).item() / len(dataloader)
     return error
 
 def test_model(model: BaseModel):
@@ -91,7 +93,7 @@ def test_model(model: BaseModel):
     """
     print("Testing model...")
     batch_size = 1
-    dataset = torch.load(f"data/datasets/test_data/test_data.pt")
+    dataset = torch.load(f"data/datasets/test_data/test_data.pt", weights_only = False)
     dataloader = DataLoader(dataset, batch_size = batch_size, shuffle = False)
     test_error = evaluate_per_density(model, dataloader, save_visualisation = True)
     try:
@@ -100,3 +102,4 @@ def test_model(model: BaseModel):
     except:
         pass
     print(f"test error: {test_error}")
+    return test_error
