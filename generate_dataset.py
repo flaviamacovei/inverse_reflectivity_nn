@@ -10,6 +10,7 @@ from data.dataset_generation.CompletePropsGenerator import CompletePropsGenerato
 from data.dataset_generation.MaskedPropsGenerator import MaskedPropsGenerator
 from data.dataset_generation.ExplicitPropsGenerator import ExplicitPropsGenerator
 from utils.os_utils import short_hash, get_unique_filename
+from utils.data_utils import get_dataset_name
 
 
 def save_tensors(generated):
@@ -54,6 +55,13 @@ def write_to_metadata(dataset_filename, props_dict):
             f.seek(0)
             yaml.dump(content, f, sort_keys=False, default_flow_style=False, indent=2)
 
+def dataset_exists(split: str):
+    for density in ['complete', 'masked', 'explicit']:
+        dataset_name = get_dataset_name(split, density)
+        if not dataset_name:
+            return False
+    return True
+
 
 def generate_dataset(generators, split):
     """
@@ -69,6 +77,9 @@ def generate_dataset(generators, split):
     else:
         # all validation datasets have 100 points
         num_points = 100
+    if dataset_exists(split):
+        print("No generation necessary. Dataset already exists.")
+        return
     # maximum total size of a dataset that cuda memory can handle
     MAX_SIZE = 2_400_000
     # maximum number of points that cuda memory can handle
