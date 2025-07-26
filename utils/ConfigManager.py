@@ -87,3 +87,7 @@ class ConfigManager:
             else:
                 return default
         return value
+
+    def set_layers_to(self, num_layers: int):
+        self.config["layers"]["max"] = num_layers
+        self.config["num_layers"] = num_layers
