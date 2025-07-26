@@ -38,4 +38,37 @@ def get_dataset_name(split: str, density: str):
         for dataset in content["datasets"]:
             if dataset["properties"] == props_dict:
                 return dataset["title"]
-        return None
+        return
+
+
+def load_config(config_id: int):
+    configs = {
+        1: {
+            "num_layers": 5,
+            "substrate": "Suprasil Heraeus",
+            "air": "Air",
+            "materials": ["SiO2 IBS", "TiO2 IBS"]
+        },
+        2: {
+            "num_layers": 7,
+            "substrate": "DC_Substrate",
+            "air": "DC_Air",
+            "materials": ["H", "L", "A", "F", "M", "T", "Ag", "Au", "Ni"]
+        },
+        3: {
+            "num_layers": 15,
+            "substrate": "DC_Substrate",
+            "air": "DC_Air",
+            "materials": ["H", "L", "A", "F", "M", "T", "Ag", "Au", "Ni"],
+        }
+    }
+
+    assert config_id in [1, 2, 3], "Available config ids: 1, 2, 3"
+    with open('config.yaml', 'r') as f:
+        config_dict = yaml.safe_load(f)
+    config_dict['layers']['max'] = configs[config_id]['num_layers']
+    config_dict['materials']['substrate'] = configs[config_id]['substrate']
+    config_dict['materials']['air'] = configs[config_id]['air']
+    config_dict['materials']['thin_films'] = configs[config_id]['materials']
+    with open('config.yaml', 'w') as f:
+        yaml.dump(config_dict, f, sort_keys = False)
