@@ -1,5 +1,6 @@
 import yaml
 import sys
+import os
 sys.path.append(sys.path[0] + '/..')
 from utils.ConfigManager import ConfigManager as CM
 from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
@@ -32,13 +33,14 @@ def get_dataset_name(split: str, density: str):
         "density": density,
         "num_points": num_points
     }
-    with open("data/datasets/metadata.yaml", "r") as f:
-        content = yaml.safe_load(f)
-        # search for properties dictionary match in metadata
-        for dataset in content["datasets"]:
-            if dataset["properties"] == props_dict:
-                return dataset["title"]
-        return
+    if os.path.exists("data/datasets/metadata.yaml"):
+        with open("data/datasets/metadata.yaml", "r") as f:
+            content = yaml.safe_load(f)
+            # search for properties dictionary match in metadata
+            for dataset in content["datasets"]:
+                if dataset["properties"] == props_dict:
+                    return dataset["title"]
+    return None
 
 
 def load_config(config_id: int):

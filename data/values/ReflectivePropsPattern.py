@@ -42,6 +42,10 @@ class ReflectivePropsPattern(BaseReflectiveProps):
         """Return upper bound."""
         return self.upper_bound
 
+    def get_batch_size(self):
+        """Return batch size."""
+        return self.lower_bound.shape[0]
+
     def to(self, device: str):
         """Move property tensors to device."""
         return ReflectivePropsPattern(self.lower_bound.to(device), self.upper_bound.to(device))
