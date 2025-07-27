@@ -50,11 +50,28 @@ class SegmentedDataset(Dataset):
 
     def __getitem__(self, index):
         """Return the sample at the given index."""
-        segment_index = 0
-        while index >= len(self.segments[segment_index]):
-            index -= len(self.segments[segment_index])
-            segment_index += 1
-        return self.segments[segment_index][index]
+        if isinstance(index, int):
+            segment_index = 0
+            while index >= len(self.segments[segment_index]):
+                index -= len(self.segments[segment_index])
+                segment_index += 1
+            results = self.segments[segment_index][index]
+            return (results[0][None], results[1][None])
+        elif isinstance(index, slice):
+            results = []
+            start = index.start if index.start is not None else 0
+            stop = index.stop if index.stop is not None else len(self)
+            step = index.step if index.step is not None else 1
+            for i in range(start, stop, step):
+                segment_index = 0
+                while i >= len(self.segments[segment_index]):
+                    i -= len(self.segments[segment_index])
+                    segment_index += 1
+                results.append(self.segments[segment_index][i])
+            reflective_props = [sample[0] for sample in results]
+            coating = [sample[1] for sample in results]
+            return (torch.stack(reflective_props), torch.stack(coating))
+            return results
 
 class DynamicDataloader(BaseDataloader):
     """
@@ -93,7 +110,7 @@ class DynamicDataloader(BaseDataloader):
         # TODO: turn this into an actual dataloader class maybe?
         self.dataloader = DataLoader(self.dataset, batch_size = self.batch_size, shuffle = self.shuffle)
 
-    def load_data(self, filepath: str = None):
+    def load_data(self, filepath: str = None, weights_only: bool = True):
         """
         Load data from the specified dataset file.
 
@@ -111,7 +128,7 @@ class DynamicDataloader(BaseDataloader):
 
             if os.path.exists(filepath):
                 # filepath is a single file, dataset not segmented
-                self.dataset = torch.load(filepath)
+                self.dataset = torch.load(filepath, weights_only = weights_only)
             else:
                 # filepath is a prefix, dataset is segmented
                 segment_files = []
