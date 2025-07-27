@@ -9,8 +9,9 @@ from generate_dataset import generate_dataset
 from data.values.Material import Material
 from forward.forward_tmm import coating_to_reflective_props
 from prediction.BaseTrainableModel import BaseTrainableModel
-from prediction.CNN import CNN
+from prediction.GradientModel import GradientModel
 from prediction.MLP import MLP
+from prediction.CNN import CNN
 from prediction.Transformer import Transformer
 from data.dataloaders.DynamicDataloader import DynamicDataloader
 from data.values.Coating import Coating
@@ -28,8 +29,11 @@ from score_model import score_model
 
 def train_model():
     """Instantiate and train model."""
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
     # map architecture specified in config to model classes
     models = {
+        "gradient": GradientModel,
         "mlp": MLP,
         "cnn": CNN,
         "transformer": Transformer
