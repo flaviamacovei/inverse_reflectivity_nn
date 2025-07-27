@@ -51,7 +51,7 @@ class EmbeddingManager:
         self.num_materials = len(self.materials)
         self.LOSS_SCALE = torch.cat([m.get_coeffs() for m in self.materials]).abs().max().item()
         self.materials_refractive_indices = torch.stack([m.get_refractive_indices() for m in self.materials])
-
+        # pca_lowrank instead of pca?
         self.pca = PCA(n_components = CM().get('material_embedding.dim'))
         self.SAVEPATH = f'data/material_embedding/embeddings_{self.hash_materials()}.pt'
         self.scale_coeffs = []
@@ -122,6 +122,7 @@ class EmbeddingManager:
 
     def hash_materials(self):
         """Hash materials to use as filename for saving / loading embeddings."""
+        # does this need more information?
         material_hashes = [hash(material) for material in self.materials]
         return short_hash(tuple(material_hashes))
 

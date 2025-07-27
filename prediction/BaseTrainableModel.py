@@ -105,6 +105,8 @@ class BaseTrainableModel(BaseModel, ABC):
             print(
                 f"{'-' * 50}\nOn leg {guidance}-{density}")
             # update attributes: loss function, optimiser, dataloader, loss_scale
+            # first run data through model, then compute loss
+            # shapes might be off (+ 1 due to changes in SegmentedDataset)
             self.compute_loss = self.loss_functions[guidance]
             self.optimiser = self.optimisers[guidance]
             self.dataloader.load_leg(self.current_leg)
