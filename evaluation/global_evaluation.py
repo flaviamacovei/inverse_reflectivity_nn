@@ -8,13 +8,14 @@ from utils.data_utils import load_config
 from utils.ConfigManager import ConfigManager as CM
 from data.dataloaders.DynamicDataloader import DynamicDataloader
 from data.values.ReflectivePropsPattern import ReflectivePropsPattern
+from data.values.ReflectivePropsValue import ReflectivePropsValue
 from utils.data_utils import get_dataset_name
 from prediction.BaseModel import BaseModel
 from prediction.GradientModel import GradientModel
 from prediction.MLP import MLP
 from prediction.Transformer import Transformer
 from forward.forward_tmm import coating_to_reflective_props
-from evaluation.loss import match
+from ui.visualise import visualise
 
 def load_pattern():
     lower_bound = None
@@ -66,8 +67,36 @@ def pairwise_distance(pattern: ReflectivePropsPattern):
     error = (left_error + right_error)
     error = error * mask
     error = error.sum(dim = -1)
+    print(error.shape)
+    smallest_idx = torch.argmin(error)
+    multiindex = torch.unravel_index(smallest_idx, error.shape)
+
+    p1 = ReflectivePropsValue(p1_lower[multiindex[0]], p1_upper[multiindex[0]])
+    p2 = ReflectivePropsValue(p2_lower[multiindex[1]], p2_upper[multiindex[1]])
+    visualise(refs = p1, filename = "p1")
+    visualise(refs = p2, filename = "p2")
+    print(multiindex)
+    smallest = error[multiindex[0], multiindex[1]]
+    print(smallest)
     indices = torch.triu_indices(num, num, offset = 1)
     return error[indices[0], indices[1]]
+
+def match(input: ReflectivePropsValue, target: ReflectivePropsPattern):
+    """
+    Match a reflective properties value to a reflective properties pattern.
+
+    Args:
+        input: reflective properties value object.
+        target: reflective properties pattern object.
+    """
+    upper_error = input.get_value() - target.get_upper_bound()
+    upper_error = upper_error.clamp(min = 0)
+    lower_error = target.get_lower_bound() - input.get_value()
+    lower_error = lower_error.clamp(min = 0)
+
+    total_error = torch.sum(upper_error ** 2 + lower_error ** 2, dim = -1)
+
+    return total_error
 
 def evaluate_model(model: BaseModel):
     target = load_pattern()
@@ -86,7 +115,7 @@ def evaluate_error(error):
     return {'min': min, 'q_25': q_25, 'mean': mean, 'median': median, 'q_75': q_75, 'max': max}
 
 
-def compare_all():
+def evaluate_all_models():
     results = {
         'model': [],
         'min': [],
@@ -97,17 +126,25 @@ def compare_all():
         'max': []
     }
     random = random_baseline()
-    results = filter(lambda item: item[1].append(random[item[0]]), results.items())
-    # model_classes = {
-    #     'gradient': GradientModel,
-    #     'mlp': MLP,
-    #     'transformer': Transformer
-    # }
-    # for type in ['gradient', 'mlp', 'transformer']:
+    for key in results.keys():
+        if key == 'model':
+            results[key].append('random')
+        else:
+            results[key].append(random[key])
+    model_classes = {
+        'gradient': GradientModel,
+        # 'mlp': MLP,
+        # 'transformer': Transformer
+    }
+    # for type in ['gradient']:#, 'mlp', 'transformer']:
     #     ModelClass = model_classes[type]
     #     model = ModelClass()
     #     evaluation = evaluate_model(model)
-    #     results = filter(lambda item: item[1].append(evaluation[item[0]]), results.items())
+    #     for key in results.keys():
+    #         if key == 'model':
+    #             results[key].append(type)
+    #         else:
+    #             results[key].append(evaluation[key])
 
     results = pd.DataFrame(results)
     return results
@@ -115,5 +152,5 @@ def compare_all():
     
 
 if __name__ == '__main__':
-    results = random_baseline()
+    results = evaluate_all_models()
     print(results)

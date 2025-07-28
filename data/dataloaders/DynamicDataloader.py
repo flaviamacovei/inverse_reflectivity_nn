@@ -106,7 +106,7 @@ class DynamicDataloader(BaseDataloader):
         """
         density = CM().get(f'training.guidance_schedule.{leg}.density')
         filepath = get_dataset_name("training", density)
-        self.load_data(filepath)
+        self.load_data(filepath, weights_only = False)
         # TODO: turn this into an actual dataloader class maybe?
         self.dataloader = DataLoader(self.dataset, batch_size = self.batch_size, shuffle = self.shuffle)
 

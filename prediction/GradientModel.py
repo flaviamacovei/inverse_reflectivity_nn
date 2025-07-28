@@ -67,5 +67,5 @@ class GradientModel(BaseModel):
 
         grads = original.grad.flatten()
 
-        print(f"loss: {loss}, grad norm: {torch.linalg.norm(grads):.3e}")
+        # print(f"loss: {loss}, grad norm: {torch.linalg.norm(grads):.3e}")
         return loss, grads
