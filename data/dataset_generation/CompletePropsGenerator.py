@@ -35,11 +35,11 @@ class CompletePropsGenerator(BaseGenerator):
 
         # make features
         embedding = self.get_materials_embeddings(materials_indices)
-        coating_encoding = torch.cat([thicknesses[:, :, None], embedding], dim = 2)
+        coating_encoding = torch.cat([thicknesses[:, :, None], embedding], dim = 2).float()
         coating = Coating(coating_encoding)
 
         # make labels
-        reflective_props_tensor = coating_to_reflective_props(coating).get_value()
+        reflective_props_tensor = coating_to_reflective_props(coating).get_value().float()
 
         lower_bound = torch.clamp(reflective_props_tensor - self.TOLERANCE / 2, 0, 1)
         upper_bound = torch.clamp(reflective_props_tensor + self.TOLERANCE / 2, 0, 1)

@@ -74,8 +74,8 @@ class ExplicitPropsGenerator(BaseGenerator):
             lower_bounds.append(lower_bound)
             upper_bounds.append(upper_bound)
 
-        lower_bounds = torch.cat(lower_bounds, dim = 0)
-        upper_bounds = torch.cat(upper_bounds, dim = 0)
+        lower_bounds = torch.cat(lower_bounds, dim = 0).float()
+        upper_bounds = torch.cat(upper_bounds, dim = 0).float()
 
 
         pattern = ReflectivePropsPattern(lower_bounds, upper_bounds)

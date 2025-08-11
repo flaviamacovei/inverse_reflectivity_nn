@@ -56,7 +56,8 @@ class SegmentedDataset(Dataset):
                 index -= len(self.segments[segment_index])
                 segment_index += 1
             results = self.segments[segment_index][index]
-            return (results[0][None], results[1][None])
+            # TODO: add batch dimension (size 1) without breaking training
+            return (results[0], results[1])
         elif isinstance(index, slice):
             results = []
             start = index.start if index.start is not None else 0
@@ -96,6 +97,7 @@ class DynamicDataloader(BaseDataloader):
         """
         super().__init__(batch_size, shuffle)
         self.dataset = None
+
 
     def load_leg(self, leg: int = 0):
         """
@@ -143,29 +145,6 @@ class DynamicDataloader(BaseDataloader):
             raise FileNotFoundError("Dataset in current configuration not found. Please run generate_dataset.py first.")
 
 
-    def __getitem__(self, item):
-        """
-        Return the item at the given index.
-
-        Args:
-            item: The index of the item to return.
-
-        Returns:
-            The item at the given index.
-
-        Raises:
-            IndexError: If the index is out of range.
-        """
-        try:
-            return self.dataset[item]
-        except IndexError:
-            raise IndexError("Index out of range")
-
-
     def __iter__(self):
         """Return an iterator for the dataset."""
         return iter(self.dataloader)
-
-    def __len__(self):
-        """Return the number of samples in the dataset."""
-        return len(self.batch_indices)

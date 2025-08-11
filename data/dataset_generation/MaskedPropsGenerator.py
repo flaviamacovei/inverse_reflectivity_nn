@@ -33,10 +33,11 @@ class MaskedPropsGenerator(BaseGenerator):
         num_marks = torch.randint(self.MIN_NUM_MASKS, self.MAX_NUM_MASKS + 1, (num_points, 1), device = CM().get('device'))
         # set the first num_marks elements of marks to 1, the rest to 0
         marks = torch.linspace(0, length - 1, length, device = CM().get('device'))[None, :].repeat(num_points, 1)
-        marks = (marks <= num_marks).float()
+        marks = (marks <= num_marks)
         # shuffle positions along row dimension
         shuffle_indices = torch.argsort(torch.rand(*marks.shape), dim=1)
         marks = marks[torch.arange(marks.shape[0], device = CM().get('device')).unsqueeze(-1), shuffle_indices]
+        marks = marks.float()
 
         # 1d convolution
         # ensure odd kernel size
@@ -63,12 +64,12 @@ class MaskedPropsGenerator(BaseGenerator):
 
         # make features
         embedding = self.get_materials_embeddings(materials_indices)
-        coating_encoding = torch.cat([thicknesses[:, :, None], embedding], dim=2)
+        coating_encoding = torch.cat([thicknesses[:, :, None], embedding], dim=2).float()
         coating = Coating(coating_encoding)
 
         mask = self.make_mask(num_points)
 
-        reflective_props_tensor = coating_to_reflective_props(coating).get_value()
+        reflective_props_tensor = coating_to_reflective_props(coating).get_value().float()
 
         lower_bound = reflective_props_tensor - self.TOLERANCE / 2
         upper_bound = reflective_props_tensor + self.TOLERANCE / 2

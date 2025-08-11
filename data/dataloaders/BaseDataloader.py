@@ -3,6 +3,7 @@ from torch.utils.data import Dataset, TensorDataset
 from typing import Any, Optional, Union, List
 import torch
 import random
+import math
 
 
 class BaseDataloader(ABC):
@@ -49,9 +50,9 @@ class BaseDataloader(ABC):
             raise ValueError("Dataset not loaded. Call load_data first.")
 
         if isinstance(self.dataset, Dataset):
-            return len(self.dataset) // self.batch_size
+            return math.ceil(len(self.dataset) / self.batch_size)
         elif isinstance(self.dataset, list):
-            return len(self.dataset) // self.batch_size
+            return math.ceil(len(self.dataset) / self.batch_size)
         else:
             raise TypeError("Unsupported dataset type.")
 

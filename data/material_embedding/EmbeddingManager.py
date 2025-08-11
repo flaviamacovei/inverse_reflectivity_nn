@@ -191,6 +191,7 @@ class EmbeddingManager:
         try:
             with open(self.SAVEPATH, 'rb') as f:
                 self.pca = load(f)
+                self.pca.to(CM().get('device'))
         except FileNotFoundError:
             print(f"Saved embeddings not found. Performing PCA.")
             self.pca.fit(self.materials_refractive_indices)

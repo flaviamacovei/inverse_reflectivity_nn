@@ -65,7 +65,7 @@ class BaseGenerator(ABC):
         air_thicknesses = torch.zeros((num_points, num_thin_films + 2), device = CM().get('device'))
         extended_mask = self.make_air_mask(num_points, num_thin_films)
         # add air to thicknesses: first air film has thickness 1, the rest 0
-        first_true_idx = extended_mask.float().argmax(dim=1)
+        first_true_idx = extended_mask.int().argmax(dim=1)
         air_thicknesses_mask = torch.zeros_like(extended_mask, dtype=torch.bool, device = CM().get('device'))
         air_thicknesses_mask[torch.arange(extended_mask.size(0)), first_true_idx] = extended_mask[
             torch.arange(extended_mask.size(0)), first_true_idx]  # only if there was a True

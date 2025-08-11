@@ -63,7 +63,7 @@ def dataset_exists(split: str):
     return True
 
 
-def generate_dataset(generators, split):
+def generate_dataset(split):
     """
     Generate data and save to file.
 
@@ -71,6 +71,11 @@ def generate_dataset(generators, split):
         generators: A dictionary mapping density to the generator class.
         split: "training" or "validation".
     """
+    generators = {
+        "complete": CompletePropsGenerator,
+        "masked": MaskedPropsGenerator,
+        "explicit": ExplicitPropsGenerator
+    }
     if split == "training":
         # number of points in training dataset specified in config file
         num_points = CM().get('training.dataset_size')
@@ -130,10 +135,5 @@ def generate_dataset(generators, split):
 if __name__ == "__main__":
     # default split (no argument specified) is "training"
     split = "training" if len(sys.argv) == 1 else sys.argv[1]
-    generators = {
-        "complete": CompletePropsGenerator,
-        "masked": MaskedPropsGenerator,
-        "explicit": ExplicitPropsGenerator
-    }
-    generate_dataset(generators, split)
+    generate_dataset(split)
 
