@@ -46,8 +46,6 @@ class BaseTrainableModel(BaseModel, ABC):
         compute_loss_guided: Compute guided loss of a batch of data. Guided loss is the L2 loss between the predicted coating and the ground truth coating.
         compute_loss_free: Compute free loss of a batch of data. Free loss is the L2 loss between the predicted reflective properties value and the ground truth reflective properties pattern.
         load: Load the model from a file.
-        set_to_train: Set trainable model to training mode.
-        set_to_eval: Set trainable model to evaluation mode.
         scale_gradients: Scale gradients of trainable model. Must be implemented by subclasses.
     """
 
@@ -76,7 +74,8 @@ class BaseTrainableModel(BaseModel, ABC):
         self.compute_loss = None
         self.optimiser = None
         self.current_leg = -1
-        self.should_scale_loss = False
+        self.guidance = None
+        self.checkpoint = None
 
     def get_current_leg(self, epoch):
         """Return current leg of the guidance schedule."""
@@ -104,81 +103,90 @@ class BaseTrainableModel(BaseModel, ABC):
             density = CM().get(f'training.guidance_schedule.{self.current_leg}.density')
             print(
                 f"{'-' * 50}\nOn leg {guidance}-{density}")
-            # update attributes: loss function, optimiser, dataloader, loss_scale
+            # update attributes: loss function, optimiser, dataloader,
             # first run data through model, then compute loss
             # shapes might be off (+ 1 due to changes in SegmentedDataset)
             self.compute_loss = self.loss_functions[guidance]
             self.optimiser = self.optimisers[guidance]
             self.dataloader.load_leg(self.current_leg)
-            self.should_scale_loss = True
+            self.guidance = guidance
 
     def train(self):
         """Train the model."""
         assert self.dataloader is not None, "No dataloader provided, model can only be used in evaluation mode."
         print("Training model...")
         self.model.apply(self.initialise_weights)
-        self.set_to_train()
-        loss_scale = None
-        previous_loss = None
-        checkpoint = None
         for epoch in range(CM().get('training.num_epochs')):
+            self.model.train()
             self.update_leg(epoch)
 
-            epoch_loss = torch.tensor(0.0, device=CM().get('device')) # requires grad is False
+            epoch_loss = torch.tensor(0.0, device=CM().get('device'))
             # training loop
             for batch in self.dataloader:
-                # features, labels statt batch
                 self.optimiser.zero_grad()
-                # erst durch modell dann loss
-                loss = self.compute_loss(batch)
+                reflective_props_tensor, coating_encoding = batch
+                reflective_props_tensor = reflective_props_tensor.to(CM().get('device'))
+                coating_encoding = coating_encoding.to(CM().get('device'))
+                # a batch consists of reflective properties and coating encodings
+                # in free mode, reflective properties are simultaneously input and ground truth
+                # in guided mode, coating encodings are ground truth
+                labels = reflective_props_tensor if self.guidance == 'free' else coating_encoding
+                # TODO: might need to add target too for transformer
+                preds = self.get_model_output(reflective_props_tensor)
+                preds = preds.reshape((reflective_props_tensor.shape[0], (CM().get('layers.max') + 2), CM().get('material_embedding.dim') + 1))
+                loss = self.compute_loss(preds, labels)
+                # print(f"loss: {loss}")
                 epoch_loss += loss.item()
 
                 if CM().get('wandb.log'):
-                    if not loss_scale:
-                        loss_scale = loss
-                    elif self.should_scale_loss and previous_loss is not None:
-                        print(f"updating: {loss.item()} from {previous_loss}")
-                        loss_scale = loss.item() / (previous_loss / loss_scale)
-                    self.should_scale_loss = False
-                    wandb.log({"loss": loss.item() / loss_scale})
-                    previous_loss = loss.item()
+                    wandb.log({"loss": loss.item()})
 
                 loss.backward()
+
+                # for name, param in self.model.named_parameters():
+                #     if param.requires_grad:
+                #         print(name, param.data)
 
                 self.scale_gradients()
                 self.optimiser.step()
             if epoch % max(1, CM().get('training.num_epochs') / 10) == 0:
                 if CM().get('training.save_model'):
                     # logging at every 10% of training
-                    # TODO: make separate function from here
-                    new_checkpoint = get_unique_filename(f"out/models/checkpoint_{short_hash(self.model) + short_hash(epoch)}.pt")
-                    # always save latest checkpoint
-                    torch.save(self.model, new_checkpoint)
-                    if checkpoint:
-                        os.remove(checkpoint)
-                    checkpoint = new_checkpoint
-                    current_time = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-                    print(f"Checkpoint at {current_time}: {checkpoint}")
-                    # to here
+                    self.update_checkpoint(epoch)
                 print(f"Loss in epoch {epoch + 1}: {epoch_loss.item()}")
                 # divide by dataset size instead of loss in epoch 0?
-                # visualise first item of batch
-                features = batch[0].float().to(CM().get('device'))
-                lower_bound, upper_bound = features.chunk(2, dim=1)
-                refs = ReflectivePropsPattern(lower_bound, upper_bound)
-                encoding = self.model(features).reshape(
-                    (features.shape[0], (CM().get('layers.max') + 2), CM().get('material_embedding.dim') + 1))
-                coating = Coating(encoding)
-                preds = coating_to_reflective_props(coating)
-                print(coating.get_batch(0))
-                visualise(preds, refs, f"from_training_epoch_{epoch}")
-
+                self.visualise_epoch(epoch)
         print("Training complete.")
         # save final trained model
         if CM().get('training.save_model'):
             self.save_model()
-        if checkpoint:
-            os.remove(checkpoint)
+        if self.checkpoint:
+            os.remove(self.checkpoint)
+
+    def visualise_epoch(self, epoch: int):
+        # visualise first item of batch
+        self.model.eval()
+        reflective_props_tensor = self.dataloader[0][0][None]
+        reflective_props_tensor = reflective_props_tensor.to(CM().get('device'))
+        lower_bound, upper_bound = reflective_props_tensor.chunk(2, dim=1)
+        refs = ReflectivePropsPattern(lower_bound, upper_bound)
+        output = self.get_model_output(reflective_props_tensor)
+        output = output.reshape(
+            (reflective_props_tensor.shape[0], (CM().get('layers.max') + 2), CM().get('material_embedding.dim') + 1))
+        coating = Coating(output)
+        preds = coating_to_reflective_props(coating)
+        print(coating.get_batch(0))
+        visualise(preds, refs, f"from_training_epoch_{epoch}")
+
+    def update_checkpoint(self, epoch: int):
+        new_checkpoint = get_unique_filename(f"out/models/checkpoint_{short_hash(self.model) + short_hash(epoch)}.pt")
+        # always save latest checkpoint
+        torch.save(self.model, new_checkpoint)
+        if self.checkpoint:
+            os.remove(self.checkpoint)
+        self.checkpoint = new_checkpoint
+        current_time = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        print(f"Checkpoint at {current_time}: {self.checkpoint}")
 
     def save_model(self):
         MODEL_METADATA = "out/models/models_metadata.yaml"
@@ -237,32 +245,29 @@ class BaseTrainableModel(BaseModel, ABC):
         Args:
             target: Reflective properties pattern for which to perform prediction.
         """
-        self.set_to_eval()
+        self.model.eval()
         # convert input to shape expected by model
         model_input = torch.cat((target.get_lower_bound(), target.get_upper_bound()), dim = 1)
         # predict encoding of coating
-        encoding = self.model(model_input.float()).reshape((model_input.shape[0], (CM().get('layers.max') + 2), CM().get('material_embedding.dim') + 1))
-        return Coating(encoding)
+        preds = self.get_model_output(model_input)
+        preds = preds.reshape(
+            (model_input.shape[0], (CM().get('layers.max') + 2), CM().get('material_embedding.dim') + 1))
+        return Coating(preds)
 
-    def compute_loss_guided(self, batch: (torch.Tensor, torch.Tensor)):
+    def compute_loss_guided(self, preds: torch.Tensor, labels: torch.Tensor):
         """
         Compute guided loss of a batch of data.
 
         Guided loss is the L2 loss between the predicted coating and the ground truth coating.
 
         Args:
-            batch: Tuple of features and labels for which to compute loss.
+            preds: Model output.
+            labels: Ground truth coating encoding.
         """
-        features, labels = batch
         # features are reflective properties converted to model input shape
-        features = features.float().to(CM().get('device'))
-        # labels are encodings of ground truth coatings
-        labels = labels.float().to(CM().get('device'))
-        preds = self.get_model_output(features, labels, 'guided')
-        preds = preds.reshape((features.shape[0], (CM().get('layers.max') + 2), CM().get('material_embedding.dim') + 1))
-        return torch.sum((preds - labels)**2)#**0.5 <- unnötig
+        return torch.sum((preds - labels) ** 2)
 
-    def compute_loss_free(self, batch: torch.Tensor):
+    def compute_loss_free(self, preds: torch.Tensor, labels: torch.Tensor):
         """
         Compute free loss of a batch of data.
 
@@ -271,20 +276,16 @@ class BaseTrainableModel(BaseModel, ABC):
         Args:
             batch: Tuple of features and labels for which to compute loss.
         """
-        # reflective properties are simultaneously model input and ground truth
-        features = batch[0].float().to(CM().get('device'))
-        lower_bound, upper_bound = features.chunk(2, dim=1)
+        lower_bound, upper_bound = labels.chunk(2, dim=1)
         # create reflective properties pattern for match operation
         pattern = ReflectivePropsPattern(lower_bound, upper_bound)
-        encoding = self.get_model_output(features, guidance = 'free')
-        encoding = encoding.reshape((features.shape[0], (CM().get('layers.max') + 2), CM().get('material_embedding.dim') + 1))
-        coating = Coating(encoding)
+        coating = Coating(preds)
         # convert predicted coating to reflective properties value
         preds = coating_to_reflective_props(coating)
         return match(preds, pattern)
 
     @abstractmethod
-    def get_model_output(self, src, tgt = None, guidance = 'free'):
+    def get_model_output(self, src, tgt = None):
         """
         Get output of the model for given input. Must be implemented by subclasses.
 
@@ -293,7 +294,6 @@ class BaseTrainableModel(BaseModel, ABC):
         Args:
             src: Model input.
             tgt: Model target.
-            guidance: Guidance type. Accepted values: "free" and "guided".
 
         Returns:
             Output of the model.
@@ -305,17 +305,8 @@ class BaseTrainableModel(BaseModel, ABC):
         self.model = torch.load(filename, weights_only = weights_only)
         self.model.to(CM().get('device'))
 
-    def set_to_train(self):
-        """Set trainable model to training mode."""
-        self.model.train()
-
-    def set_to_eval(self):
-        """Set trainable model to evaluation mode."""
-        self.model.eval()
 
     @abstractmethod
     def scale_gradients(self):
         """Scale gradients of trainable model. Must be implemented by subclasses."""
-        if CM().get(f'training.guidance_schedule.{self.current_leg}.guidance') == "free":
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
 

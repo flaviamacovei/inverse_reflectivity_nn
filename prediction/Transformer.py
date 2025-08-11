@@ -32,7 +32,7 @@ class TrainableTransformer(nn.Module):
         self.encoder = Encoder(encoder_layer, num_layers)
         self.decoder = Decoder(decoder_layer, num_layers)
 
-    def forward(self, src, tgt = None, mode = 'free'):
+    def forward(self, src, tgt = None, guidance ='free'):
         # src: (B, src_len * input_dim)
         # tgt: (B, tgt_len, target_dim) or None
 
@@ -44,7 +44,7 @@ class TrainableTransformer(nn.Module):
 
         memory = self.encoder(src)
 
-        if mode == 'guided' and tgt is not None:
+        if guidance == 'guided' and tgt is not None:
             tgt = self.decoder_input_proj(tgt)
         else:
             # Free mode: use zeros or learned start token
@@ -150,7 +150,7 @@ class Transformer(BaseTrainableModel):
         print(f"number of trainable parameters: {sum(p.numel() for p in model.parameters() if p.requires_grad)}")
         super().__init__(model.to(CM().get('device')))
 
-    def get_model_output(self, src, tgt = None, guidance = 'free'):
+    def get_model_output(self, src, tgt = None):
         """
         Get output of the model for given input.
 
@@ -159,12 +159,11 @@ class Transformer(BaseTrainableModel):
         Args:
             src: Input data.
             tgt: Target data.
-            guidance: Guidance type.
 
         Returns:
             Output of the model.
         """
-        return self.model(src, tgt, guidance)
+        return self.model(src, tgt, self.guidance)
 
     def scale_gradients(self):
         pass

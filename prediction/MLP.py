@@ -62,7 +62,7 @@ class MLP(BaseTrainableModel):
         """Initialise an MLP instance."""
         super().__init__(TrainableMLP().to(CM().get('device')))
 
-    def get_model_output(self, src, tgt = None, guidance = 'free'):
+    def get_model_output(self, src, tgt = None):
         """
         Get output of the model for given input.
 
@@ -71,7 +71,6 @@ class MLP(BaseTrainableModel):
         Args:
             src: Input data.
             tgt: Target data. Ignore.
-            guidance: Guidance data. Ignore.
 
         Returns:
             Output of the model.
@@ -79,4 +78,5 @@ class MLP(BaseTrainableModel):
         return self.model(src)
 
     def scale_gradients(self):
-        pass
+        if self.guidance == "free":
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
