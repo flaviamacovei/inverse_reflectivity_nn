@@ -69,6 +69,8 @@ def load_config(config_id: int):
     with open('config.yaml', 'r') as f:
         config_dict = yaml.safe_load(f)
     config_dict['layers']['max'] = configs[config_id]['num_layers']
+    # TODO: can I replace this line with a reference in yaml that is preserved during load and dump?
+    config_dict['num_layers'] = configs[config_id]['num_layers']
     config_dict['materials']['substrate'] = configs[config_id]['substrate']
     config_dict['materials']['air'] = configs[config_id]['air']
     config_dict['materials']['thin_films'] = configs[config_id]['materials']

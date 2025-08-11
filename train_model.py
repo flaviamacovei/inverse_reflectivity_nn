@@ -57,18 +57,4 @@ def train_model():
         score_model(model)
 
 if __name__ == "__main__":
-    num_layers = range(1, 23)
-    for num in num_layers:
-        CM().set_layers_to(num)
-        print(f"\n\n\n{num} layer{'s' if num > 1 else ''}")
-        try:
-            train_model()
-        except FileNotFoundError:
-            split = "training"
-            generators = {
-                "complete": CompletePropsGenerator,
-                "masked": MaskedPropsGenerator,
-                "explicit": ExplicitPropsGenerator
-            }
-            generate_dataset(generators, split)
-            train_model()
+    train_model()

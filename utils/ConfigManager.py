@@ -66,7 +66,7 @@ class ConfigManager:
             self.config['training']['num_legs'] = len(self.config['training']['guidance_schedule'])
 
         except BaseException as e:
-            print(f"Error loading config: {e}")
+            raise ValueError(f"Error loading config: {e}")
         return self.config
 
     def get(self, key, default=None):
@@ -91,3 +91,7 @@ class ConfigManager:
     def set_layers_to(self, num_layers: int):
         self.config["layers"]["max"] = num_layers
         self.config["num_layers"] = num_layers
+
+    def set_seed_to(self, seed: int):
+        random.seed(seed)
+        torch.manual_seed(seed)
