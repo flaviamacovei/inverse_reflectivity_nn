@@ -202,6 +202,7 @@ class BaseTrainableModel(BaseModel, ABC):
             "materials_hash": EM().hash_materials(),
             "num_materials": len(CM().get('materials.thin_films')),
             "theta": CM().get('theta').item(),
+            "air_pad": CM().get('air_pad'),
             "tolerance": CM().get('tolerance'),
             "num_points": CM().get('training.dataset_size'),
             "epochs": CM().get('training.num_epochs')

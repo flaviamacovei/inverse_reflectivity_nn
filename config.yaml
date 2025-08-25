@@ -1,100 +1,74 @@
-device: 'auto' # accepted values: "auto", "cpu"
-
-seed: null # <value> or null
-
+device: cpu
+seed: 3
 num_stacks: 1
-
 layers:
-  min: 1 # must be >= 1
-  max: &max_layers 3 # must be >= min
-
+  min: 1
+  max: 7
 wavelengths:
-  start: 300.e-3
-  end: 1499.e-3
+  start: 0.3
+  end: 1.499
   steps: 1200
-
-polarisation: 's' # accepted values: "s", "p"
-
+polarisation: s
 thicknesses_bounds:
-  min: 1.e-9
-  max: 1.e-6
-
+  min: 1.0e-09
+  max: 1.0e-06
 materials:
-  substrate: "DC_Substrate" # accepted values: "Suprasil Heraeus", "Suprasil", "BK7", "DC_Substrate"
-  air: "DC_Air" # accepted values: "Air", "DC_Air"
+  substrate: DC_Substrate
+  air: DC_Air
   thin_films:
-#    - "SiO2 IBS"
-#    - "TiO2 IBS"
-    - "H"
-    - "L"
-    - "A"
-    - "F"
-    - "M"
-    - "T"
-    - "Ag"
-    - "Au"
-    - "Ni"
-
+  - H
+  - L
+  - A
+  - F
+  - M
+  - T
+  - Ag
+  - Au
+  - Ni
 theta:
-  start: 0.
-  end: 0.
+  start: 0.0
+  end: 0.0
   steps: 1
-
-num_layers: *max_layers
-
+air_pad: true
+stratified_sampling: true
+num_layers: 7
 material_embedding:
-  data_file: "data/material_embedding/materials.yaml"
+  data_file: data/material_embedding/materials.yaml
   dim: 2
   num_epochs: 200
   learning_rate: 0.01
-
-tolerance: 1.0e-3
-
-architecture: &architecture "mlp" # accepted values: "gradient", "mlp", "cnn", "transformer"
-
+tolerance: 0.001
+architecture: cnn
 transformer:
-  model_dim: 16 # 256 or maybe even 1024
-  num_heads: 4 # 8
-  num_layers: 5 # 6
-  d_ff: 1024 # 1024
+  model_dim: 16
+  num_heads: 4
+  num_layers: 5
+  d_ff: 1024
   dropout: 0.1
-
-# possibly: different optimiser (numpy linesearch without parameters)
-
 training:
-  guided_learning_rate: &glr 0.0001 # default: 0.001
-  free_learning_rate: &flr 1.e-5
-  num_epochs: &epochs 500
-  batch_size: &batch_size 32 # should be <= size of dataset
+  guided_learning_rate: 0.0001
+  free_learning_rate: 1.0e-05
+  num_epochs: 500
+  batch_size: 32
   dataset_size: 5000
-  save_model: true
-  evaluate: true
+  save_model: false
+  evaluate: false
   guidance_schedule:
-  # for each leg specify: guidance in {"guided", "free"}, density in {"complete", "masked", "explicit"}, percent in {0 ... 1}
-  # percent refers to the percentage of the epochs that will be spent training on the given density and guidance
-  # note that the combination "guided-explicit" is not allowed
-#    - guidance: "guided"
-#      density: "complete"
-#      percent: 1.0
-#    - guidance: "guided"
-#      density: "masked"
-#      percent: 0.2
-    - guidance: "free"
-      density: "complete"
-      percent: 1.0
-#    - guidance: "free"
-#      density: "masked"
-#      percent: 0.2
-#    - guidance: "free"
-#      density: "explicit"
-#      percent: 0.2
-
+  - guidance: guided
+    density: complete
+    percent: 0.3
+  - guidance: guided
+    density: masked
+    percent: 0.3
+  - guidance: guided
+    density: explicit
+    percent: 0.4
 wandb:
-  log: true
-  project: "inverse-mirrors-nn"
+  log: false
+  project: inverse-mirrors-nn
   config:
-    architecture: *architecture
-    guided_learning_rate: *glr
-    free_learning_rate: *flr
-    epochs: *epochs
-    batch_size: *batch_size
+    architecture: mlp
+    guided_learning_rate: 0.0001
+    free_learning_rate: 0.01
+    epochs: 500
+    batch_size: 32

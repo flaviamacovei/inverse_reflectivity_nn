@@ -29,6 +29,7 @@ def get_dataset_name(split: str, density: str):
         "polarisation": CM().get('polarisation'),
         "materials_hash": EM().hash_materials(),
         "theta": CM().get('theta').item(),
+        "air_pad": CM().get('air_pad'),
         "tolerance": CM().get('tolerance'),
         "density": density,
         "num_points": num_points
