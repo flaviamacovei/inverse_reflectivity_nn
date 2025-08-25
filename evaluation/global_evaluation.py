@@ -1,7 +1,9 @@
 import pandas as pd
 import torch
 import sys
-
+import os
+import wandb
+import yaml
 
 sys.path.append(sys.path[0] + '/..')
 from utils.data_utils import load_config
@@ -11,18 +13,20 @@ from data.values.ReflectivePropsPattern import ReflectivePropsPattern
 from data.values.ReflectivePropsValue import ReflectivePropsValue
 from utils.data_utils import get_dataset_name
 from prediction.BaseModel import BaseModel
+from prediction.BaseTrainableModel import BaseTrainableModel
 from prediction.GradientModel import GradientModel
 from prediction.MLP import MLP
+from prediction.CNN import CNN
+from prediction.MLPGradient import MLPGradient
 from prediction.Transformer import Transformer
 from forward.forward_tmm import coating_to_reflective_props
-from ui.visualise import visualise
 
 def load_pattern():
     lower_bound = None
     upper_bound = None
     for density in ['complete', 'masked', 'explicit']:
-        dataloader = DynamicDataloader(CM().get('training.dataset_size'), shuffle=False)
-        filepath = get_dataset_name("training", density)
+        dataloader = DynamicDataloader(100, shuffle=False)
+        filepath = get_dataset_name("validation", density)
         dataloader.load_data(filepath, weights_only=False)
         dataset = dataloader.dataset
         local_lower_bound, local_upper_bound = torch.chunk(dataset[:][0], 2, dim=-1)
@@ -35,7 +39,6 @@ def load_pattern():
 def random_baseline():
     pattern = load_pattern()
     error = pairwise_distance(pattern)
-
     return evaluate_error(error)
 
 
@@ -55,7 +58,7 @@ def pairwise_distance(pattern: ReflectivePropsPattern):
     p2_lower_mask = p2_lower == 0
     p2_upper_mask = p2_upper == 1
     vertical_mask = torch.logical_and(p2_lower_mask, p2_upper_mask)
-    mask = (~(torch.logical_or(horizontal_mask, vertical_mask))).int()
+    mask = (~torch.logical_or(horizontal_mask, vertical_mask)).int()
 
     p1_lower = p1_lower + epsilon
     p1_upper = p1_upper - epsilon
@@ -65,19 +68,10 @@ def pairwise_distance(pattern: ReflectivePropsPattern):
     left_error = (p1_lower - p2_upper).clamp(min = 0)
     right_error = (p2_lower - p1_upper).clamp(min = 0)
     error = (left_error + right_error)
-    error = error * mask
+    error = error * mask # removing this raises the overall error a bit but it doesn't remove the 0.0 from min
+    # makes sense, overlapping masks still have 0 error even if we don't disregard masked regions
     error = error.sum(dim = -1)
-    print(error.shape)
-    smallest_idx = torch.argmin(error)
-    multiindex = torch.unravel_index(smallest_idx, error.shape)
 
-    p1 = ReflectivePropsValue(p1_lower[multiindex[0]], p1_upper[multiindex[0]])
-    p2 = ReflectivePropsValue(p2_lower[multiindex[1]], p2_upper[multiindex[1]])
-    visualise(refs = p1, filename = "p1")
-    visualise(refs = p2, filename = "p2")
-    print(multiindex)
-    smallest = error[multiindex[0], multiindex[1]]
-    print(smallest)
     indices = torch.triu_indices(num, num, offset = 1)
     return error[indices[0], indices[1]]
 
@@ -132,25 +126,45 @@ def evaluate_all_models():
         else:
             results[key].append(random[key])
     model_classes = {
+        # 'transformer': Transformer,
         'gradient': GradientModel,
-        # 'mlp': MLP,
-        # 'transformer': Transformer
+        'mlp': MLP,
+        'mlp+graidnet': MLPGradient,
+        'cnn': CNN,
     }
-    # for type in ['gradient']:#, 'mlp', 'transformer']:
-    #     ModelClass = model_classes[type]
-    #     model = ModelClass()
-    #     evaluation = evaluate_model(model)
-    #     for key in results.keys():
-    #         if key == 'model':
-    #             results[key].append(type)
-    #         else:
-    #             results[key].append(evaluation[key])
+    for type in model_classes.keys():
+        ModelClass = model_classes[type]
+        model = ModelClass()
+        if isinstance(model, BaseTrainableModel):
+            if CM().get('wandb.log'):
+                wandb.init(
+                    project=CM().get('wandb.project'),
+                    config=CM().get('wandb.config')
+                )
+            model.train()
+        evaluation = evaluate_model(model)
+        for key in results.keys():
+            if key == 'model':
+                results[key].append(type)
+            else:
+                results[key].append(evaluation[key])
 
     results = pd.DataFrame(results)
     return results
 
-    
+def remove_files():
+    with open('data/datasets/metadata.yaml', 'r') as f:
+        content = yaml.safe_load(f)
+        for density in ['complete', 'masked', 'explicit']:
+            filepath = get_dataset_name("training", density)
+            item = next((x for x in content['datasets'] if x['title'] == filepath), None)
+            content['datasets'].remove(item)
+            os.remove(filepath)
+    with open('data/datasets/metadata.yaml', 'w') as f:
+        yaml.dump(content, f, sort_keys=False)
+
 
 if __name__ == '__main__':
     results = evaluate_all_models()
+    results.to_csv("out/config_2.csv")
     print(results)
