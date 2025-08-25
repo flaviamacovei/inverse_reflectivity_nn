@@ -31,7 +31,7 @@ class CompletePropsGenerator(BaseGenerator):
             coating: corresponding Coating instance.
         """
         materials_indices = self.make_materials_choice(num_points)
-        thicknesses = self.make_thicknesses(num_points)
+        thicknesses = self.make_thicknesses(materials_indices)
 
         # make features
         embedding = self.get_materials_embeddings(materials_indices)
