@@ -58,7 +58,10 @@ class GradientModel(BaseModel):
     def loss_function(self, params: torch.Tensor, target: ReflectivePropsPattern):
         flat_params = params.detach().clone().requires_grad_(True)
         original = flat_params
-        params = flat_params.reshape(self.coating_length, self.encoding_length)[None]
+        if flat_params.shape[0] == self.coating_length * self.encoding_length:
+            params = flat_params.reshape(self.coating_length, self.encoding_length)[None]
+        elif flat_params.shape[0] == len(target) * self.coating_length * self.encoding_length:
+            params = flat_params.reshape(len(target), self.coating_length, self.encoding_length)
         params = params.to(CM().get('device'))
 
         coating = Coating(params)
