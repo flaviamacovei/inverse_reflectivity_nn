@@ -30,6 +30,7 @@ def get_dataset_name(split: str, density: str):
         "materials_hash": EM().hash_materials(),
         "theta": CM().get('theta').item(),
         "air_pad": CM().get('air_pad'),
+        "stratified_sampling": CM().get('stratified_sampling'),
         "tolerance": CM().get('tolerance'),
         "density": density,
         "num_points": num_points

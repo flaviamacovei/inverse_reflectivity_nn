@@ -1,4 +1,4 @@
-device: cpu
+device: auto
 seed: 3
 num_stacks: 1
 layers:
@@ -38,7 +38,7 @@ material_embedding:
   num_epochs: 200
   learning_rate: 0.01
 tolerance: 0.001
-architecture: cnn
+architecture: mlp
 transformer:
   model_dim: 16
   num_heads: 4
@@ -52,19 +52,16 @@ training:
   batch_size: 32
   dataset_size: 5000
   save_model: false
-  evaluate: false
+  evaluate: true
   guidance_schedule:
   - guidance: guided
     density: complete
-    percent: 0.3
+    percent: 0.5
   - guidance: guided
     density: masked
-    percent: 0.3
-  - guidance: guided
-    density: explicit
-    percent: 0.4
+    percent: 0.5
 wandb:
-  log: false
+  log: true
   project: inverse-mirrors-nn
   config:
     architecture: mlp
