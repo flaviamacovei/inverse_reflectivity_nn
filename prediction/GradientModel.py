@@ -17,6 +17,7 @@ class GradientModel(BaseModel):
         self.coating_length = CM().get('num_layers') + 2
         # thicknesses plus embedding dimension
         self.encoding_length = CM().get('material_embedding.dim') + 1
+        self.initialise()
 
 
     def predict(self, target: ReflectivePropsPattern):
@@ -26,8 +27,7 @@ class GradientModel(BaseModel):
         Args:
             target: Reflective properties pattern for which to perform prediction.
         """
-        init_params = self.initialise()
-        bounds = Bounds(np.zeros_like(init_params), np.ones_like(init_params))
+        bounds = Bounds(np.zeros_like(self.init_params), np.ones_like(self.init_params))
 
         def np_loss_function(params: np.ndarray):
             params = torch.tensor(params, dtype=torch.float32, requires_grad=True)
@@ -36,7 +36,7 @@ class GradientModel(BaseModel):
 
         result = minimize(
             fun = np_loss_function,
-            x0 = init_params,
+            x0 = self.init_params,
             method = 'L-BFGS-B',
             jac = True,
             bounds = bounds
@@ -49,9 +49,10 @@ class GradientModel(BaseModel):
 
         return Coating(optimised_params)
 
-    def initialise(self):
-        init_params = np.random.randn(self.coating_length, self.encoding_length).flatten()
-        return init_params
+    def initialise(self, init_params = None):
+        if init_params == None:
+            init_params = np.random.randn(self.coating_length, self.encoding_length).flatten()
+        self.init_params = init_params
 
 
     def loss_function(self, params: torch.Tensor, target: ReflectivePropsPattern):
