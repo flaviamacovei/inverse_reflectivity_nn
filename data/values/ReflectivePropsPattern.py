@@ -68,6 +68,9 @@ class ReflectivePropsPattern(BaseReflectiveProps):
             return torch.equal(self.lower_bound, other.get_lower_bound()) and torch.equal(self.upper_bound, other.get_upper_bound())
         return False
 
+    def __len__(self):
+        return self.lower_bound.shape[0]
+
     def __str__(self):
         """Return string representation of ReflectivePropsPattern object."""
         return f"Reflective Props Pattern object:\n\tlower bound: {self.lower_bound.squeeze().cpu().detach().numpy()},\n\tupper bound: {self.upper_bound.squeeze().cpu().detach().numpy()}"
