@@ -13,6 +13,7 @@ from data.values.ReflectivityPattern import ReflectivityPattern
 from data.values.ReflectivityValue import ReflectivityValue
 from utils.data_utils import get_dataset_name
 from prediction.BaseModel import BaseModel
+from prediction.RandomModel import RandomModel
 from prediction.BaseTrainableModel import BaseTrainableModel
 from prediction.GradientModel import GradientModel
 from prediction.MLP import MLP
@@ -26,7 +27,8 @@ def load_pattern():
     upper_bound = None
     for density in ['complete', 'masked', 'explicit']:
         dataloader = DynamicDataloader(100, shuffle=False)
-        filepath = get_dataset_name("validation", density)
+        own_path = os.path.realpath(__file__)
+        filepath = os.path.join(os.path.dirname(os.path.dirname(own_path)), get_dataset_name("validation", density))
         dataloader.load_data(filepath, weights_only=False)
         dataset = dataloader.dataset
         local_lower_bound, local_upper_bound = torch.chunk(dataset[:][0], 2, dim=-1)
@@ -36,44 +38,6 @@ def load_pattern():
         upper_bound = local_upper_bound if upper_bound == None else torch.cat([upper_bound, local_upper_bound], dim=0)
     return ReflectivityPattern(lower_bound=lower_bound, upper_bound=upper_bound)
 
-def random_baseline():
-    pattern = load_pattern()
-    error = pairwise_distance(pattern)
-    return evaluate_error(error)
-
-
-def pairwise_distance(pattern: ReflectivityPattern):
-    epsilon = CM().get('tolerance')
-    num = pattern.get_batch_size()
-    repetitions = [1] * (len(pattern.get_lower_bound().shape) + 1)
-    repetitions[1] = num
-    p1_lower = pattern.get_lower_bound()[:, None].repeat(repetitions)
-    p1_upper = pattern.get_upper_bound()[:, None].repeat(repetitions)
-    p2_lower = pattern.get_lower_bound()[:, None].repeat(repetitions).transpose(0, 1)
-    p2_upper = pattern.get_upper_bound()[:, None].repeat(repetitions).transpose(0, 1)
-
-    p1_lower_mask = p1_lower == 0
-    p1_upper_mask = p1_upper == 1
-    horizontal_mask = torch.logical_and(p1_lower_mask, p1_upper_mask)
-    p2_lower_mask = p2_lower == 0
-    p2_upper_mask = p2_upper == 1
-    vertical_mask = torch.logical_and(p2_lower_mask, p2_upper_mask)
-    mask = (~torch.logical_or(horizontal_mask, vertical_mask)).int()
-
-    p1_lower = p1_lower + epsilon
-    p1_upper = p1_upper - epsilon
-    p2_lower = p2_lower + epsilon
-    p2_upper = p2_upper - epsilon
-
-    left_error = (p1_lower - p2_upper).clamp(min = 0)
-    right_error = (p2_lower - p1_upper).clamp(min = 0)
-    error = (left_error + right_error)
-    error = error * mask # removing this raises the overall error a bit but it doesn't remove the 0.0 from min
-    # makes sense, overlapping masks still have 0 error even if we don't disregard masked regions
-    error = error.sum(dim = -1)
-
-    indices = torch.triu_indices(num, num, offset = 1)
-    return error[indices[0], indices[1]]
 
 def match(input: ReflectivityValue, target: ReflectivityPattern):
     """
@@ -119,18 +83,13 @@ def evaluate_all_models():
         'q_75': [],
         'max': []
     }
-    random = random_baseline()
-    for key in results.keys():
-        if key == 'model':
-            results[key].append('random')
-        else:
-            results[key].append(random[key])
     model_classes = {
-        # 'transformer': Transformer,
+        'random': RandomModel,
         'gradient': GradientModel,
-        'mlp': MLP,
-        'mlp+graidnet': MLPGradient,
-        'cnn': CNN,
+        # 'mlp': MLP,
+        # 'cnn': CNN,
+        # 'transformer': Transformer,
+        # 'mlp+graidnet': MLPGradient,
     }
     for type in model_classes.keys():
         ModelClass = model_classes[type]
