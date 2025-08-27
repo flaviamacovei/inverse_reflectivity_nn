@@ -39,7 +39,8 @@ class GradientModel(BaseModel):
             x0 = self.init_params,
             method = 'L-BFGS-B',
             jac = True,
-            bounds = bounds
+            bounds = bounds,
+            options = {"maxiter": 1000}
         )
 
         optimised_params = result.x

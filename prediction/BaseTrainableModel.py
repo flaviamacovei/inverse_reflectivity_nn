@@ -134,7 +134,6 @@ class BaseTrainableModel(BaseModel, ABC):
                 preds = self.get_model_output(reflectivity)
                 preds = preds.reshape((reflectivity.shape[0], (CM().get('layers.max') + 2), CM().get('material_embedding.dim') + 1))
                 loss = self.compute_loss(preds, labels)
-                # print(f"loss: {loss}")
                 epoch_loss += loss.item()
 
                 if CM().get('wandb.log'):
@@ -148,6 +147,7 @@ class BaseTrainableModel(BaseModel, ABC):
 
                 self.scale_gradients()
                 self.optimiser.step()
+            epoch_loss /= len(self.dataloader)
             if epoch % max(1, CM().get('training.num_epochs') / 10) == 0:
                 if CM().get('training.save_model'):
                     # logging at every 10% of training
@@ -259,14 +259,17 @@ class BaseTrainableModel(BaseModel, ABC):
         """
         Compute guided loss of a batch of data.
 
-        Guided loss is the L2 loss between the predicted coating and the ground truth coating.
+        Guided loss is the scaled L2 loss between the predicted coating and the ground truth coating.
 
         Args:
             preds: Model output.
             labels: Ground truth coating encoding.
         """
-        # features are equal to reflectivity converted to model input shape
-        return torch.sum((preds - labels) ** 2)
+        batch_size = preds.shape[0]
+        num_layers = preds.shape[1]
+        encoding_size = preds.shape[2]
+        scale_mean = batch_size * num_layers * encoding_size
+        return torch.sum((preds - labels) ** 2) / scale_mean
 
     def compute_loss_free(self, preds: torch.Tensor, labels: torch.Tensor):
         """
