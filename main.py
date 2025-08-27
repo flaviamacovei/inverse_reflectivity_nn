@@ -22,9 +22,9 @@ from data.values.ReflectivityPattern import ReflectivityPattern
 from utils.ConfigManager import ConfigManager as CM
 from evaluation.model_eval import evaluate_model, test_model
 from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
-from data.dataset_generation.CompletePropsGenerator import CompletePropsGenerator
-from data.dataset_generation.MaskedPropsGenerator import MaskedPropsGenerator
-from data.dataset_generation.ExplicitPropsGenerator import ExplicitPropsGenerator
+from data.dataset_generation.CompletePatternGenerator import CompletePatternGenerator
+from data.dataset_generation.MaskedPatternGenerator import MaskedPatternGenerator
+from data.dataset_generation.ExplicitPatternGenerator import ExplicitPatternGenerator
 from tmm_clean.tmm_core import compute_multilayer_optics
 
 def notify():
@@ -112,9 +112,9 @@ def overview():
         except FileNotFoundError:
             split = "validation"
             generators = {
-                "complete": CompletePropsGenerator,
-                "masked": MaskedPropsGenerator,
-                "explicit": ExplicitPropsGenerator
+                "complete": CompletePatternGenerator,
+                "masked": MaskedPatternGenerator,
+                "explicit": ExplicitPatternGenerator
             }
             generate_dataset(generators, split)
             validation_errors = evaluate_model(model)

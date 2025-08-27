@@ -6,9 +6,9 @@ import sys
 sys.path.append(sys.path[0] + '/..')
 from utils.ConfigManager import ConfigManager as CM
 from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
-from data.dataset_generation.CompletePropsGenerator import CompletePropsGenerator
-from data.dataset_generation.MaskedPropsGenerator import MaskedPropsGenerator
-from data.dataset_generation.ExplicitPropsGenerator import ExplicitPropsGenerator
+from data.dataset_generation.CompletePatternGenerator import CompletePatternGenerator
+from data.dataset_generation.MaskedPatternGenerator import MaskedPatternGenerator
+from data.dataset_generation.ExplicitPatternGenerator import ExplicitPatternGenerator
 from utils.os_utils import short_hash, get_unique_filename
 from utils.data_utils import get_dataset_name
 
@@ -106,9 +106,9 @@ def generate_dataset(split):
         split: "training" or "validation".
     """
     generators = {
-        "complete": CompletePropsGenerator,
-        "masked": MaskedPropsGenerator,
-        "explicit": ExplicitPropsGenerator
+        "complete": CompletePatternGenerator,
+        "masked": MaskedPatternGenerator,
+        "explicit": ExplicitPatternGenerator
     }
     if split == "training":
         # number of points in training dataset specified in config file

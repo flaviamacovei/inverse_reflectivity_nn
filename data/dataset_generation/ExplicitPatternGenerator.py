@@ -8,9 +8,9 @@ from utils.ConfigManager import ConfigManager as CM
 from data.dataset_generation.BaseGenerator import BaseGenerator
 
 
-class ExplicitPropsGenerator(BaseGenerator):
+class ExplicitPatternGenerator(BaseGenerator):
     """
-    Explicit Properties Generator class for generating datasets of density 'explicit'.
+    Explicit Reflectivity Pattern Generator class for generating datasets of density 'explicit'.
 
     An 'explicit' point consists of a list of regions with explicit values for each region.
     Outside of those, no reflectivity is specified.
@@ -21,7 +21,7 @@ class ExplicitPropsGenerator(BaseGenerator):
     """
 
     def __init__(self, num_points = 1, batch_size: int = 256):
-        """Initialise a MaskedPropsGenerator instance."""
+        """Initialise an ExplicitPatternGenerator instance."""
         super().__init__(num_points, batch_size)
         self.MIN_NUM_REGIONS = 1
         self.MAX_NUM_REGIONS = 7

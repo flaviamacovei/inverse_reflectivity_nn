@@ -7,9 +7,9 @@ from data.values.ReflectivityPattern import ReflectivityPattern
 from forward.forward_tmm import coating_to_reflectivity
 from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
 
-class CompletePropsGenerator(BaseGenerator):
+class CompletePatternGenerator(BaseGenerator):
     """
-    Complete Properties Generator class for generating datasets of density 'complete'.
+    Complete Reflectivity Pattern Generator class for generating datasets of density 'complete'.
 
     A 'complete' point contains reflectivity information at every wavelength.
     Lower bound and upper bound differ by no more than config.tolerance.
@@ -19,7 +19,7 @@ class CompletePropsGenerator(BaseGenerator):
         make_point: Generate a 'complete' point.
     """
     def __init__(self, num_points = 1, batch_size: int = 256):
-        """Initialise a CompletePropsGenerator instance."""
+        """Initialise a CompletePatternGenerator instance."""
         super().__init__(num_points, batch_size)
 
     def make_points(self, num_points: int):

@@ -42,8 +42,8 @@ class RandomDataloader(BaseDataloader):
             refractive_indices = torch.rand((self.num_layers))
             coating = Coating(thicknesses_tensor, refractive_indices)
             # calculate reflectivity from coating
-            properties_tensor = coating_to_reflectivity(coating).get_value()
-            lower_bound = torch.clamp(properties_tensor - self.TOLERANCE / 2, 0, 1)
-            upper_bound = torch.clamp(properties_tensor + self.TOLERANCE / 2, 0, 1)
+            reflectivity = coating_to_reflectivity(coating).get_value()
+            lower_bound = torch.clamp(reflectivity - self.TOLERANCE / 2, 0, 1)
+            upper_bound = torch.clamp(reflectivity + self.TOLERANCE / 2, 0, 1)
             reflectivity = torch.cat((lower_bound, upper_bound))
             self.dataset.append(reflectivity)

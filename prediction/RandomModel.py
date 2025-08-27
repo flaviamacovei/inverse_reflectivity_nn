@@ -5,7 +5,7 @@ sys.path.append(sys.path[0] + '/..')
 from data.values.ReflectivityPattern import ReflectivityPattern
 from data.values.Coating import Coating
 from utils.ConfigManager import ConfigManager as CM
-from data.dataset_generation.CompletePropsGenerator import CompletePropsGenerator
+from data.dataset_generation.CompletePatternGenerator import CompletePatternGenerator
 
 class RandomModel(BaseModel):
     """
@@ -22,7 +22,7 @@ class RandomModel(BaseModel):
         num_points = target.get_batch_size()
 
         # this isn't super pretty
-        generator = CompletePropsGenerator()
+        generator = CompletePatternGenerator()
 
         materials_indices = generator.make_materials_choice(num_points)
         thicknesses = generator.make_thicknesses(materials_indices)
