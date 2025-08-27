@@ -3,7 +3,7 @@ import random
 import sys
 
 sys.path.append(sys.path[0] + '/../..')
-from data.values.ReflectivePropsPattern import ReflectivePropsPattern
+from data.values.ReflectivityPattern import ReflectivityPattern
 from utils.ConfigManager import ConfigManager as CM
 from data.dataset_generation.BaseGenerator import BaseGenerator
 
@@ -47,7 +47,7 @@ class ExplicitPropsGenerator(BaseGenerator):
 
         Returns:
             set of
-            pattern: ReflectivePropsPattern instance with regions with explicit values.
+            pattern: ReflectivityPattern instance with regions with explicit values.
             coating: corresponding Coating instance.
         """
         lower_bounds = []
@@ -78,6 +78,6 @@ class ExplicitPropsGenerator(BaseGenerator):
         upper_bounds = torch.cat(upper_bounds, dim = 0).float()
 
 
-        pattern = ReflectivePropsPattern(lower_bounds, upper_bounds)
+        pattern = ReflectivityPattern(lower_bounds, upper_bounds)
 
         return pattern, None

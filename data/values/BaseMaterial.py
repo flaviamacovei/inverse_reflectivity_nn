@@ -5,7 +5,7 @@ import sys
 sys.path.append(sys.path[0] + '/..')
 from utils.os_utils import short_hash
 
-class Material(ABC):
+class BaseMaterial(ABC):
     """
     Abstract base class for materials.
 

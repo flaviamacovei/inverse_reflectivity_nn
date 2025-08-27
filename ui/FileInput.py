@@ -1,21 +1,21 @@
 import torch
 import sys
 sys.path.append(sys.path[0] + '/..')
-from data.values.ReflectivePropsPattern import ReflectivePropsPattern
+from data.values.ReflectivityPattern import ReflectivityPattern
 from utils.ConfigManager import ConfigManager as CM
 from utils.tmm_utils import get_wavelength_index
 
 class FileInput():
     """
-    Interface class for loading reflective properties targets from a file.
+    Interface class for loading reflectivity targets from a file.
 
     Attributes:
         wavelengths: list of wavelengths
         values: list of target values
 
     Methods:
-        read_from_csv: Read reflective properties target from CSV file and store values internally.
-        to_reflective_props_pattern: Convert internally stored wavelengths and values to ReflectivePropsPattern object.
+        read_from_csv: Read reflectivity target from CSV file and store values internally.
+        to_reflectivity_pattern: Convert internally stored wavelengths and values to ReflectivityPattern object.
     """
     def __init__(self):
         """Initialise a FileInput instance."""
@@ -23,7 +23,7 @@ class FileInput():
         self.values = None
 
     def read_from_csv(self, file: str):
-        """Read reflective properties target from CSV file and store values internally."""
+        """Read reflectivity target from CSV file and store values internally."""
         assert file is not None
         assert file.endswith(".csv")
 
@@ -35,8 +35,8 @@ class FileInput():
         self.values = [float(line.split(",")[1]) / 100 for line in lines]
 
 
-    def to_reflective_props_pattern(self):
-        """Convert internally stored wavelengths and values to ReflectivePropsPattern object."""
+    def to_reflectivity_pattern(self):
+        """Convert internally stored wavelengths and values to Reflectivity Pattern object."""
         # FIXME: use torch
         lower_bound = torch.zeros((1, CM().get('wavelengths').shape[0]), device=CM().get('device'))
         upper_bound = torch.ones((1, CM().get('wavelengths').shape[0]), device=CM().get('device'))
@@ -53,4 +53,4 @@ class FileInput():
 
         print(f"File converted successfully.")
 
-        return ReflectivePropsPattern(lower_bound, upper_bound)
+        return ReflectivityPattern(lower_bound, upper_bound)

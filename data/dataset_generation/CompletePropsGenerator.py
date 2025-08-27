@@ -3,8 +3,8 @@ import sys
 sys.path.append(sys.path[0] + '/../..')
 from data.dataset_generation.BaseGenerator import BaseGenerator
 from data.values.Coating import Coating
-from data.values.ReflectivePropsPattern import ReflectivePropsPattern
-from forward.forward_tmm import coating_to_reflective_props
+from data.values.ReflectivityPattern import ReflectivityPattern
+from forward.forward_tmm import coating_to_reflectivity
 from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
 
 class CompletePropsGenerator(BaseGenerator):
@@ -27,7 +27,7 @@ class CompletePropsGenerator(BaseGenerator):
         Generate 'complete' points.
 
         Returns:
-            pattern: ReflectivePropsPattern instance where lower bound and upper bound differ by no more than config.tolerance.
+            pattern: ReflectivityPattern instance where lower bound and upper bound differ by no more than config.tolerance.
             coating: corresponding Coating instance.
         """
         materials_indices = self.make_materials_choice(num_points)
@@ -39,11 +39,11 @@ class CompletePropsGenerator(BaseGenerator):
         coating = Coating(coating_encoding)
 
         # make labels
-        reflective_props_tensor = coating_to_reflective_props(coating).get_value().float()
+        reflectivity = coating_to_reflectivity(coating).get_value().float()
 
-        lower_bound = torch.clamp(reflective_props_tensor - self.TOLERANCE / 2, 0, 1)
-        upper_bound = torch.clamp(reflective_props_tensor + self.TOLERANCE / 2, 0, 1)
+        lower_bound = torch.clamp(reflectivity - self.TOLERANCE / 2, 0, 1)
+        upper_bound = torch.clamp(reflectivity + self.TOLERANCE / 2, 0, 1)
 
-        pattern = ReflectivePropsPattern(lower_bound, upper_bound)
+        pattern = ReflectivityPattern(lower_bound, upper_bound)
 
-        return pattern.to('cpu'), coating.to('cpu')
+        return pattern, coating

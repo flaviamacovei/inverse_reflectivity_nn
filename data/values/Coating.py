@@ -1,7 +1,7 @@
 import torch
 import sys
 sys.path.append(sys.path[0] + '/..')
-from data.values.Material import Material
+from data.values.BaseMaterial import BaseMaterial
 from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
 from utils.ConfigManager import ConfigManager as CM
 

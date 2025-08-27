@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import sys
 sys.path.append(sys.path[0] + '/..')
-from data.values.ReflectivePropsPattern import ReflectivePropsPattern
+from data.values.ReflectivityPattern import ReflectivityPattern
 
 class BaseModel(ABC):
     """
@@ -11,18 +11,18 @@ class BaseModel(ABC):
     It is intended to be subclassed by specific models with extended functionality.
 
     Methods:
-        predict: Predict a coating given a reflective properties pattern object. Must be implemented by subclasses.
+        predict: Predict a coating given a reflectivity pattern object. Must be implemented by subclasses.
     """
 
     def __init__(self):
         """Initialise a BaseModel instance."""
         pass
     @abstractmethod
-    def predict(self, target: ReflectivePropsPattern):
+    def predict(self, target: ReflectivityPattern):
         """
-        Predict a coating given a reflective properties pattern object. Must be implemented by subclasses.
+        Predict a coating given a reflectivity pattern object. Must be implemented by subclasses.
 
         Args:
-            target: Reflective properties pattern for which to perform prediction.
+            target: Reflectivity pattern for which to perform prediction.
         """
         pass

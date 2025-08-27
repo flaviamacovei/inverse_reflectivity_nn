@@ -10,7 +10,7 @@ continue_reading = True
 while continue_reading:
     ui = UserInput()
     ui.read_regions()
-    patterns.append(ui.to_reflective_props_pattern())
+    patterns.append(ui.to_reflectivity_pattern())
     continue_reading = input("Specify another point? (y/n): ").lower() == 'y'
 
 feature_tensors = []

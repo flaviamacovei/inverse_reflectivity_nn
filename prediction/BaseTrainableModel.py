@@ -8,13 +8,12 @@ from datetime import datetime
 import sys
 import yaml
 sys.path.append(sys.path[0] + '/..')
-from data.dataloaders.BaseDataloader import BaseDataloader
 from prediction.BaseModel import BaseModel
-from data.values.ReflectivePropsPattern import ReflectivePropsPattern
-from data.values.ReflectivePropsValue import ReflectivePropsValue
+from data.values.ReflectivityPattern import ReflectivityPattern
+from data.values.ReflectivityValue import ReflectivityValue
 from data.values.Coating import Coating
 from utils.os_utils import get_unique_filename
-from forward.forward_tmm import coating_to_reflective_props
+from forward.forward_tmm import coating_to_reflectivity
 from evaluation.loss import match
 from utils.ConfigManager import ConfigManager as CM
 from utils.os_utils import short_hash
@@ -42,9 +41,9 @@ class BaseTrainableModel(BaseModel, ABC):
         train: Train the model.
         initialise_weights: Initialise weights of the trainable model.
         init_dataloader: Initialise dataloader.
-        predict: Predict a coating given a reflective properties pattern object.
+        predict: Predict a coating given a reflectivity pattern object.
         compute_loss_guided: Compute guided loss of a batch of data. Guided loss is the L2 loss between the predicted coating and the ground truth coating.
-        compute_loss_free: Compute free loss of a batch of data. Free loss is the L2 loss between the predicted reflective properties value and the ground truth reflective properties pattern.
+        compute_loss_free: Compute free loss of a batch of data. Free loss is the L2 loss between the predicted reflectivity value and the ground truth reflectivity pattern.
         load: Load the model from a file.
         scale_gradients: Scale gradients of trainable model. Must be implemented by subclasses.
     """
@@ -124,16 +123,16 @@ class BaseTrainableModel(BaseModel, ABC):
             # training loop
             for batch in self.dataloader:
                 self.optimiser.zero_grad()
-                reflective_props_tensor, coating_encoding = batch
-                reflective_props_tensor = reflective_props_tensor.to(CM().get('device'))
+                reflectivity, coating_encoding = batch
+                reflectivity = reflectivity.to(CM().get('device'))
                 coating_encoding = coating_encoding.to(CM().get('device'))
-                # a batch consists of reflective properties and coating encodings
-                # in free mode, reflective properties are simultaneously input and ground truth
+                # a batch consists of reflectivity and coating encodings
+                # in free mode, reflectivity is simultaneously input and ground truth
                 # in guided mode, coating encodings are ground truth
-                labels = reflective_props_tensor if self.guidance == 'free' else coating_encoding
+                labels = reflectivity if self.guidance == 'free' else coating_encoding
                 # TODO: might need to add target too for transformer
-                preds = self.get_model_output(reflective_props_tensor)
-                preds = preds.reshape((reflective_props_tensor.shape[0], (CM().get('layers.max') + 2), CM().get('material_embedding.dim') + 1))
+                preds = self.get_model_output(reflectivity)
+                preds = preds.reshape((reflectivity.shape[0], (CM().get('layers.max') + 2), CM().get('material_embedding.dim') + 1))
                 loss = self.compute_loss(preds, labels)
                 # print(f"loss: {loss}")
                 epoch_loss += loss.item()
@@ -166,15 +165,15 @@ class BaseTrainableModel(BaseModel, ABC):
     def visualise_epoch(self, epoch: int):
         # visualise first item of batch
         self.model.eval()
-        reflective_props_tensor = self.dataloader[0][0][None]
-        reflective_props_tensor = reflective_props_tensor.to(CM().get('device'))
-        lower_bound, upper_bound = reflective_props_tensor.chunk(2, dim=1)
-        refs = ReflectivePropsPattern(lower_bound, upper_bound)
-        output = self.get_model_output(reflective_props_tensor)
+        reflectivity = self.dataloader[0][0][None]
+        reflectivity = reflectivity.to(CM().get('device'))
+        lower_bound, upper_bound = reflectivity.chunk(2, dim=1)
+        refs = ReflectivityPattern(lower_bound, upper_bound)
+        output = self.get_model_output(reflectivity)
         output = output.reshape(
-            (reflective_props_tensor.shape[0], (CM().get('layers.max') + 2), CM().get('material_embedding.dim') + 1))
+            (reflectivity.shape[0], (CM().get('layers.max') + 2), CM().get('material_embedding.dim') + 1))
         coating = Coating(output)
-        preds = coating_to_reflective_props(coating)
+        preds = coating_to_reflectivity(coating)
         print(coating.get_batch(0))
         visualise(preds, refs, f"from_training_epoch_{epoch}")
 
@@ -240,12 +239,12 @@ class BaseTrainableModel(BaseModel, ABC):
             print("Dataset in current configuration not found. Please run generate_dataset.py first.")
             return
 
-    def predict(self, target: ReflectivePropsPattern):
+    def predict(self, target: ReflectivityPattern):
         """
-        Predict a coating given a reflective properties pattern object.
+        Predict a coating given a reflectivity pattern object.
 
         Args:
-            target: Reflective properties pattern for which to perform prediction.
+            target: Reflectivity pattern for which to perform prediction.
         """
         self.model.eval()
         # convert input to shape expected by model
@@ -266,24 +265,24 @@ class BaseTrainableModel(BaseModel, ABC):
             preds: Model output.
             labels: Ground truth coating encoding.
         """
-        # features are reflective properties converted to model input shape
+        # features are equal to reflectivity converted to model input shape
         return torch.sum((preds - labels) ** 2)
 
     def compute_loss_free(self, preds: torch.Tensor, labels: torch.Tensor):
         """
         Compute free loss of a batch of data.
 
-        Free loss is the L2 loss between the predicted reflective properties value and the ground truth reflective properties pattern.
+        Free loss is the L2 loss between the predicted reflectivity value and the ground truth reflective properties pattern.
 
         Args:
             batch: Tuple of features and labels for which to compute loss.
         """
         lower_bound, upper_bound = labels.chunk(2, dim=1)
-        # create reflective properties pattern for match operation
-        pattern = ReflectivePropsPattern(lower_bound, upper_bound)
+        # create reflectivity pattern for match operation
+        pattern = ReflectivityPattern(lower_bound, upper_bound)
         coating = Coating(preds)
-        # convert predicted coating to reflective properties value
-        preds = coating_to_reflective_props(coating)
+        # convert predicted coating to reflectivity value
+        preds = coating_to_reflectivity(coating)
         return match(preds, pattern)
 
     @abstractmethod

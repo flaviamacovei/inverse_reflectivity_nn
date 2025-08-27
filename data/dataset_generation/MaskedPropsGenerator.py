@@ -3,9 +3,9 @@ import torch
 import numpy as np
 import sys
 sys.path.append(sys.path[0] + '/../..')
-from data.values.ReflectivePropsPattern import ReflectivePropsPattern
+from data.values.ReflectivityPattern import ReflectivityPattern
 from data.values.Coating import Coating
-from forward.forward_tmm import coating_to_reflective_props
+from forward.forward_tmm import coating_to_reflectivity
 from utils.ConfigManager import ConfigManager as CM
 from data.dataset_generation.BaseGenerator import BaseGenerator
 
@@ -56,7 +56,7 @@ class MaskedPropsGenerator(BaseGenerator):
         Generate 'masked' points.
 
         Returns:
-            pattern: ReflectivePropsPattern instance with masked and unmasked intervals.
+            pattern: ReflectivityPattern instance with masked and unmasked intervals.
             coating: corresponding Coating instance.
         """
         materials_indices = self.make_materials_choice(num_points)
@@ -69,14 +69,14 @@ class MaskedPropsGenerator(BaseGenerator):
 
         mask = self.make_mask(num_points)
 
-        reflective_props_tensor = coating_to_reflective_props(coating).get_value().float()
+        reflectivity = coating_to_reflectivity(coating).get_value().float()
 
-        lower_bound = reflective_props_tensor - self.TOLERANCE / 2
-        upper_bound = reflective_props_tensor + self.TOLERANCE / 2
+        lower_bound = reflectivity - self.TOLERANCE / 2
+        upper_bound = reflectivity + self.TOLERANCE / 2
 
         lower_bound = torch.clamp(lower_bound - mask, 0, 1)
         upper_bound = torch.clamp(upper_bound + mask, 0, 1)
 
-        pattern = ReflectivePropsPattern(lower_bound, upper_bound)
+        pattern = ReflectivityPattern(lower_bound, upper_bound)
 
-        return pattern.to('cpu'), coating.to('cpu')
+        return pattern, coating

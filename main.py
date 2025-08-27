@@ -6,8 +6,8 @@ import wandb
 import yaml
 from itertools import product
 import time
-from data.values.Material import Material
-from forward.forward_tmm import coating_to_reflective_props
+from data.values.BaseMaterial import BaseMaterial
+from forward.forward_tmm import coating_to_reflectivity
 from prediction.BaseTrainableModel import BaseTrainableModel
 from prediction.CNN import CNN
 from prediction.MLP import MLP
@@ -18,7 +18,7 @@ from ui.visualise import visualise
 from ui.FileInput import FileInput
 from generate_dataset import generate_dataset
 from data.values.ConstantRIMaterial import ConstantRIMaterial
-from data.values.ReflectivePropsPattern import ReflectivePropsPattern
+from data.values.ReflectivityPattern import ReflectivityPattern
 from utils.ConfigManager import ConfigManager as CM
 from evaluation.model_eval import evaluate_model, test_model
 from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
@@ -42,20 +42,20 @@ def main():
 
     # fi = FileInput()
     # fi.read_from_csv("data/data_files/Neuschwanstein_target.csv")
-    # target = fi.to_reflective_props_pattern()
+    # target = fi.to_reflectivity_pattern()
 
 
-    target = ReflectivePropsPattern(lower_bound[None], upper_bound[None])
+    target = ReflectivityPattern(lower_bound[None], upper_bound[None])
     model = MLP()
     model.load("out/models/model_33543.pt")
     coating = model.predict(target)
     print(coating)
-    preds = coating_to_reflective_props(coating)
+    preds = coating_to_reflectivity(coating)
     visualise(preds = preds, refs = target, filename = "pca")
     # print(f"coating: {coating}")
     # print(f"refractive indices: {coating.get_refractive_indices()}")
     # lower_bound, upper_bound = point[0][None].chunk(2, dim = 1)
-    # visualise(refs = ReflectivePropsPattern(lower_bound, upper_bound), filename = "test")
+    # visualise(refs = ReflectivityPattern(lower_bound, upper_bound), filename = "test")
     notify()
 
 def overview():
@@ -89,6 +89,8 @@ def overview():
             "polarisation": CM().get('polarisation'),
             "num_materials": rowdict["num materials"],
             "theta": CM().get('theta').item(),
+            "air_pad": CM().get('air_pad'),
+            "stratified_sampling": CM().get('stratified_sampling'),
             "tolerance": CM().get('tolerance'),
             "num_points": CM().get('training.dataset_size')
         }
@@ -128,4 +130,15 @@ def overview():
 
 
 if __name__ == "__main__":
-    overview()
+    # overview()
+
+    dataloader = DynamicDataloader(CM().get('training.dataset_size'), False)
+    # complete
+    dataloader.load_leg(0)
+    all_complete = dataloader[:][0]
+    # masked
+    dataloader.load_leg(1)
+    all_masked = dataloader[:][0]
+    # explicit
+    dataloader.load_leg(2)
+    all_explicit = dataloader[:][0]

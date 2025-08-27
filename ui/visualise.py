@@ -4,18 +4,18 @@ from scipy.interpolate import make_interp_spline
 import numpy as np
 import sys
 sys.path.append(sys.path[0] + '/..')
-from data.values.ReflectivePropsPattern import ReflectivePropsPattern
-from data.values.ReflectivePropsValue import ReflectivePropsValue
+from data.values.ReflectivityPattern import ReflectivityPattern
+from data.values.ReflectivityValue import ReflectivityValue
 from utils.ConfigManager import ConfigManager as CM
 
 
-def visualise_spline(preds: ReflectivePropsValue = None, refs: ReflectivePropsPattern = None, filename: str = "visualisation"):
+def visualise_spline(preds: ReflectivityValue = None, refs: ReflectivityPattern = None, filename: str = "visualisation"):
     """
     Visualise prediction using spline interpolation.
 
     Args:
-        preds: predicted reflective props value. Optional.
-        refs: ground truth reflective props pattern. Optional.
+        preds: predicted reflectivity value. Optional.
+        refs: ground truth reflectivity pattern. Optional.
         filename: filename. Optional.
     """
     assert not preds or len(preds.get_value().shape) == 2
@@ -52,13 +52,13 @@ def visualise_spline(preds: ReflectivePropsValue = None, refs: ReflectivePropsPa
     plt.ylim(0, 1.1)
     plt.savefig(f"out/{filename}.png")
 
-def visualise(preds: ReflectivePropsValue = None, refs: ReflectivePropsPattern = None, filename: str = "visualisation"):
+def visualise(preds: ReflectivityValue = None, refs: ReflectivityPattern = None, filename: str = "visualisation"):
     """
     Visualise prediction using linear interpolation.
 
     Args:
-        preds: predicted reflective props value. Optional.
-        refs: ground truth reflective props pattern. Optional.
+        preds: predicted reflectivity value. Optional.
+        refs: ground truth reflectivity pattern. Optional.
         filename: filename. Optional.
     """
     assert not preds or len(preds.get_value().shape) == 2

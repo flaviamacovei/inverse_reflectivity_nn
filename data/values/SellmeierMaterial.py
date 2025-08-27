@@ -2,10 +2,10 @@ import torch
 from typing import Union
 import sys
 sys.path.append(sys.path[0] + '/..')
-from data.values.Material import Material
+from data.values.BaseMaterial import BaseMaterial
 from utils.ConfigManager import ConfigManager as CM
 
-class SellmeierMaterial(Material):
+class SellmeierMaterial(BaseMaterial):
     """
     Material class for representing materials with multiple-value Sellmeier coefficients.
 

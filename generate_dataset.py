@@ -18,13 +18,13 @@ def convert_to_dataset(generated):
     Convert a list of tensors to a TensorDataset.
 
     Args:
-        generated: A list of tuples of the form (reflective properties pattern, coating).
+        generated: A list of tuples of the form (ReflectivityPattern, Coating).
     """
     feature_tensors = []
     label_tensors = []
-    for (reflective_props, coating) in generated:
-        # convert reflective properties to concatenated tensor
-        feature_tensor = torch.cat((reflective_props.get_lower_bound(), reflective_props.get_upper_bound()),
+    for (reflectivity, coating) in generated:
+        # convert reflectivity to concatenated tensor
+        feature_tensor = torch.cat((reflectivity.get_lower_bound(), reflectivity.get_upper_bound()),
                                    dim=1).squeeze()
         if coating is None:
             # for explicit dataset, no coating is provided so use dummy data
@@ -70,8 +70,8 @@ def sample(data: TensorDataset, num_points: int):
     Divide into bins and sample evenly many points per bin.
     """
     BINS = 10
-    reflective_props, coating = data.tensors
-    averaged = torch.sum(reflective_props, dim = -1) / reflective_props.shape[-1]
+    reflectivity, coating = data.tensors
+    averaged = torch.sum(reflectivity, dim = -1) / reflectivity.shape[-1]
     hist = torch.histc(averaged, bins = BINS, min = 0, max = 1)
 
     # weights are inversely proportional to frequency in data
@@ -90,7 +90,7 @@ def sample(data: TensorDataset, num_points: int):
     greater_equal = torch.ge(averaged[:, None].repeat(1, BINS), lower_bound)
     less_than = torch.lt(averaged[:, None].repeat(1, BINS), upper_bound)
     mask = torch.logical_and(greater_equal, less_than)
-    masked_weights = weights[None].repeat(reflective_props.shape[0], 1) * mask
+    masked_weights = weights[None].repeat(reflectivity.shape[0], 1) * mask
     point_weights = masked_weights.sum(dim=1)
     # possibly num_samples to data.shape[0]
     sampler = WeightedRandomSampler(weights = point_weights, num_samples = num_points, replacement = False)

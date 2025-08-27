@@ -9,8 +9,8 @@ sys.path.append(sys.path[0] + '/..')
 from utils.data_utils import load_config
 from utils.ConfigManager import ConfigManager as CM
 from data.dataloaders.DynamicDataloader import DynamicDataloader
-from data.values.ReflectivePropsPattern import ReflectivePropsPattern
-from data.values.ReflectivePropsValue import ReflectivePropsValue
+from data.values.ReflectivityPattern import ReflectivityPattern
+from data.values.ReflectivityValue import ReflectivityValue
 from utils.data_utils import get_dataset_name
 from prediction.BaseModel import BaseModel
 from prediction.BaseTrainableModel import BaseTrainableModel
@@ -19,7 +19,7 @@ from prediction.MLP import MLP
 from prediction.CNN import CNN
 from prediction.MLPGradient import MLPGradient
 from prediction.Transformer import Transformer
-from forward.forward_tmm import coating_to_reflective_props
+from forward.forward_tmm import coating_to_reflectivity
 
 def load_pattern():
     lower_bound = None
@@ -34,7 +34,7 @@ def load_pattern():
         local_upper_bound = local_upper_bound.to(CM().get('device'))
         lower_bound = local_lower_bound if lower_bound == None else torch.cat([lower_bound, local_lower_bound], dim=0)
         upper_bound = local_upper_bound if upper_bound == None else torch.cat([upper_bound, local_upper_bound], dim=0)
-    return ReflectivePropsPattern(lower_bound=lower_bound, upper_bound=upper_bound)
+    return ReflectivityPattern(lower_bound=lower_bound, upper_bound=upper_bound)
 
 def random_baseline():
     pattern = load_pattern()
@@ -42,7 +42,7 @@ def random_baseline():
     return evaluate_error(error)
 
 
-def pairwise_distance(pattern: ReflectivePropsPattern):
+def pairwise_distance(pattern: ReflectivityPattern):
     epsilon = CM().get('tolerance')
     num = pattern.get_batch_size()
     repetitions = [1] * (len(pattern.get_lower_bound().shape) + 1)
@@ -75,13 +75,13 @@ def pairwise_distance(pattern: ReflectivePropsPattern):
     indices = torch.triu_indices(num, num, offset = 1)
     return error[indices[0], indices[1]]
 
-def match(input: ReflectivePropsValue, target: ReflectivePropsPattern):
+def match(input: ReflectivityValue, target: ReflectivityPattern):
     """
-    Match a reflective properties value to a reflective properties pattern.
+    Match a reflectivity value to a reflectivity pattern.
 
     Args:
-        input: reflective properties value object.
-        target: reflective properties pattern object.
+        input: reflectivity value object.
+        target: reflectivity pattern object.
     """
     upper_error = input.get_value() - target.get_upper_bound()
     upper_error = upper_error.clamp(min = 0)
@@ -95,7 +95,7 @@ def match(input: ReflectivePropsValue, target: ReflectivePropsPattern):
 def evaluate_model(model: BaseModel):
     target = load_pattern()
     coating = model.predict(target)
-    preds = coating_to_reflective_props(coating)
+    preds = coating_to_reflectivity(coating)
     error = match(preds, target)
     return evaluate_error(error)
 

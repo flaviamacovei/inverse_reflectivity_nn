@@ -69,9 +69,9 @@ class SegmentedDataset(Dataset):
                     i -= len(self.segments[segment_index])
                     segment_index += 1
                 results.append(self.segments[segment_index][i])
-            reflective_props = [sample[0] for sample in results]
+            reflectivity = [sample[0] for sample in results]
             coating = [sample[1] for sample in results]
-            return (torch.stack(reflective_props), torch.stack(coating))
+            return (torch.stack(reflectivity), torch.stack(coating))
             return results
 
 class DynamicDataloader(BaseDataloader):

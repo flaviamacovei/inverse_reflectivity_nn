@@ -4,10 +4,10 @@ from scipy.optimize import minimize, Bounds, check_grad
 import sys
 sys.path.append(sys.path[0] + '/..')
 from prediction.BaseModel import BaseModel
-from data.values.ReflectivePropsPattern import ReflectivePropsPattern
+from data.values.ReflectivityPattern import ReflectivityPattern
 from utils.ConfigManager import ConfigManager as CM
 from data.values.Coating import Coating
-from forward.forward_tmm import coating_to_reflective_props
+from forward.forward_tmm import coating_to_reflectivity
 from evaluation.loss import match
 
 class GradientModel(BaseModel):
@@ -20,12 +20,12 @@ class GradientModel(BaseModel):
         self.initialise()
 
 
-    def predict(self, target: ReflectivePropsPattern):
+    def predict(self, target: ReflectivityPattern):
         """
-        Predict a coating given a reflective properties pattern object.
+        Predict a coating given a reflectivity pattern object.
 
         Args:
-            target: Reflective properties pattern for which to perform prediction.
+            target: Reflectivity pattern for which to perform prediction.
         """
         bounds = Bounds(np.zeros_like(self.init_params), np.ones_like(self.init_params))
 
@@ -55,7 +55,7 @@ class GradientModel(BaseModel):
         self.init_params = init_params
 
 
-    def loss_function(self, params: torch.Tensor, target: ReflectivePropsPattern):
+    def loss_function(self, params: torch.Tensor, target: ReflectivityPattern):
         flat_params = params.detach().clone().requires_grad_(True)
         original = flat_params
         if flat_params.shape[0] == self.coating_length * self.encoding_length:
@@ -65,7 +65,7 @@ class GradientModel(BaseModel):
         params = params.to(CM().get('device'))
 
         coating = Coating(params)
-        preds = coating_to_reflective_props(coating)
+        preds = coating_to_reflectivity(coating)
         loss = match(preds, target)
         loss.backward()
 

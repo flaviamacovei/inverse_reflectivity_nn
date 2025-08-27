@@ -6,7 +6,7 @@ from torch_pca import PCA
 from pickle import load, dump
 import sys
 sys.path.append(sys.path[0] + '/..')
-from data.values.Material import Material
+from data.values.BaseMaterial import BaseMaterial
 from data.values.SellmeierMaterial import SellmeierMaterial
 from data.values.ConstantRIMaterial import ConstantRIMaterial
 from utils.ConfigManager import ConfigManager as CM
@@ -59,7 +59,7 @@ class EmbeddingManager:
 
         self.embeddings = self.refractive_indices_to_embeddings(self.materials_refractive_indices)
 
-    def load_materials(self) -> list[Material]:
+    def load_materials(self) -> list[BaseMaterial]:
         # TODO: map benutzen und filter wenn nötig (wie in CM)
         """
         Load materials from data file.
@@ -143,7 +143,7 @@ class EmbeddingManager:
         refractive_indices = self.pca.inverse_transform(embeddings)
         return refractive_indices
 
-    def encode(self, materials: list[Material]):
+    def encode(self, materials: list[BaseMaterial]):
         # TODO: redo with lookup
         """
         Map materials to embeddings.
@@ -155,7 +155,7 @@ class EmbeddingManager:
             Tensor of embeddings. Shape: (batch_size, embedding_dim).
         """
         assert len(materials) > 0, "No materials provided"
-        assert isinstance(materials[0], Material), "Materials must be of type Material"
+        assert isinstance(materials[0], BaseMaterial), "Materials must be of type Material"
         materials_indices = [self.materials_indices[material.get_title()] for material in materials]
         return self.embeddings[materials_indices]
 

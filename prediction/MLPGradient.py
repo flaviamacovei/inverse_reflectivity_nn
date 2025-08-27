@@ -8,7 +8,7 @@ from prediction.BaseModel import BaseModel
 from prediction.GradientModel import GradientModel
 from data.dataloaders.BaseDataloader import BaseDataloader
 from utils.ConfigManager import ConfigManager as CM
-from data.values.ReflectivePropsPattern import ReflectivePropsPattern
+from data.values.ReflectivityPattern import ReflectivityPattern
 
 class MLPGradient(MLP):
     """
@@ -22,7 +22,7 @@ class MLPGradient(MLP):
         super().__init__()
         self.gradient = GradientModel()
 
-    def predict(self, target: ReflectivePropsPattern):
+    def predict(self, target: ReflectivityPattern):
         mlp_prediction = super().predict(target)
         print(mlp_prediction.get_encoding().shape)
         self.gradient.initialise(mlp_prediction.get_encoding().detach().flatten())

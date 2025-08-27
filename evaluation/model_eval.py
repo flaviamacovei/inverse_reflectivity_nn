@@ -4,8 +4,8 @@ import wandb
 import sys
 sys.path.append(sys.path[0] + '/..')
 from prediction.BaseModel import BaseModel
-from data.values.ReflectivePropsPattern import ReflectivePropsPattern
-from forward.forward_tmm import coating_to_reflective_props
+from data.values.ReflectivityPattern import ReflectivityPattern
+from forward.forward_tmm import coating_to_reflectivity
 from evaluation.loss import match
 from utils.ConfigManager import ConfigManager as CM
 from utils.data_utils import get_dataset_name
@@ -75,9 +75,9 @@ def evaluate_per_density(model: BaseModel, dataloader: DataLoader, save_visualis
     for i, batch in enumerate(dataloader):
         features = batch[0].float().to(CM().get('device'))
         lower_bound, upper_bound = features.chunk(2, dim=1)
-        pattern = ReflectivePropsPattern(lower_bound, upper_bound)
+        pattern = ReflectivityPattern(lower_bound, upper_bound)
         coating = model.predict(pattern)
-        preds = coating_to_reflective_props(coating)
+        preds = coating_to_reflectivity(coating)
         if save_visualisation:
             visualise(refs = pattern, preds = preds, filename = f"evaluation_{i}")
         # evaluation uses free loss

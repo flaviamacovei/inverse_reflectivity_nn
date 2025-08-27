@@ -2,8 +2,9 @@ from prediction.BaseModel import BaseModel
 import torch
 import sys
 sys.path.append(sys.path[0] + '/..')
-from data.values.ReflectivePropsPattern import ReflectivePropsPattern
+from data.values.ReflectivityPattern import ReflectivityPattern
 from data.values.Coating import Coating
+from utils.ConfigManager import ConfigManager as CM
 
 class RandomModel(BaseModel):
     """
@@ -17,8 +18,7 @@ class RandomModel(BaseModel):
         super().__init__()
         self.num_layers = CM().get('num_layers')
 
-    def predict(self, target: ReflectivePropsPattern):
-        # TODO: update or remove
+    def predict(self, target: ReflectivityPattern):
         thicknesses_tensor = torch.rand((self.num_layers))
         refractive_indices_tensor = torch.rand((self.num_layers))
         return Coating(thicknesses_tensor, refractive_indices_tensor)

@@ -6,8 +6,8 @@ import yaml
 import wandb
 from torch.utils.data import DataLoader
 from generate_dataset import generate_dataset
-from data.values.Material import Material
-from forward.forward_tmm import coating_to_reflective_props
+from data.values.BaseMaterial import BaseMaterial
+from forward.forward_tmm import coating_to_reflectivity
 from prediction.BaseTrainableModel import BaseTrainableModel
 from prediction.GradientModel import GradientModel
 from prediction.MLP import MLP
@@ -17,7 +17,7 @@ from data.dataloaders.DynamicDataloader import DynamicDataloader
 from data.values.Coating import Coating
 from ui.visualise import visualise
 from ui.FileInput import FileInput
-from data.values.ReflectivePropsPattern import ReflectivePropsPattern
+from data.values.ReflectivityPattern import ReflectivityPattern
 from utils.ConfigManager import ConfigManager as CM
 from evaluation.model_eval import evaluate_model, test_model
 from data.material_embedding.EmbeddingManager import EmbeddingManager as EM

@@ -5,13 +5,13 @@ import torch
 import sys
 sys.path.append(sys.path[0] + '/..')
 from data.values.Region import Region
-from data.values.ReflectivePropsPattern import ReflectivePropsPattern
+from data.values.ReflectivityPattern import ReflectivityPattern
 from utils.ConfigManager import ConfigManager as CM
 from utils.tmm_utils import get_wavelength_index
 
 class UserInput():
     """
-    Interface class for loading reflective properties targets from command line.
+    Interface class for loading reflectivity targets from command line.
 
     Attributes:
         regions: List of regions with specified values.
@@ -21,7 +21,7 @@ class UserInput():
         read_float_from_input: Convert user input to float.
         read_regions: Read regions from user input.
         run: Run script.
-        to_reflective_props_pattern: Convert internally stored regions to ReflectivePropsPattern object.
+        to_reflectivity_pattern: Convert internally stored regions to ReflectivityPattern object.
     """
     def __init__(self):
         """Initialise a UserInput instance."""
@@ -88,8 +88,8 @@ class UserInput():
         """Run script."""
         self.read_regions()
 
-    def to_reflective_props_pattern(self):
-        """Convert internally stored regions to ReflectivePropsPattern object."""
+    def to_reflectivity_pattern(self):
+        """Convert internally stored regions to ReflectivityPattern object."""
         lower_bound = torch.zeros((1, CM().get('wavelengths').shape[0]), device = CM().get('device'))
         upper_bound = torch.ones((1, CM().get('wavelengths').shape[0]), device = CM().get('device'))
 
@@ -101,4 +101,4 @@ class UserInput():
         lower_bound = torch.clamp(lower_bound - CM().get('tolerance') / 2, 0, 1)
         upper_bound = torch.clamp(upper_bound + CM().get('tolerance') / 2, 0, 1)
 
-        return ReflectivePropsPattern(lower_bound, upper_bound)
+        return ReflectivityPattern(lower_bound, upper_bound)
