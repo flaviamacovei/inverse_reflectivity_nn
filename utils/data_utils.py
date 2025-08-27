@@ -35,8 +35,10 @@ def get_dataset_name(split: str, density: str):
         "density": density,
         "num_points": num_points
     }
-    if os.path.exists("data/datasets/metadata.yaml"):
-        with open("data/datasets/metadata.yaml", "r") as f:
+    own_path = os.path.realpath(__file__)
+    metadata_path = os.path.join(os.path.dirname(os.path.dirname(own_path)), "data/datasets/metadata.yaml")
+    if os.path.exists(metadata_path):
+        with open(metadata_path, "r") as f:
             content = yaml.safe_load(f)
             # search for properties dictionary match in metadata
             for dataset in content["datasets"]:

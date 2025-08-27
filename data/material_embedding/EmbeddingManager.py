@@ -1,3 +1,5 @@
+import os.path
+
 import torch
 import torch.nn as nn
 import itertools
@@ -29,7 +31,7 @@ class EmbeddingManager:
         LOSS_SCALE: Scaling factor for loss function given by maximum absolute value of material coefficients.
         materials_refractive_indices: Refractive indices of materials. Shape: (num_materials, |wavelengths|).
         model: Embedding model.
-        SAVEPATH: Pathfor saving / loading embeddings.
+        SAVEPATH: Path for saving / loading embeddings.
         embeddings: Embeddings model parameter. Shape: (num_materials, embedding_dim).
 
     Methods:
@@ -53,7 +55,8 @@ class EmbeddingManager:
         self.materials_refractive_indices = torch.stack([m.get_refractive_indices() for m in self.materials])
         # pca_lowrank instead of pca?
         self.pca = PCA(n_components = CM().get('material_embedding.dim'))
-        self.SAVEPATH = f'data/material_embedding/embeddings_{self.hash_materials()}.pt'
+        own_path = os.path.realpath(__file__)
+        self.SAVEPATH = os.path.join(os.path.dirname(os.path.dirname(own_path)), f'material_embedding/embeddings_{self.hash_materials()}.pt')
         self.scale_coeffs = []
         self.load_pca()
 
