@@ -5,6 +5,7 @@ sys.path.append(sys.path[0] + '/..')
 from data.values.ReflectivityPattern import ReflectivityPattern
 from data.values.Coating import Coating
 from utils.ConfigManager import ConfigManager as CM
+from data.dataset_generation.CompletePropsGenerator import CompletePropsGenerator
 
 class RandomModel(BaseModel):
     """
@@ -16,9 +17,17 @@ class RandomModel(BaseModel):
     def __init__(self):
         """Initialise a RandomModel instance."""
         super().__init__()
-        self.num_layers = CM().get('num_layers')
 
     def predict(self, target: ReflectivityPattern):
-        thicknesses_tensor = torch.rand((self.num_layers))
-        refractive_indices_tensor = torch.rand((self.num_layers))
-        return Coating(thicknesses_tensor, refractive_indices_tensor)
+        num_points = target.get_batch_size()
+
+        # this isn't super pretty
+        generator = CompletePropsGenerator()
+
+        materials_indices = generator.make_materials_choice(num_points)
+        thicknesses = generator.make_thicknesses(materials_indices)
+        embedding = generator.get_materials_embeddings(materials_indices)
+        coating_encoding = torch.cat([thicknesses[:, :, None], embedding], dim=2).float()
+        coating = Coating(coating_encoding)
+
+        return coating
