@@ -58,7 +58,8 @@ class TrainableCNN(nn.Module):
 
     def forward(self, x):
         """Propagate input through the model."""
-        x = x.view((x.shape[0], 1, 2, x.shape[1] // 2))
+        lower_bound, upper_bound = torch.chunk(x, 2, 1)
+        x = torch.stack([lower_bound, upper_bound], dim=-1)  # (batch, 2 * |wl|) --> (batch, |wl|, 2)
         out = self.conv_block_1(x)
         out = self.conv_block_2(out)
         out = self.conv_block_3(out)
