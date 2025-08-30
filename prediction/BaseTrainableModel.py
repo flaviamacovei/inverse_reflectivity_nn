@@ -58,20 +58,14 @@ class BaseTrainableModel(BaseModel, ABC):
         super().__init__()
         self.model = model
         self.init_dataloader()
-        # self.optimiser = torch.optim.Adam(self.model.parameters(), lr=CM().get('training.learning_rate'))
+        self.optimiser = torch.optim.Adam(self.model.parameters())
 
         # loss function depends on guidance of current leg
         self.loss_functions = {
             "free": self.compute_loss_free,
             "guided": self.compute_loss_guided
         }
-        # learning rate (and by extension optimiser) depends on guidance of current leg
-        self.optimisers = {
-            "free": torch.optim.Adam(self.model.parameters(), lr=CM().get('training.free_learning_rate')),
-            "guided": torch.optim.Adam(self.model.parameters(), lr=CM().get('training.guided_learning_rate'))
-        }
         self.compute_loss = None
-        self.optimiser = None
         self.current_leg = -1
         self.guidance = None
         self.checkpoint = None
@@ -102,11 +96,12 @@ class BaseTrainableModel(BaseModel, ABC):
             density = CM().get(f'training.guidance_schedule.{self.current_leg}.density')
             print(
                 f"{'-' * 50}\nOn leg {guidance}-{density}")
-            # update attributes: loss function, optimiser, dataloader,
+            # update attributes: loss function, learning rate, dataloader,
             # first run data through model, then compute loss
             # shapes might be off (+ 1 due to changes in SegmentedDataset)
             self.compute_loss = self.loss_functions[guidance]
-            self.optimiser = self.optimisers[guidance]
+            for g in self.optimiser.param_groups:
+                g['lr'] = CM().get(f'training.{guidance}_learning_rate')
             self.dataloader.load_leg(self.current_leg)
             self.guidance = guidance
 
@@ -130,7 +125,6 @@ class BaseTrainableModel(BaseModel, ABC):
                 # in free mode, reflectivity is simultaneously input and ground truth
                 # in guided mode, coating encodings are ground truth
                 labels = reflectivity if self.guidance == 'free' else coating_encoding
-                # TODO: might need to add target too for transformer
                 preds = self.get_model_output(reflectivity, coating_encoding)
                 preds = preds.reshape((reflectivity.shape[0], (CM().get('layers.max') + 2), CM().get('material_embedding.dim') + 1))
                 loss = self.compute_loss(preds, labels)
