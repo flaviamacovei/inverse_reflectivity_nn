@@ -168,6 +168,7 @@ class BaseTrainableModel(BaseModel, ABC):
         first_batch = self.dataloader[0]
         reflectivity, coating_encoding = first_batch
         reflectivity = reflectivity.to(CM().get('device'))
+        coating_encoding = coating_encoding.to(CM().get('device'))
         reflectivity = reflectivity[None]
         coating_encoding = coating_encoding[None]
         lower_bound, upper_bound = reflectivity.chunk(2, dim=1)

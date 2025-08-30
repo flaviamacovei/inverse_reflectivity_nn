@@ -276,28 +276,53 @@ class Transformer(BaseTrainableModel):
             Output of the model.
         """
 
-        src = src.view((src.shape[0], src.shape[1] // 2, 2))  # (batch, 2 * |wl|) --> (batch, |wl|, 2)
-        src_mask = torch.ones(src.shape[0], src.shape[1], device = CM().get('device')) # maybe later: mask out masked ranges
+        # src = src.view((src.shape[0], src.shape[1] // 2, 2))  # (batch, 2 * |wl|) --> (batch, |wl|, 2)
+        lower_bound, upper_bound = torch.chunk(src, 2, 1)
+        src = torch.stack([lower_bound, upper_bound], dim = -1) # (batch, 2 * |wl|) --> (batch, |wl|, 2)
+        if CM().get('transformer.src_mask'):
+            # mask out regions where lower bound is 0 and upper bound is 1
+            src_mask = ~((src[:, :, 0] == 0).to(torch.bool) & (src[:, :, 1] == 1).to(torch.bool))
+            src_mask = src_mask.to(torch.float)
+        else:
+            src_mask = torch.ones(src.shape[0], src.shape[1], device = CM().get('device'))
         encoder_output = self.model.encode(src, src_mask)
 
-        if tgt is not None:
+        if tgt is not None and len(tgt.shape) != 1:
             # in training mode, target is specified
-            tgt_mask = self.causal_mask(tgt.shape[1]) # (1, |coating|, |coating|)
+            # in training mode explicit leg, target is dummy data (len(shape) == 3) and should be ignored -> move to inference block
+            tgt_mask = self.make_tgt_mask(tgt) # (batch, 1, |coating|, |coating|)
             decoder_output = self.model.decode(encoder_output, src_mask, tgt, tgt_mask)
             return self.model.project(decoder_output)
         else:
             # in inference mode, target is not specified
             substrate = EM().get_material(CM().get('materials.substrate'))
             # beginning of any coating: thickness is 1.0, material is substrate
-            thickness = torch.ones((src.shape[0], 1, 1), device = CM().get('device')) # (batch, |coating| = 1, 1)
+            thickness = torch.ones((src.shape[0], 1, 1), device = CM().get('device')) # (batch, 1, |coating| = 1, 1)
             substrate_encoding = EM().encode([substrate])[:, None].repeat(src.shape[0], 1, 1) # (batch, |coating| = 1, 1)
             tgt = torch.cat([thickness, substrate_encoding], dim = -1) # (batch, |coating| = 1, tgt_embed_dim + 1)
             while tgt.shape[1] < self.tgt_seq_len:
-                tgt_mask = self.causal_mask(tgt.shape[1]) # (1, |coating|, |coating|)
+                tgt_mask = self.make_tgt_mask(tgt)  # (batch, 1, |coating|, |coating|), second dimension reserved for broadcasting across attn heads
                 decoder_output = self.model.decode(encoder_output, src_mask, tgt, tgt_mask)
                 projection = self.model.project(decoder_output[:, -1])[:, None] # take only the last item but keep the dimension
                 tgt = torch.cat([tgt, projection], dim = 1)
             return tgt
+
+    def make_tgt_mask(self, tgt):
+        if CM().get('transformer.tgt_struct_mask'):
+            substrate = EM().get_material(CM().get('materials.substrate'))
+            air = EM().get_material(CM().get('materials.air'))
+            masked_materials_encoding = EM().encode([substrate, air]).squeeze()[None, None] # (1, 1, 2)
+            struct_mask = tgt[:, :, 1][:, :, None].repeat(1, 1, 2) == masked_materials_encoding
+            struct_mask = torch.logical_or(struct_mask[:, :, 0], struct_mask[:, :, 1])[:, :, None] # (batch, |coating|, 1)
+            struct_mask_repeated = struct_mask.repeat(1, 1, tgt.shape[1])
+            tgt_struct_mask = struct_mask_repeated  | struct_mask_repeated.transpose(-2, -1) # (batch, |coating|, |coating|)
+        else:
+            tgt_struct_mask = torch.ones((tgt.shape[0], tgt.shape[1], tgt.shape[1]), device = CM().get('device')) # (batch, |coating|, |coating|)
+        if CM().get('transformer.tgt_caus_mask'):
+            tgt_caus_mask = self.causal_mask(tgt.shape[1]) # (1, |coating|, |coating|)
+        else:
+            tgt_caus_mask = torch.ones((tgt.shape[0], tgt.shape[1], tgt.shape[1]), device = CM().get('device')) # (batch, |coating|, |coating|)
+        return (tgt_struct_mask | tgt_caus_mask)[:, None]
 
 
     def scale_gradients(self):

@@ -1,5 +1,5 @@
 device: auto
-seed: 3
+seed: null
 num_stacks: 1
 layers:
   min: 1
@@ -30,42 +30,53 @@ theta:
   end: 0.0
   steps: 1
 air_pad: true
-stratified_sampling: true
+stratified_sampling: false
 num_layers: 7
 material_embedding:
   data_file: data/material_embedding/materials.yaml
   dim: 2
-  num_epochs: 200
-  learning_rate: 0.01
 tolerance: 0.001
-architecture: mlp
+architecture: transformer
 transformer:
-  model_dim: 16
-  num_heads: 4
+  hidden_seq_len: 500
+  d_model: 64
   num_layers: 5
-  d_ff: 1024
+  num_heads: 8
   dropout: 0.1
+  d_ff: 1024
+  src_mask: true
+  tgt_struct_mask: true
+  tgt_caus_mask: true
 training:
   guided_learning_rate: 0.0001
   free_learning_rate: 1.0e-05
   num_epochs: 500
-  batch_size: 32
+  batch_size: 3
   dataset_size: 5000
   save_model: false
   evaluate: true
   guidance_schedule:
-  - guidance: guided
-    density: complete
-    percent: 0.5
-  - guidance: guided
-    density: masked
-    percent: 0.5
+#  - guidance: guided
+#    density: complete
+#    percent: 0.25
+#  - guidance: free
+#    density: complete
+#    percent: 0.25
+#  - guidance: guided
+#    density: masked
+#    percent: 0.25
+#  - guidance: free
+#    density: masked
+#    percent: 0.25
+  - guidance: free
+    density: explicit
+    percent: 1.0
 wandb:
-  log: true
+  log: false
   project: inverse-mirrors-nn
   config:
-    architecture: mlp
+    architecture: transformer
     guided_learning_rate: 0.0001
     free_learning_rate: 0.01
     epochs: 500
-    batch_size: 32
+    batch_size: 128
