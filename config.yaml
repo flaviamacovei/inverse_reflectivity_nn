@@ -36,7 +36,12 @@ material_embedding:
   data_file: data/material_embedding/materials.yaml
   dim: 2
 tolerance: 0.001
-architecture: transformer
+architecture: mlp
+mlp:
+  hidden_dims:
+    - 128
+    - 512
+    - 64
 transformer:
   hidden_seq_len: 500
   d_model: 64
@@ -50,18 +55,18 @@ transformer:
 training:
   guided_learning_rate: 0.0001
   free_learning_rate: 1.0e-05
-  num_epochs: 500
-  batch_size: 3
-  dataset_size: 5000
+  num_epochs: 10
+  batch_size: 32
+  dataset_size: 100
   save_model: false
   evaluate: true
   guidance_schedule:
-#  - guidance: guided
-#    density: complete
-#    percent: 0.25
-#  - guidance: free
-#    density: complete
-#    percent: 0.25
+  - guidance: guided
+    density: complete
+    percent: 0.3
+  - guidance: free
+    density: complete
+    percent: 0.3
 #  - guidance: guided
 #    density: masked
 #    percent: 0.25
@@ -70,7 +75,7 @@ training:
 #    percent: 0.25
   - guidance: free
     density: explicit
-    percent: 1.0
+    percent: 0.4
 wandb:
   log: false
   project: inverse-mirrors-nn

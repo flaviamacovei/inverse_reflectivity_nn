@@ -11,11 +11,11 @@ class TrainableMLP(nn.Module):
     Trainable multilayer perceptron. Extends nn.Module.
 
     Architecture:
-        2 x |wavelengths| --> 128 --> 512 --> 64 --> output_size
+        2 x |wavelengths| --> ...hidden dimensions... --> out_dim
     See readme for details.
 
     Attributes:
-        output_size: Output size of the network. Equal to |coating| * (embedding_dim + 1)
+        out_dim: Output size of the network. Equal to |coating| * (embedding_dim + 1)
 
     Methods:
         forward: Propagate input through the model.
@@ -25,31 +25,23 @@ class TrainableMLP(nn.Module):
         """Initialise a TrainableMLP instance."""
         super().__init__()
         in_dim = 2 * CM().get('wavelengths').size()[0]
-        layer_1_features = 128
-        layer_2_features = 512
-        layer_3_features = 64
-        self.output_size = (CM().get('layers.max') + 2) * (CM().get('material_embedding.dim') + 1)
-        self.net = nn.Sequential(
-            nn.Linear(in_dim, layer_1_features, device = CM().get('device')),
-            nn.ReLU(),
-            nn.BatchNorm1d(layer_1_features),
-            nn.Linear(layer_1_features, layer_2_features, device = CM().get('device')),
-            nn.ReLU(),
-            nn.BatchNorm1d(layer_2_features),
-            nn.Linear(layer_2_features, layer_3_features, device = CM().get('device')),
-            nn.ReLU(),
-            nn.BatchNorm1d(layer_3_features),
-            nn.Linear(layer_3_features, self.output_size, device = CM().get('device')),
-            nn.ReLU()
-        )
+        self.out_dim = (CM().get('layers.max') + 2) * (CM().get('material_embedding.dim') + 1)
+        dimensions = [in_dim] + CM().get('mlp.hidden_dims') + [self.out_dim]
+        layers = []
+        for i in range(len(dimensions) - 1):
+            layers.append(nn.Linear(dimensions[i], dimensions[i + 1], device = CM().get('device')))
+            layers.append(nn.ReLU())
+        self.net = nn.ModuleList(layers)
 
     def forward(self, x):
         """Propagate input through the model."""
-        return torch.abs(self.net(x))
+        for layer in self.net:
+            x = layer(x)
+        return torch.abs(x)
 
     def get_output_size(self):
         """Return output size of the network."""
-        return self.output_size
+        return self.out_dim
 
 class MLP(BaseTrainableModel):
     """
