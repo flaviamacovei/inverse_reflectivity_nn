@@ -121,7 +121,7 @@ class BaseTrainableModel(BaseModel, ABC):
 
             epoch_loss = torch.tensor(0.0, device=CM().get('device'))
             # training loop
-            for batch in self.dataloader:
+            for i, batch in enumerate(self.dataloader):
                 self.optimiser.zero_grad()
                 reflectivity, coating_encoding = batch
                 reflectivity = reflectivity.to(CM().get('device'))
@@ -131,9 +131,12 @@ class BaseTrainableModel(BaseModel, ABC):
                 # in guided mode, coating encodings are ground truth
                 labels = reflectivity if self.guidance == 'free' else coating_encoding
                 # TODO: might need to add target too for transformer
-                preds = self.get_model_output(reflectivity)
+                preds = self.get_model_output(reflectivity, coating_encoding)
                 preds = preds.reshape((reflectivity.shape[0], (CM().get('layers.max') + 2), CM().get('material_embedding.dim') + 1))
                 loss = self.compute_loss(preds, labels)
+                if loss > 1:
+                    print(f"something's going very wrong in epoch {epoch} iteration {i}")
+                    torch.save(preds, f"out/error_in_{epoch}_{i}.pt")
                 epoch_loss += loss.item()
 
                 if CM().get('wandb.log'):
@@ -165,11 +168,16 @@ class BaseTrainableModel(BaseModel, ABC):
     def visualise_epoch(self, epoch: int):
         # visualise first item of batch
         self.model.eval()
-        reflectivity = self.dataloader[0][0][None]
+        first_batch = self.dataloader[0]
+        reflectivity, coating_encoding = first_batch
         reflectivity = reflectivity.to(CM().get('device'))
+        reflectivity = reflectivity[None]
+        coating_encoding = coating_encoding[None]
         lower_bound, upper_bound = reflectivity.chunk(2, dim=1)
         refs = ReflectivityPattern(lower_bound, upper_bound)
-        output = self.get_model_output(reflectivity)
+        # this shouldn't make problems for architectures other than transformer but if it does lmk
+        with torch.no_grad():
+            output = self.get_model_output(reflectivity, coating_encoding)
         output = output.reshape(
             (reflectivity.shape[0], (CM().get('layers.max') + 2), CM().get('material_embedding.dim') + 1))
         coating = Coating(output)
