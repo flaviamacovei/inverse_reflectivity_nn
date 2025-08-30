@@ -134,9 +134,6 @@ class BaseTrainableModel(BaseModel, ABC):
                 preds = self.get_model_output(reflectivity, coating_encoding)
                 preds = preds.reshape((reflectivity.shape[0], (CM().get('layers.max') + 2), CM().get('material_embedding.dim') + 1))
                 loss = self.compute_loss(preds, labels)
-                if loss > 1:
-                    print(f"something's going very wrong in epoch {epoch} iteration {i}")
-                    torch.save(preds, f"out/error_in_{epoch}_{i}.pt")
                 epoch_loss += loss.item()
 
                 if CM().get('wandb.log'):

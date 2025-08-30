@@ -6,6 +6,7 @@ import sys
 sys.path.append(sys.path[0] + '/..')
 from prediction.BaseTrainableModel import BaseTrainableModel
 from utils.ConfigManager import ConfigManager as CM
+from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
 
 
 class PositionalEncoding(nn.Module):
@@ -274,16 +275,36 @@ class Transformer(BaseTrainableModel):
         Returns:
             Output of the model.
         """
+
         src = src.view((src.shape[0], src.shape[1] // 2, 2))  # (batch, 2 * |wl|) --> (batch, |wl|, 2)
         src_mask = torch.ones(src.shape[0], src.shape[1], device = CM().get('device')) # maybe later: mask out masked ranges
-        tgt_mask = torch.triu(torch.ones(size = (1, tgt.shape[1], tgt.shape[1]), device = CM().get('device')), diagonal = 1).type(torch.int) == 0
         encoder_output = self.model.encode(src, src_mask)
-        decoder_output = self.model.decode(encoder_output, src_mask, tgt, tgt_mask)
-        return self.model.project(decoder_output)
+
+        if tgt is not None:
+            # in training mode, target is specified
+            tgt_mask = self.causal_mask(tgt.shape[1]) # (1, |coating|, |coating|)
+            decoder_output = self.model.decode(encoder_output, src_mask, tgt, tgt_mask)
+            return self.model.project(decoder_output)
+        else:
+            # in inference mode, target is not specified
+            substrate = EM().get_material(CM().get('materials.substrate'))
+            # beginning of any coating: thickness is 1.0, material is substrate
+            thickness = torch.ones((src.shape[0], 1, 1), device = CM().get('device')) # (batch, |coating| = 1, 1)
+            substrate_encoding = EM().encode([substrate])[:, None].repeat(src.shape[0], 1, 1) # (batch, |coating| = 1, 1)
+            tgt = torch.cat([thickness, substrate_encoding], dim = -1) # (batch, |coating| = 1, tgt_embed_dim + 1)
+            while tgt.shape[1] < self.tgt_seq_len:
+                tgt_mask = self.causal_mask(tgt.shape[1]) # (1, |coating|, |coating|)
+                decoder_output = self.model.decode(encoder_output, src_mask, tgt, tgt_mask)
+                projection = self.model.project(decoder_output[:, -1])[:, None] # take only the last item but keep the dimension
+                tgt = torch.cat([tgt, projection], dim = 1)
+            return tgt
+
 
     def scale_gradients(self):
         pass
 
+    def causal_mask(self, size):
+        return torch.triu(torch.ones(size=(1, size, size), device=CM().get('device')), diagonal=1).type(torch.int) == 0
 
     def build_transformer(self, src_seq_len: int, hidden_seq_len: int, tgt_seq_len: int, src_embed_dim: int = 2, tgt_embed_dim: int = 2, d_model: int = 512, N: int = 6, h: int = 8, dropout: float = 0.1, d_ff: int = 2048):
         # N is the number of blocks per encoder / decoder
