@@ -35,7 +35,7 @@ class ConfigManager:
         try:
             # set device
             if self.config['device'] == 'auto':
-                self.config['device'] = 'cuda' if torch.cuda.is_available() else 'cpu'
+                self.config['device'] = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
             # set random seed
             seed = self.config['seed']

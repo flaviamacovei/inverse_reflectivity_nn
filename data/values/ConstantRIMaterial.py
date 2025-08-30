@@ -30,7 +30,7 @@ class ConstantRIMaterial(BaseMaterial):
 
     def get_refractive_indices(self):
         """Return the refractive index of the material for each wavelength."""
-        result = torch.zeros_like(CM().get('wavelengths'))
+        result = torch.zeros_like(CM().get('wavelengths'), device = CM().get('device'))
         result[:] = self.refractive_index
         return result
 

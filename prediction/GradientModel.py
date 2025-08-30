@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+import time
 from scipy.optimize import minimize, Bounds, check_grad
 import sys
 sys.path.append(sys.path[0] + '/..')
@@ -17,7 +18,6 @@ class GradientModel(BaseModel):
         self.coating_length = CM().get('num_layers') + 2
         # thicknesses plus embedding dimension
         self.encoding_length = CM().get('material_embedding.dim') + 1
-        self.initialise()
 
 
     def predict(self, target: ReflectivityPattern):
@@ -27,6 +27,8 @@ class GradientModel(BaseModel):
         Args:
             target: Reflectivity pattern for which to perform prediction.
         """
+        batch_size = target.get_batch_size()
+        self.initialise(batch_size = batch_size)
         bounds = Bounds(np.zeros_like(self.init_params), np.ones_like(self.init_params))
 
         def np_loss_function(params: np.ndarray):
@@ -34,6 +36,7 @@ class GradientModel(BaseModel):
             loss, grads = self.loss_function(params, target)
             return loss.detach().cpu().numpy(), grads.detach().cpu().numpy()
 
+        start_time = time.time()
         result = minimize(
             fun = np_loss_function,
             x0 = self.init_params,
@@ -42,17 +45,20 @@ class GradientModel(BaseModel):
             bounds = bounds,
             options = {"maxiter": 1000}
         )
+        end_time = time.time()
+        print(f"this shit took {end_time - start_time} seconds")
 
         optimised_params = result.x
 
-        optimised_params = torch.from_numpy(optimised_params).reshape(self.coating_length, self.encoding_length).float()[None]
+        optimised_params = torch.from_numpy(optimised_params).reshape(batch_size, self.coating_length, self.encoding_length).float()
         optimised_params = optimised_params.to(CM().get('device'))
 
         return Coating(optimised_params)
 
-    def initialise(self, init_params = None):
-        if init_params == None:
-            init_params = np.random.randn(self.coating_length, self.encoding_length).flatten()
+    def initialise(self, init_params = None, batch_size: int = None):
+        assert init_params is not None or batch_size is not None
+        if init_params is None:
+            init_params = np.random.randn(batch_size, self.coating_length, self.encoding_length).flatten()
         self.init_params = init_params
 
 

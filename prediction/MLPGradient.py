@@ -1,5 +1,4 @@
 import torch
-import torch.nn as nn
 import sys
 sys.path.append(sys.path[0] + '/..')
 from prediction.BaseTrainableModel import BaseTrainableModel
@@ -25,6 +24,6 @@ class MLPGradient(MLP):
     def predict(self, target: ReflectivityPattern):
         mlp_prediction = super().predict(target)
         print(mlp_prediction.get_encoding().shape)
-        self.gradient.initialise(mlp_prediction.get_encoding().detach().flatten())
+        self.gradient.initialise(mlp_prediction.get_encoding().detach().cpu().numpy().flatten())
         gradient_prediction = self.gradient.predict(target)
         return gradient_prediction

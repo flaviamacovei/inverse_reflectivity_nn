@@ -34,8 +34,8 @@ class Coating():
              encoding: Concatenated tensor of thicknesses and material encodings. Shape: (batch_size, |coating|, embedding_dim + 1)
                        for one batch for one layer: encoding[0] = thickness, encoding[1:] = material encodings
         """
-        assert len(encoding.shape) == 3
-        assert encoding.shape[2] == CM().get('material_embedding.dim') + 1
+        assert len(encoding.shape) == 3, f"Encoding must have 3 dimensions, found {len(encoding.shape)}"
+        assert encoding.shape[2] == CM().get('material_embedding.dim') + 1, f"Final dimension of encoding must be embedding_dim + 1, found {encoding.shape[2]}"
         self.num_layers = encoding.shape[1]
         self.material_encodings = encoding[:, :, 1:]
         self.thicknesses = encoding[:, :, 0]

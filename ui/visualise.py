@@ -18,8 +18,8 @@ def visualise_spline(preds: ReflectivityValue = None, refs: ReflectivityPattern 
         refs: ground truth reflectivity pattern. Optional.
         filename: filename. Optional.
     """
-    assert not preds or len(preds.get_value().shape) == 2
-    assert not refs or len(refs.get_lower_bound().shape) == 2
+    assert not preds or len(preds.get_value().shape) == 2, f"preds shape must have length 2 found {len(preds.get_value().shape)}"
+    assert not refs or len(refs.get_lower_bound().shape) == 2, f"refs shape must have length 2 found {len(refs.get_lower_bound().shape)}"
     plt.clf()
 
     wavelengths_cpu = CM().get('wavelengths').to("cpu")
@@ -61,8 +61,10 @@ def visualise(preds: ReflectivityValue = None, refs: ReflectivityPattern = None,
         refs: ground truth reflectivity pattern. Optional.
         filename: filename. Optional.
     """
-    assert not preds or len(preds.get_value().shape) == 2
-    assert not refs or len(refs.get_lower_bound().shape) == 2
+    assert not preds or len(
+        preds.get_value().shape) == 2, f"preds shape must have length 2 found {len(preds.get_value().shape)}"
+    assert not refs or len(
+        refs.get_lower_bound().shape) == 2, f"refs shape must have length 2 found {len(refs.get_lower_bound().shape)}"
     plt.clf()
 
     wavelengths_cpu = CM().get('wavelengths').to("cpu")

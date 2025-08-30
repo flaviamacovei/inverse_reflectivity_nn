@@ -28,7 +28,6 @@ class EmbeddingManager:
     Attributes:
         materials: List of materials.
         num_materials: Number of materials.
-        LOSS_SCALE: Scaling factor for loss function given by maximum absolute value of material coefficients.
         materials_refractive_indices: Refractive indices of materials. Shape: (num_materials, |wavelengths|).
         model: Embedding model.
         SAVEPATH: Path for saving / loading embeddings.
@@ -51,7 +50,6 @@ class EmbeddingManager:
         self.materials_indices = dict()
         self.load_materials()
         self.num_materials = len(self.materials)
-        self.LOSS_SCALE = torch.cat([m.get_coeffs() for m in self.materials]).abs().max().item()
         self.materials_refractive_indices = torch.stack([m.get_refractive_indices() for m in self.materials])
         # pca_lowrank instead of pca?
         self.pca = PCA(n_components = CM().get('material_embedding.dim'))
