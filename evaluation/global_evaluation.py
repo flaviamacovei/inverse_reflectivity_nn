@@ -23,23 +23,33 @@ from prediction.Transformer import Transformer
 from forward.forward_tmm import coating_to_reflectivity
 from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
 
-def load_pattern():
-    lower_bound = None
-    upper_bound = None
-    for density in ['complete', 'masked', 'explicit']:
-        dataloader = DynamicDataloader(100, shuffle=False)
-        own_path = os.path.realpath(__file__)
-        filepath = os.path.join(os.path.dirname(os.path.dirname(own_path)), get_dataset_name("validation", density))
-        dataloader.load_data(filepath, weights_only=False)
-        dataset = dataloader.dataset
-        local_lower_bound, local_upper_bound = torch.chunk(dataset[:][0], 2, dim=-1)
-        local_lower_bound = local_lower_bound.to(CM().get('device'))
-        local_upper_bound = local_upper_bound.to(CM().get('device'))
-        lower_bound = local_lower_bound if lower_bound == None else torch.cat([lower_bound, local_lower_bound], dim=0)
-        upper_bound = local_upper_bound if upper_bound == None else torch.cat([upper_bound, local_upper_bound], dim=0)
-    lower_bound = lower_bound.to(CM().get('device'))
-    upper_bound = upper_bound.to(CM().get('device'))
-    return ReflectivityPattern(lower_bound=lower_bound, upper_bound=upper_bound)
+def load_pattern(type_data: str):
+    if type_data == "validation":
+        lower_bound = None
+        upper_bound = None
+        for density in ['complete', 'masked', 'explicit']:
+            dataloader = DynamicDataloader(100, shuffle=False)
+            own_path = os.path.realpath(__file__)
+            filepath = os.path.join(os.path.dirname(os.path.dirname(own_path)), get_dataset_name("validation", density))
+            dataloader.load_data(filepath, weights_only=False)
+            dataset = dataloader.dataset
+            local_lower_bound, local_upper_bound = torch.chunk(dataset[:][0], 2, dim=-1)
+            local_lower_bound = local_lower_bound.to(CM().get('device'))
+            local_upper_bound = local_upper_bound.to(CM().get('device'))
+            lower_bound = local_lower_bound if lower_bound == None else torch.cat([lower_bound, local_lower_bound], dim=0)
+            upper_bound = local_upper_bound if upper_bound == None else torch.cat([upper_bound, local_upper_bound], dim=0)
+        lower_bound = lower_bound.to(CM().get('device'))
+        upper_bound = upper_bound.to(CM().get('device'))
+        return ReflectivityPattern(lower_bound, upper_bound)
+    elif type_data == "test":
+        ownpath = os.path.realpath(__file__)
+        dataset = torch.load(os.path.join(os.path.dirname(os.path.dirname(ownpath)), "data/datasets/test_data/test_data.pt"), weights_only = False)
+        batch = dataset.tensors
+        reflectivity = batch[0].to(CM().get('device'))
+        lower_bound, upper_bound = torch.chunk(reflectivity, 2, -1)
+        return ReflectivityPattern(lower_bound, upper_bound)
+    else:
+        raise ValueError(f"Invalid type {type_data}")
 
 
 def match(input: ReflectivityValue, target: ReflectivityPattern):
@@ -61,8 +71,8 @@ def match(input: ReflectivityValue, target: ReflectivityPattern):
 
     return total_error
 
-def evaluate_model(model: BaseModel):
-    target = load_pattern()
+def evaluate_model(model: BaseModel, type_data: str):
+    target = load_pattern(type_data)
     coating = model.predict(target)
     preds = coating_to_reflectivity(coating)
     num_points = target.get_batch_size()
@@ -78,7 +88,7 @@ def evaluate_error(error):
     q_75 = error.quantile(0.75).item()
     return {'min': min, 'q_25': q_25, 'mean': mean, 'median': median, 'q_75': q_75, 'max': max}
 
-def evaluate_all_models():
+def evaluate_all_models(type_data: str):
     results = {
         'model': [],
         'min': [],
@@ -92,9 +102,9 @@ def evaluate_all_models():
         'random': RandomModel,
         'transformer': Transformer,
         'gradient': GradientModel,
-        # 'mlp': MLP,
-        # 'mlp+gradient': MLPGradient,
-        # 'cnn': CNN,
+        'mlp': MLP,
+        'mlp+gradient': MLPGradient,
+        'cnn': CNN,
     }
     for type in model_classes.keys():
         ModelClass = model_classes[type]
@@ -114,13 +124,12 @@ def evaluate_all_models():
                     )
                 model.train()
 
-        evaluation = evaluate_model(model)
+        evaluation = evaluate_model(model, type_data)
         for key in results.keys():
             if key == 'model':
                 results[key].append(type)
             else:
                 results[key].append(evaluation[key])
-        print(f"Finished evaluating {type} model.")
     results = pd.DataFrame(results)
     return results
 
@@ -137,6 +146,8 @@ def remove_files():
 
 
 if __name__ == '__main__':
-    results = evaluate_all_models()
-    results.to_csv("out/config_2.csv")
-    print(results)
+    for type_data in ['validation', 'test']:
+        results = evaluate_all_models(type_data)
+        # results.to_csv(f"out/config_2_{type_data}.csv")
+        print("-" * 50 + f"\n{type_data.upper()} DATA\n" + "-" * 50)
+        print(results)
