@@ -21,6 +21,7 @@ from prediction.CNN import CNN
 from prediction.MLPGradient import MLPGradient
 from prediction.Transformer import Transformer
 from forward.forward_tmm import coating_to_reflectivity
+from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
 
 def load_pattern():
     lower_bound = None
@@ -75,6 +76,34 @@ def evaluate_error(error):
     q_75 = error.quantile(0.75).item()
     return {'min': min, 'q_25': q_25, 'mean': mean, 'median': median, 'q_75': q_75, 'max': max}
 
+def retrieve_loaded_model(type):
+    ownpath = os.path.realpath(__file__)
+    models_data_file = os.path.join(os.path.dirname(os.path.dirname(ownpath)), "out/models/models_metadata.yaml")
+    props_dict = {
+        "architecture": type,
+        "model_details": CM().get(type),
+        "num_layers": CM().get('num_layers'),
+        "min_wl": CM().get('wavelengths')[0].item(),
+        "max_wl": CM().get('wavelengths')[-1].item(),
+        "wl_step": len(CM().get('wavelengths')),
+        "polarisation": CM().get('polarisation'),
+        "materials_hash": EM().hash_materials(),
+        "num_materials": len(CM().get('materials.thin_films')),
+        "theta": CM().get('theta').item(),
+        "air_pad": CM().get('air_pad'),
+        "stratified_sampling": CM().get('stratified_sampling'),
+        "tolerance": CM().get('tolerance'),
+        "num_points": CM().get('training.dataset_size'),
+        "epochs": CM().get('training.num_epochs')
+    }
+    if os.path.exists(models_data_file):
+        with open(models_data_file, "r") as f:
+            content = yaml.safe_load(f)
+            # search for properties dictionary match in metadata
+            for model in content["models"]:
+                if model["properties"] == props_dict:
+                    return os.path.join(os.path.dirname(os.path.dirname(ownpath)), model["title"])
+    return None
 
 def evaluate_all_models():
     results = {
@@ -89,21 +118,28 @@ def evaluate_all_models():
     model_classes = {
         'random': RandomModel,
         'gradient': GradientModel,
-        'mlp': MLP,
-        'mlp+graidnet': MLPGradient,
-        'cnn': CNN,
-        # 'transformer': Transformer,
+        # 'mlp': MLP,
+        # 'mlp+gradient': MLPGradient,
+        # 'cnn': CNN,
+        'transformer': Transformer,
     }
     for type in model_classes.keys():
         ModelClass = model_classes[type]
         model = ModelClass()
         if isinstance(model, BaseTrainableModel):
-            if CM().get('wandb.log'):
-                wandb.init(
-                    project=CM().get('wandb.project'),
-                    config=CM().get('wandb.config')
-                )
-            model.train()
+            model_filename = retrieve_loaded_model(type)
+            if model_filename is not None:
+                trainable_model = torch.load(model_filename, weights_only = False)
+                model.model = trainable_model
+            else:
+                print(f"Saved {type} model not found. Performing training...")
+                if CM().get('wandb.log'):
+                    wandb.init(
+                        project=CM().get('wandb.project'),
+                        config=CM().get('wandb.config')
+                    )
+                model.train()
+
         evaluation = evaluate_model(model)
         for key in results.keys():
             if key == 'model':

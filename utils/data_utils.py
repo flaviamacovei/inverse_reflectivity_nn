@@ -13,6 +13,8 @@ def get_dataset_name(split: str, density: str):
         split: "training" or "validation".
         density: "complete", "masked", or "explicit".
     """
+    ownpath = os.path.realpath(__file__)
+
     if split == "validation":
         # all validation datasets have 100 points
         num_points = 100
@@ -43,7 +45,7 @@ def get_dataset_name(split: str, density: str):
             # search for properties dictionary match in metadata
             for dataset in content["datasets"]:
                 if dataset["properties"] == props_dict:
-                    return dataset["title"]
+                    return os.path.join(os.path.dirname(os.path.dirname(ownpath)), dataset["title"])
     return None
 
 
