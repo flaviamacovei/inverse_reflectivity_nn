@@ -80,3 +80,10 @@ class GradientModel(BaseModel):
 
         # print(f"loss: {loss}, grad norm: {torch.linalg.norm(grads):.3e}")
         return loss, grads
+
+    def get_architecture_name(self):
+        """
+        Return name of model architecture.
+        """
+        return "gradient"
+

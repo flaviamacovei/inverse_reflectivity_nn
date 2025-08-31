@@ -26,3 +26,10 @@ class BaseModel(ABC):
             target: Reflectivity pattern for which to perform prediction.
         """
         pass
+
+    @abstractmethod
+    def get_architecture_name(self):
+        """
+        Return name of model architecture. Must be implemented by subclasses.
+        """
+        pass

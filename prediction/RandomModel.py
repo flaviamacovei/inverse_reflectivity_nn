@@ -31,3 +31,9 @@ class RandomModel(BaseModel):
         coating = Coating(coating_encoding)
 
         return coating
+
+    def get_architecture_name(self):
+        """
+        Return name of model architecture.
+        """
+        return "random"

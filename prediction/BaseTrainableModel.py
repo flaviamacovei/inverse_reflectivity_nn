@@ -189,10 +189,9 @@ class BaseTrainableModel(BaseModel, ABC):
 
     def save_model(self):
         MODEL_METADATA = "out/models/models_metadata.yaml"
-        model_filename = get_unique_filename(f"out/models/model_{short_hash(self.model)}.pt")
-
         props_dict = {
-            "architecture": CM().get('architecture'),
+            "architecture": self.get_architecture_name(),
+            "model_details": CM().get(self.get_architecture_name()),
             "num_layers": CM().get('num_layers'),
             "min_wl": CM().get('wavelengths')[0].item(),
             "max_wl": CM().get('wavelengths')[-1].item(),
@@ -207,6 +206,8 @@ class BaseTrainableModel(BaseModel, ABC):
             "num_points": CM().get('training.dataset_size'),
             "epochs": CM().get('training.num_epochs')
         }
+        model_filename = get_unique_filename(f"out/models/model_{short_hash(props_dict)}.pt")
+
         if not os.path.exists(MODEL_METADATA):
             # create file if it does not exist
             with open(MODEL_METADATA, "w") as f:

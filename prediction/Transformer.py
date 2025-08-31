@@ -276,7 +276,6 @@ class Transformer(BaseTrainableModel):
             Output of the model.
         """
 
-        # src = src.view((src.shape[0], src.shape[1] // 2, 2))  # (batch, 2 * |wl|) --> (batch, |wl|, 2)
         lower_bound, upper_bound = torch.chunk(src, 2, 1)
         src = torch.stack([lower_bound, upper_bound], dim = -1) # (batch, 2 * |wl|) --> (batch, |wl|, 2)
         if CM().get('transformer.src_mask'):
@@ -322,7 +321,7 @@ class Transformer(BaseTrainableModel):
             tgt_caus_mask = self.causal_mask(tgt.shape[1]) # (1, |coating|, |coating|)
         else:
             tgt_caus_mask = torch.ones((tgt.shape[0], tgt.shape[1], tgt.shape[1]), device = CM().get('device')) # (batch, |coating|, |coating|)
-        return (tgt_struct_mask | tgt_caus_mask)[:, None]
+        return (tgt_struct_mask.to(torch.bool) | tgt_caus_mask.to(torch.bool))[:, None]
 
 
     def scale_gradients(self):
@@ -379,3 +378,9 @@ class Transformer(BaseTrainableModel):
                 nn.init.xavier_uniform_(p)
 
         return transformer
+
+    def get_architecture_name(self):
+        """
+        Return name of model architecture.
+        """
+        return "transformer"

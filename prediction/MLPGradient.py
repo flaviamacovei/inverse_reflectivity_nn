@@ -27,3 +27,9 @@ class MLPGradient(MLP):
         self.gradient.initialise(mlp_prediction.get_encoding().detach().cpu().numpy().flatten())
         gradient_prediction = self.gradient.predict(target)
         return gradient_prediction
+
+    def get_architecture_name(self):
+        """
+        Return name of model architecture.
+        """
+        return "mlp+gradient"

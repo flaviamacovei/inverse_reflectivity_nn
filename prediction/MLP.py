@@ -72,3 +72,10 @@ class MLP(BaseTrainableModel):
     def scale_gradients(self):
         if self.guidance == "free":
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+
+    def get_architecture_name(self):
+        """
+        Return name of model architecture.
+        """
+        return "mlp"
+

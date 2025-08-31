@@ -100,3 +100,9 @@ class CNN(BaseTrainableModel):
 
     def scale_gradients(self):
         pass
+
+    def get_architecture_name(self):
+        """
+        Return name of model architecture.
+        """
+        return "cnn"
