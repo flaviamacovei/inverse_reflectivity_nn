@@ -48,6 +48,35 @@ def get_dataset_name(split: str, density: str):
                     return os.path.join(os.path.dirname(os.path.dirname(ownpath)), dataset["title"])
     return None
 
+def get_loaded_model_name(type):
+    ownpath = os.path.realpath(__file__)
+    models_data_file = os.path.join(os.path.dirname(os.path.dirname(ownpath)), "out/models/models_metadata.yaml")
+    props_dict = {
+        "architecture": type,
+        "model_details": CM().get(type),
+        "num_layers": CM().get('num_layers'),
+        "min_wl": CM().get('wavelengths')[0].item(),
+        "max_wl": CM().get('wavelengths')[-1].item(),
+        "wl_step": len(CM().get('wavelengths')),
+        "polarisation": CM().get('polarisation'),
+        "materials_hash": EM().hash_materials(),
+        "num_materials": len(CM().get('materials.thin_films')),
+        "theta": CM().get('theta').item(),
+        "air_pad": CM().get('air_pad'),
+        "stratified_sampling": CM().get('stratified_sampling'),
+        "tolerance": CM().get('tolerance'),
+        "num_points": CM().get('training.dataset_size'),
+        "epochs": CM().get('training.num_epochs')
+    }
+    if os.path.exists(models_data_file):
+        with open(models_data_file, "r") as f:
+            content = yaml.safe_load(f)
+            # search for properties dictionary match in metadata
+            for model in content["models"]:
+                if model["properties"] == props_dict:
+                    return os.path.join(os.path.dirname(os.path.dirname(ownpath)), model["title"])
+    return None
+
 
 def load_config(config_id: int):
     configs = {

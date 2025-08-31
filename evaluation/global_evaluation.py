@@ -11,7 +11,7 @@ from utils.ConfigManager import ConfigManager as CM
 from data.dataloaders.DynamicDataloader import DynamicDataloader
 from data.values.ReflectivityPattern import ReflectivityPattern
 from data.values.ReflectivityValue import ReflectivityValue
-from utils.data_utils import get_dataset_name
+from utils.data_utils import get_dataset_name, get_loaded_model_name
 from prediction.BaseModel import BaseModel
 from prediction.RandomModel import RandomModel
 from prediction.BaseTrainableModel import BaseTrainableModel
@@ -37,6 +37,8 @@ def load_pattern():
         local_upper_bound = local_upper_bound.to(CM().get('device'))
         lower_bound = local_lower_bound if lower_bound == None else torch.cat([lower_bound, local_lower_bound], dim=0)
         upper_bound = local_upper_bound if upper_bound == None else torch.cat([upper_bound, local_upper_bound], dim=0)
+    lower_bound = lower_bound.to(CM().get('device'))
+    upper_bound = upper_bound.to(CM().get('device'))
     return ReflectivityPattern(lower_bound=lower_bound, upper_bound=upper_bound)
 
 
@@ -76,35 +78,6 @@ def evaluate_error(error):
     q_75 = error.quantile(0.75).item()
     return {'min': min, 'q_25': q_25, 'mean': mean, 'median': median, 'q_75': q_75, 'max': max}
 
-def retrieve_loaded_model(type):
-    ownpath = os.path.realpath(__file__)
-    models_data_file = os.path.join(os.path.dirname(os.path.dirname(ownpath)), "out/models/models_metadata.yaml")
-    props_dict = {
-        "architecture": type,
-        "model_details": CM().get(type),
-        "num_layers": CM().get('num_layers'),
-        "min_wl": CM().get('wavelengths')[0].item(),
-        "max_wl": CM().get('wavelengths')[-1].item(),
-        "wl_step": len(CM().get('wavelengths')),
-        "polarisation": CM().get('polarisation'),
-        "materials_hash": EM().hash_materials(),
-        "num_materials": len(CM().get('materials.thin_films')),
-        "theta": CM().get('theta').item(),
-        "air_pad": CM().get('air_pad'),
-        "stratified_sampling": CM().get('stratified_sampling'),
-        "tolerance": CM().get('tolerance'),
-        "num_points": CM().get('training.dataset_size'),
-        "epochs": CM().get('training.num_epochs')
-    }
-    if os.path.exists(models_data_file):
-        with open(models_data_file, "r") as f:
-            content = yaml.safe_load(f)
-            # search for properties dictionary match in metadata
-            for model in content["models"]:
-                if model["properties"] == props_dict:
-                    return os.path.join(os.path.dirname(os.path.dirname(ownpath)), model["title"])
-    return None
-
 def evaluate_all_models():
     results = {
         'model': [],
@@ -117,19 +90,20 @@ def evaluate_all_models():
     }
     model_classes = {
         'random': RandomModel,
+        'transformer': Transformer,
         'gradient': GradientModel,
         # 'mlp': MLP,
         # 'mlp+gradient': MLPGradient,
         # 'cnn': CNN,
-        'transformer': Transformer,
     }
     for type in model_classes.keys():
         ModelClass = model_classes[type]
         model = ModelClass()
         if isinstance(model, BaseTrainableModel):
-            model_filename = retrieve_loaded_model(type)
+            model_filename = get_loaded_model_name(type)
             if model_filename is not None:
                 trainable_model = torch.load(model_filename, weights_only = False)
+                trainable_model = trainable_model.to(CM().get('device'))
                 model.model = trainable_model
             else:
                 print(f"Saved {type} model not found. Performing training...")
@@ -146,7 +120,7 @@ def evaluate_all_models():
                 results[key].append(type)
             else:
                 results[key].append(evaluation[key])
-
+        print(f"Finished evaluating {type} model.")
     results = pd.DataFrame(results)
     return results
 
