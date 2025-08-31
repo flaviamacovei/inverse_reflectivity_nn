@@ -167,7 +167,6 @@ class BaseTrainableModel(BaseModel, ABC):
         coating_encoding = coating_encoding[None]
         lower_bound, upper_bound = reflectivity.chunk(2, dim=1)
         refs = ReflectivityPattern(lower_bound, upper_bound)
-        # this shouldn't make problems for architectures other than transformer but if it does lmk
         with torch.no_grad():
             output = self.get_model_output(reflectivity, coating_encoding)
         output = output.reshape(

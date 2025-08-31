@@ -24,7 +24,7 @@ class TrainableMLP(nn.Module):
     def __init__(self):
         """Initialise a TrainableMLP instance."""
         super().__init__()
-        in_dim = 2 * CM().get('wavelengths').size()[0]
+        in_dim = 2 * CM().get('wavelengths').shape[0]
         self.out_dim = (CM().get('layers.max') + 2) * (CM().get('material_embedding.dim') + 1)
         dimensions = [in_dim] + CM().get('mlp.hidden_dims') + [self.out_dim]
         layers = []
