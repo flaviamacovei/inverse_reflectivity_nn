@@ -48,12 +48,14 @@ def get_dataset_name(split: str, density: str):
                     return os.path.join(os.path.dirname(os.path.dirname(ownpath)), dataset["title"])
     return None
 
-def get_saved_model_path(type):
-    ownpath = os.path.realpath(__file__)
-    models_data_file = os.path.join(os.path.dirname(os.path.dirname(ownpath)), "out/models/models_metadata.yaml")
+def get_props_dict(attributes: dict = None):
+    """
+    read properties from config and augment with attributes if provided
+    """
+    # properties read from config
     props_dict = {
-        "architecture": type,
-        "model_details": CM().get(type),
+        "architecture": CM().get('architecture'),
+        "model_details": CM().get(CM().get('architecture')),
         "num_layers": CM().get('num_layers'),
         "min_wl": CM().get('wavelengths')[0].item(),
         "max_wl": CM().get('wavelengths')[-1].item(),
@@ -68,6 +70,27 @@ def get_saved_model_path(type):
         "num_points": CM().get('training.dataset_size'),
         "epochs": CM().get('training.num_epochs')
     }
+    # architecture is special: it also is the reference to the model_details
+    if "architecture" in attributes.keys():
+        props_dict['model_details'] = CM().get(attributes['architecture'])
+    if attributes is not None:
+        # augment with attributes
+        for key, value in attributes.items():
+            if key in props_dict.keys() and isinstance(value, dict) and isinstance(props_dict[key], dict):
+                # key existing in both dictionaries and values are dictionaries
+                # merge dictionaries where value from attributes takes precedence
+                props_dict[key] = {**props_dict[key], **value}
+            else:
+                # key not existing in props_dict / value not of type dictionary
+                #               add              /          overwrite
+                props_dict[key] = value
+    return props_dict
+
+def get_saved_model_path(attributes = None):
+    props_dict = get_props_dict(attributes)
+    ownpath = os.path.realpath(__file__)
+    models_data_file = os.path.join(os.path.dirname(os.path.dirname(ownpath)), "out/models/models_metadata.yaml")
+
     if os.path.exists(models_data_file):
         with open(models_data_file, "r") as f:
             content = yaml.safe_load(f)

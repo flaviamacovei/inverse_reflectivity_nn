@@ -303,17 +303,25 @@ class BaseTrainableModel(BaseModel, ABC):
         """
         pass
 
-    def load_or_train(self):
-        type = self.get_architecture_name()
-        model_filename = get_saved_model_path(type)
+    def load_or_train(self, attributes: dict = None):
+        architecture = self.get_architecture_name()
+        if attributes is None:
+            attributes = {'architecture': architecture}
+        else:
+            attributes = {**{'architecture': architecture}, **attributes}
+        model_filename = get_saved_model_path(attributes = attributes)
         if model_filename is None:
-            print(f"Saved {type} model not found. Performing training...")
+            print(f"Saved {architecture} model not found. Performing training...")
+            # update config attributes
+            CM().set(attributes)
             if CM().get('wandb.log'):
                 wandb.init(
                     project=CM().get('wandb.project'),
                     config=CM().get('wandb.config')
                 )
             self.train()
+            # restore config to original state
+            CM().reset()
         else:
             self.model = torch.load(model_filename, weights_only = False)
             self.model = self.model.to(CM().get('device'))
