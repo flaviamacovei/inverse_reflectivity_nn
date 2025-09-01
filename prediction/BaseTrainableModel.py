@@ -20,6 +20,7 @@ from utils.os_utils import short_hash
 from data.dataloaders.DynamicDataloader import DynamicDataloader
 from ui.visualise import visualise
 from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
+from utils.data_utils import get_saved_model_path
 
 class BaseTrainableModel(BaseModel, ABC):
     """
@@ -265,9 +266,7 @@ class BaseTrainableModel(BaseModel, ABC):
             preds: Model output.
             labels: Ground truth coating encoding.
         """
-        batch_size = preds.shape[0]
-        num_layers = preds.shape[1]
-        encoding_size = preds.shape[2]
+        batch_size, num_layers, encoding_size = preds.shape
         scale_mean = batch_size * num_layers * encoding_size
         return torch.sum((preds - labels) ** 2) / scale_mean
 
@@ -304,10 +303,21 @@ class BaseTrainableModel(BaseModel, ABC):
         """
         pass
 
-    def load(self, filename: str, weights_only: bool = True):
-        """Load the model from a file."""
-        self.model = torch.load(filename, weights_only = weights_only)
-        self.model.to(CM().get('device'))
+    def load_or_train(self):
+        type = self.get_architecture_name()
+        model_filename = get_saved_model_path(type)
+        if model_filename is None:
+            print(f"Saved {type} model not found. Performing training...")
+            if CM().get('wandb.log'):
+                wandb.init(
+                    project=CM().get('wandb.project'),
+                    config=CM().get('wandb.config')
+                )
+            self.train()
+        else:
+            self.model = torch.load(model_filename, weights_only = False)
+            self.model = self.model.to(CM().get('device'))
+
 
 
     @abstractmethod

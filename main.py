@@ -29,7 +29,7 @@ from data.dataset_generation.CompletePatternGenerator import CompletePatternGene
 from data.dataset_generation.MaskedPatternGenerator import MaskedPatternGenerator
 from data.dataset_generation.ExplicitPatternGenerator import ExplicitPatternGenerator
 from tmm_clean.tmm_core import compute_multilayer_optics
-from utils.data_utils import get_loaded_model_name
+from utils.data_utils import get_saved_model_path
 
 def notify():
     os.system("echo -ne '\007'")
@@ -51,7 +51,7 @@ def main():
 
     target = ReflectivityPattern(lower_bound[None], upper_bound[None])
     model = MLP()
-    model.load("out/models/model_33543.pt")
+    model.load_or_train()
     coating = model.predict(target)
     print(coating)
     preds = coating_to_reflectivity(coating)
@@ -61,76 +61,6 @@ def main():
     # lower_bound, upper_bound = point[0][None].chunk(2, dim = 1)
     # visualise(refs = ReflectivityPattern(lower_bound, upper_bound), filename = "test")
     notify()
-
-def overview():
-    overview = pd.DataFrame(columns = ["prediction type", "num layers", "num materials", "validation error", "test error", "filename"])
-    prediction_types = ["mlp", "cnn"]
-    num_layers = range(1, 23)
-    num_materials = range(1, 10)
-    combinations = list(product(prediction_types, num_layers, num_materials))
-    overview["prediction type"] = [combination[0] for combination in combinations]
-    overview["num layers"] = [combination[1] for combination in combinations]
-    overview["num materials"] = [combination[2] for combination in combinations]
-
-    MODEL_METADATA = "out/models/models_metadata.yaml"
-    if not os.path.exists(MODEL_METADATA):
-        raise FileNotFoundError(f"No file {MODEL_METADATA}")
-    models = {
-        "mlp": MLP,
-        "cnn": CNN,
-        "transformer": Transformer
-    }
-
-    for idx, row in overview.iterrows():
-        rowdict = dict(row)
-        CM().set_layers_to(rowdict['num layers'])
-        props_dict = {
-            "architecture": rowdict["prediction type"],
-            "num_layers": rowdict["num layers"],
-            "min_wl": CM().get('wavelengths')[0].item(),
-            "max_wl": CM().get('wavelengths')[-1].item(),
-            "wl_step": len(CM().get('wavelengths')),
-            "polarisation": CM().get('polarisation'),
-            "num_materials": rowdict["num materials"],
-            "theta": CM().get('theta').item(),
-            "air_pad": CM().get('air_pad'),
-            "stratified_sampling": CM().get('stratified_sampling'),
-            "tolerance": CM().get('tolerance'),
-            "num_points": CM().get('training.dataset_size')
-        }
-        filename = ''
-        with open(MODEL_METADATA, "r") as f:
-            content = yaml.safe_load(f)
-            for model in content['models']:
-                if set(props_dict.items()).issubset(model['properties'].items()):
-                    filename = model['title']
-                    break
-        if filename == '':
-            continue
-
-        Model = models[rowdict['prediction type']]
-        model = Model()
-        model.load(filename, weights_only = False)
-        try:
-            validation_errors = evaluate_model(model)
-        except FileNotFoundError:
-            split = "validation"
-            generators = {
-                "complete": CompletePatternGenerator,
-                "masked": MaskedPatternGenerator,
-                "explicit": ExplicitPatternGenerator
-            }
-            generate_dataset(generators, split)
-            validation_errors = evaluate_model(model)
-        validation_error = sum(validation_errors)
-        test_error = test_model(model)
-        overview.loc[idx, 'validation error'] = validation_error
-        overview.loc[idx, 'test error'] = test_error
-        overview.loc[idx, 'filename'] = filename
-
-    overview.dropna(axis = 0, subset = ['validation error', 'test error', 'filename'], inplace = True)
-
-    overview.to_csv("out/overview.csv")
 
 def visualise_test_data(architecture: str = None):
     if architecture is not None:
@@ -144,7 +74,7 @@ def visualise_test_data(architecture: str = None):
         ModelClass = models_types[architecture]
         model = ModelClass()
         if isinstance(model, BaseTrainableModel):
-            model_filename = get_loaded_model_name(architecture)
+            model_filename = get_saved_model_path(architecture)
             if model_filename is not None:
                 trainable_model = torch.load(model_filename, weights_only = False)
                 trainable_model = trainable_model.to(CM().get('device'))
@@ -163,7 +93,7 @@ def visualise_test_data(architecture: str = None):
             preds = coating_to_reflectivity(predicted_coating)
         else:
             preds = None
-        visualise(refs=target, preds=preds, filename=f"test_data_{architecture}_{i}")
+        visualise(refs=target, preds=preds, filename=f"test_data_{architecture}_2_{i}")
 
 if __name__ == "__main__":
     # overview()
@@ -184,5 +114,5 @@ if __name__ == "__main__":
     # model.model = trainable_model
     # model.visualise_attention(pattern, label)
 
-    visualise_test_data('gradient')
+    visualise_test_data('transformer')
     print("<3")

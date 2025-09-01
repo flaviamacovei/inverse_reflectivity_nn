@@ -13,8 +13,6 @@ def score_model(model):
     test_model(model)
 
 if __name__ == "__main__":
-    # model name must be passed as first argument
-    saved_model_file = sys.argv[1]
     # map architecture specified in config to model classes
     models = {
         "gradient": GradientModel,
@@ -25,5 +23,5 @@ if __name__ == "__main__":
     Model = models[CM().get('architecture')]
 
     model = Model()
-    model.load(f"out/models/{saved_model_file}")
+    model.load_or_train()
     score_model(model)

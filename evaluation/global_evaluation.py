@@ -11,7 +11,7 @@ from utils.ConfigManager import ConfigManager as CM
 from data.dataloaders.DynamicDataloader import DynamicDataloader
 from data.values.ReflectivityPattern import ReflectivityPattern
 from data.values.ReflectivityValue import ReflectivityValue
-from utils.data_utils import get_dataset_name, get_loaded_model_name
+from utils.data_utils import get_dataset_name, get_saved_model_path
 from prediction.BaseModel import BaseModel
 from prediction.RandomModel import RandomModel
 from prediction.BaseTrainableModel import BaseTrainableModel
@@ -110,20 +110,7 @@ def evaluate_all_models(type_data: str):
         ModelClass = model_classes[type]
         model = ModelClass()
         if isinstance(model, BaseTrainableModel):
-            model_filename = get_loaded_model_name(type)
-            if model_filename is not None:
-                trainable_model = torch.load(model_filename, weights_only = False)
-                trainable_model = trainable_model.to(CM().get('device'))
-                model.model = trainable_model
-            else:
-                print(f"Saved {type} model not found. Performing training...")
-                if CM().get('wandb.log'):
-                    wandb.init(
-                        project=CM().get('wandb.project'),
-                        config=CM().get('wandb.config')
-                    )
-                model.train()
-
+            model.load_or_train()
         evaluation = evaluate_model(model, type_data)
         for key in results.keys():
             if key == 'model':

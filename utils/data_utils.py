@@ -48,7 +48,7 @@ def get_dataset_name(split: str, density: str):
                     return os.path.join(os.path.dirname(os.path.dirname(ownpath)), dataset["title"])
     return None
 
-def get_loaded_model_name(type):
+def get_saved_model_path(type):
     ownpath = os.path.realpath(__file__)
     models_data_file = os.path.join(os.path.dirname(os.path.dirname(ownpath)), "out/models/models_metadata.yaml")
     props_dict = {
