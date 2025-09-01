@@ -12,6 +12,7 @@ from prediction.BaseTrainableModel import BaseTrainableModel
 from prediction.GradientModel import GradientModel
 from prediction.MLP import MLP
 from prediction.CNN import CNN
+from prediction.RNN import RNN
 from prediction.Transformer import Transformer
 from data.dataloaders.DynamicDataloader import DynamicDataloader
 from data.values.Coating import Coating
@@ -36,7 +37,8 @@ def train_model():
         "gradient": GradientModel,
         "mlp": MLP,
         "cnn": CNN,
-        "transformer": Transformer
+        "rnn": RNN,
+        "transformer": Transformer,
     }
 
     if CM().get('wandb.log'):
