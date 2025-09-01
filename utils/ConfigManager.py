@@ -69,7 +69,7 @@ class ConfigManager:
             raise ValueError(f"Error loading config: {e}")
         return self.config
 
-    def get(self, key, default=None):
+    def get(self, key):
         """Return value of configuration setting by specified key."""
         keys = key.split(".")
         value = self.config
@@ -83,15 +83,22 @@ class ConfigManager:
                 if index < len(value):
                     value = value[index]
                 else:
-                    return default
+                    raise IndexError(f"Index {index} out of range for list at '{'.'.join(keys[:keys.index(k)])}'")
             else:
-                return default
+                raise KeyError(f"Key {k} not found at '{'.'.join(keys[:keys.index(k)])}'")
         return value
 
-    def set_layers_to(self, num_layers: int):
-        self.config["layers"]["max"] = num_layers
-        self.config["num_layers"] = num_layers
+    def set(self, attributes: dict()):
+        # set specified attributes in config
+        for key, value in attributes.items():
+            if key in self.config.keys() and isinstance(value, dict) and isinstance(self.config[key], dict):
+                # key existing in both dictionaries and values are dictionary
+                # merge dictionaries where value from attributes takes precedence
+                self.config[key] = {**self.config[key], **value}
+            else:
+                # key not existing in props_dict / value not of type dictionary
+                #               add              /          overwrite
+                self.config[key] = value
 
-    def set_seed_to(self, seed: int):
-        random.seed(seed)
-        torch.manual_seed(seed)
+    def reset(self):
+        self._load(dir)
