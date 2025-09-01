@@ -31,9 +31,7 @@ from data.dataset_generation.MaskedPatternGenerator import MaskedPatternGenerato
 from data.dataset_generation.ExplicitPatternGenerator import ExplicitPatternGenerator
 from tmm_clean.tmm_core import compute_multilayer_optics
 from utils.data_utils import get_saved_model_path
-
-def notify():
-    os.system("echo -ne '\007'")
+from ui.cl_interact import ding
 
 def main():
     dataloader = DynamicDataloader(batch_size = 1, shuffle = False)
@@ -61,7 +59,7 @@ def main():
     # print(f"refractive indices: {coating.get_refractive_indices()}")
     # lower_bound, upper_bound = point[0][None].chunk(2, dim = 1)
     # visualise(refs = ReflectivityPattern(lower_bound, upper_bound), filename = "test")
-    notify()
+    ding()
 
 def visualise_test_data(architecture: str = None):
     if architecture is not None:

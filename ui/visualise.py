@@ -2,6 +2,7 @@ import torch
 import matplotlib.pyplot as plt
 from scipy.interpolate import make_interp_spline
 import numpy as np
+import pandas as pd
 import sys
 sys.path.append(sys.path[0] + '/..')
 from data.values.ReflectivityPattern import ReflectivityPattern
@@ -81,4 +82,31 @@ def visualise(preds: ReflectivityValue = None, refs: ReflectivityPattern = None,
         plt.plot(wavelengths_cpu, preds.get_value()[0].detach().cpu(), color='#D86ECC')
 
     plt.ylim(0, 1.1)
+    plt.savefig(f"out/{filename}.png")
+
+def visualise_errors(errors: pd.DataFrame, filename: str = "errors_graph", log_scale: bool = False):
+    sorted = errors.sort_values(by='mean').reset_index(drop=True)
+    boxplot_data = []
+    for _, row in sorted.iterrows():
+        box = {
+            'med': row['median'],
+            'mean': row['mean'],
+            'q1': row['q_25'],
+            'q3': row['q_75'],
+            'whislo': row['min'],
+            'whishi': row['max'],
+        }
+        boxplot_data.append(box)
+    fig, ax = plt.subplots(figsize = (1.2 * len(sorted), 6))
+    ax.bxp(boxplot_data, showfliers = False, showmeans = True)
+    if log_scale:
+        ax.set_yscale('log')
+    ax.set_xticks(np.arange(1, len(sorted) + 1))
+    ax.set_xticklabels(sorted['model'], rotation=45, ha='right')
+    y_max = sorted['max'].max()
+    ax.set_ylim(y_max * -0.05, y_max * 1.05)  # epsilon = 5% of max
+    ax.set_xlabel('Model')
+    ax.set_ylabel('Error')
+    ax.set_title('Models Prediction Error')
+    plt.tight_layout()
     plt.savefig(f"out/{filename}.png")

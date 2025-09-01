@@ -22,6 +22,8 @@ from prediction.Hybrid import Hybrid
 from prediction.Transformer import Transformer
 from forward.forward_tmm import coating_to_reflectivity
 from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
+from ui.visualise import visualise_errors
+from ui.cl_interact import ding
 
 def load_pattern(type_data: str):
     if type_data == "validation":
@@ -99,7 +101,7 @@ def evaluate_all_models(type_data: str):
         'max': []
     }
     model_classes = {
-        'random': {'class': RandomModel},
+        # 'random': {'class': RandomModel},
         'gradient': {'class': GradientModel},
         # 'mlp': {'class': MLP},
         # 'mlp+gradient': {'class': lambda: Hybrid('mlp')},
@@ -150,4 +152,6 @@ if __name__ == '__main__':
                                'display.precision', 3,
                                ):
             print(results)
-
+        visualise_errors(results, f"{type_data}_errors_graph", log_scale = True)
+        results.to_csv(f"out/{type_data}_errors.csv")
+        ding()
