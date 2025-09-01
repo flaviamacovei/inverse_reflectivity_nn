@@ -43,6 +43,11 @@ class ConfigManager:
                 random.seed(seed)
                 torch.manual_seed(seed)
 
+            # normalise guidance schedule durations
+            total_duration = sum([leg['percent'] for leg in self.config['training']['guidance_schedule']])
+            for leg in self.config['training']['guidance_schedule']:
+                leg['percent'] /= total_duration
+
             # make linspaces
             self.config['wavelengths'] = torch.linspace(self.config['wavelengths']['start'], self.config['wavelengths']['end'], self.config['wavelengths']['steps'], device = self.config['device'])
             self.config['theta'] = torch.tensor(np.linspace(self.config['theta']['start'], self.config['theta']['end'], self.config['theta']['steps']) * (np.pi / 180), dtype = torch.float32).to(self.config['device'])
