@@ -13,8 +13,9 @@ from prediction.BaseTrainableModel import BaseTrainableModel
 from prediction.CNN import CNN
 from prediction.GradientModel import GradientModel
 from prediction.MLP import MLP
-from prediction.MLPGradient import MLPGradient
+from prediction.RandomModel import RandomModel
 from prediction.Transformer import Transformer
+from prediction.Hybrid import Hybrid
 from data.dataloaders.DynamicDataloader import DynamicDataloader
 from data.values.Coating import Coating
 from ui.visualise import visualise
@@ -64,23 +65,20 @@ def main():
 
 def visualise_test_data(architecture: str = None):
     if architecture is not None:
-        models_types = {
+        model_classes = {
+            'random': RandomModel,
             'gradient': GradientModel,
             'mlp': MLP,
+            'mlp+gradient': lambda: Hybrid('mlp'),
             'cnn': CNN,
+            'cnn+gradient': lambda: Hybrid('cnn'),
             'transformer': Transformer,
-            'mlp+gradient': MLPGradient,
+            'transformer+gradient': lambda: Hybrid('transformer'),
         }
-        ModelClass = models_types[architecture]
+        ModelClass = model_classes[architecture]
         model = ModelClass()
         if isinstance(model, BaseTrainableModel):
-            model_filename = get_saved_model_path(architecture)
-            if model_filename is not None:
-                trainable_model = torch.load(model_filename, weights_only = False)
-                trainable_model = trainable_model.to(CM().get('device'))
-                model.model = trainable_model
-            else:
-                raise FileNotFoundError("Provided architecture has no saved model. Run train_model.py first.")
+            model.load_or_train()
     dataset = torch.load(f"data/datasets/test_data/test_data.pt", weights_only=False)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
     for i, batch in enumerate(dataloader):
@@ -114,5 +112,5 @@ if __name__ == "__main__":
     # model.model = trainable_model
     # model.visualise_attention(pattern, label)
 
-    visualise_test_data('transformer')
+    visualise_test_data('hybrid')
     print("<3")

@@ -1,7 +1,6 @@
 import torch
 import numpy as np
-import time
-from scipy.optimize import minimize, Bounds, check_grad
+from scipy.optimize import minimize, Bounds
 import sys
 sys.path.append(sys.path[0] + '/..')
 from prediction.BaseModel import BaseModel
@@ -36,7 +35,6 @@ class GradientModel(BaseModel):
             loss, grads = self.loss_function(params, target)
             return loss.detach().cpu().numpy(), grads.detach().cpu().numpy()
 
-        start_time = time.time()
         result = minimize(
             fun = np_loss_function,
             x0 = self.init_params,
@@ -45,8 +43,6 @@ class GradientModel(BaseModel):
             bounds = bounds,
             options = {"maxiter": 1000}
         )
-        end_time = time.time()
-        print(f"this shit took {end_time - start_time} seconds")
 
         optimised_params = result.x
 

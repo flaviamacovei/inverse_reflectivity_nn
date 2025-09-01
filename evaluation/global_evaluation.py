@@ -18,7 +18,7 @@ from prediction.BaseTrainableModel import BaseTrainableModel
 from prediction.GradientModel import GradientModel
 from prediction.MLP import MLP
 from prediction.CNN import CNN
-from prediction.MLPGradient import MLPGradient
+from prediction.Hybrid import Hybrid
 from prediction.Transformer import Transformer
 from forward.forward_tmm import coating_to_reflectivity
 from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
@@ -100,11 +100,13 @@ def evaluate_all_models(type_data: str):
     }
     model_classes = {
         'random': RandomModel,
-        'transformer': Transformer,
         'gradient': GradientModel,
         'mlp': MLP,
-        'mlp+gradient': MLPGradient,
+        'mlp+gradient': lambda: Hybrid('mlp'),
         'cnn': CNN,
+        'cnn+gradient': lambda: Hybrid('cnn'),
+        'transformer': Transformer,
+        'transformer+gradient': lambda: Hybrid('transformer'),
     }
     for type in model_classes.keys():
         ModelClass = model_classes[type]
