@@ -7,14 +7,20 @@ from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
 from prediction.BaseTrainableModel import BaseTrainableModel
 
 class RNNBlock(nn.Module):
-    def __init__(self, in_dim, hidden_dim, out_dim):
+    def __init__(self, in_dim: int, hidden_dim: int, out_dim: int):
         super().__init__()
         self.in_dim = in_dim
         self.hidden_dim = hidden_dim
         self.out_dim = out_dim
 
-        self.input_to_hidden = nn.Linear(self.in_dim + self.hidden_dim, self.hidden_dim)
-        self.input_to_output = nn.Linear(self.in_dim + self.hidden_dim, self.out_dim)
+        self.input_to_hidden = nn.Sequential(
+            nn.Linear(self.in_dim + self.hidden_dim, self.hidden_dim),
+            nn.Tanh(),
+        )
+        self.input_to_output = nn.Sequential(
+            nn.Linear(self.in_dim + self.hidden_dim, self.out_dim),
+            nn.Tanh(),
+        )
 
     def forward(self, x, hidden):
         if hidden is None:
@@ -61,8 +67,8 @@ class Decoder(nn.Module):
         sequence = None
         for i in range(seq_len):
             out, hidden = self.rnn(x[:, i], hidden)
-            sequence = out if sequence is None else torch.cat([sequence, out], dim = 1)
-        return sequence
+            sequence = out[:, None] if sequence is None else torch.cat([sequence, out[:, None]], dim = 1)
+        return torch.abs(sequence)
 
 class TrainableRNN(nn.Module):
     def __init__(self):
