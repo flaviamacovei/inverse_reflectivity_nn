@@ -66,19 +66,23 @@ def main():
 def visualise_test_data(architecture: str = None):
     if architecture is not None:
         model_classes = {
-            'random': RandomModel,
-            'gradient': GradientModel,
-            'mlp': MLP,
-            'mlp+gradient': lambda: Hybrid('mlp'),
-            'cnn': CNN,
-            'cnn+gradient': lambda: Hybrid('cnn'),
-            'transformer': Transformer,
-            'transformer+gradient': lambda: Hybrid('transformer'),
+            'random': {'class': RandomModel},
+            'gradient': {'class': GradientModel},
+            'mlp': {'class': MLP},
+            'mlp+gradient': {'class': lambda: Hybrid('mlp')},
+            'cnn': {'class': CNN},
+            'cnn+gradient': {'class': lambda: Hybrid('cnn')},
+            'transformer': {'class': Transformer},
+            'transformer+gradient': {'class': lambda: Hybrid('transformer')},
+            'transformer_struct_caus_mask+gradient': {'class': lambda: Hybrid('transformer'),
+                                                      'attrs': {'src_mask': False, 'tgt_struct_mask': True,
+                                                                'tgt_caus_mask': True}},
         }
-        ModelClass = model_classes[architecture]
+        ModelClass = model_classes[architecture]['class']
         model = ModelClass()
         if isinstance(model, BaseTrainableModel):
-            model.load_or_train()
+            attrs = {'model_details': model_classes[architecture]['attrs']} if 'attrs' in model_classes[architecture].keys() else None
+            model.load_or_train(attrs)
     dataset = torch.load(f"data/datasets/test_data/test_data.pt", weights_only=False)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
     for i, batch in enumerate(dataloader):
@@ -112,5 +116,5 @@ if __name__ == "__main__":
     # model.model = trainable_model
     # model.visualise_attention(pattern, label)
 
-    visualise_test_data('hybrid')
+    visualise_test_data('transformer_struct_caus_mask+gradient')
     print("<3")

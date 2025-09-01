@@ -52,5 +52,5 @@ class Hybrid(BaseTrainableModel):
         """
         return f"{self.trainable.get_architecture_name()}+gradient"
 
-    def load_or_train(self):
-        self.trainable.load_or_train()
+    def load_or_train(self, attributes: dict = None):
+        self.trainable.load_or_train(attributes)
