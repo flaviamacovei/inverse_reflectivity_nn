@@ -75,7 +75,7 @@ class TrainableCNN(nn.Module):
             x = layer(x)
         x = self.linear(x)
         x = self.final_pool(x)
-        return torch.abs(x)
+        return x + torch.abs(x)
 
     def get_output_size(self):
         """Return output size of the model."""

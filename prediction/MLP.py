@@ -37,7 +37,7 @@ class TrainableMLP(nn.Module):
         """Propagate input through the model."""
         for layer in self.net:
             x = layer(x)
-        return torch.abs(x)
+        return x + torch.abs(x)
 
     def get_output_size(self):
         """Return output size of the network."""
