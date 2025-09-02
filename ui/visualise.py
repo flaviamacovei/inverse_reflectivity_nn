@@ -85,7 +85,7 @@ def visualise(preds: ReflectivityValue = None, refs: ReflectivityPattern = None,
     plt.savefig(f"out/{filename}.png")
 
 def visualise_errors(errors: pd.DataFrame, filename: str = "errors_graph", log_scale: bool = False):
-    sorted = errors.sort_values(by='mean').reset_index(drop=True)
+    sorted = errors.sort_values(by='median').reset_index(drop=True)
     boxplot_data = []
     for _, row in sorted.iterrows():
         box = {

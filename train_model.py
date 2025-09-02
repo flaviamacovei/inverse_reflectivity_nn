@@ -52,6 +52,8 @@ def train_model():
     Model = models[CM().get('architecture')]
     model = Model()
 
+    print(f"num params: {model.get_num_params()}")
+
     if isinstance(model, BaseTrainableModel):
         model.train()
 

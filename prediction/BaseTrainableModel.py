@@ -332,3 +332,6 @@ class BaseTrainableModel(BaseModel, ABC):
     def scale_gradients(self):
         """Scale gradients of trainable model. Must be implemented by subclasses."""
 
+
+    def get_num_params(self):
+        return sum(p.numel() for p in self.model.parameters())

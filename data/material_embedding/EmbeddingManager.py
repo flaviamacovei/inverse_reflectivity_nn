@@ -124,7 +124,7 @@ class EmbeddingManager:
     def hash_materials(self):
         """Hash materials to use as filename for saving / loading embeddings."""
         # does this need more information?
-        material_hashes = [hash(material) for material in self.materials]
+        material_hashes = [hash(material) for material in self.materials] + [CM().get('material_embedding.dim')]
         return short_hash(tuple(material_hashes))
 
     def refractive_indices_to_embeddings(self, refractive_indices: torch.Tensor):

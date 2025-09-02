@@ -36,7 +36,6 @@ def convert_to_dataset(generated):
         label_tensors.append(label_tensor)
     feature_tensors = torch.cat(feature_tensors, dim = 0)
     label_tensors = torch.cat(label_tensors, dim = 0)
-    print(f"from convert: {feature_tensors.device}, {label_tensors.device}")
     return TensorDataset(feature_tensors, label_tensors)
 
 

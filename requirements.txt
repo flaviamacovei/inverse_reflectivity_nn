@@ -5,3 +5,5 @@ scipy
 wandb
 torch-pca
 pyyaml
+altair
+vl-convert-python
