@@ -28,7 +28,7 @@ def convert_to_dataset(generated):
                                    dim=1).squeeze()
         if coating is None:
             # for explicit dataset, no coating is provided so use dummy data
-            label_tensor = torch.zeros(feature_tensor.shape[0])
+            label_tensor = torch.zeros(feature_tensor.shape[0]).to(CM().get('device'))
         else:
             # for complete and masked datasets, coating is provided
             label_tensor = coating.get_encoding().squeeze()
@@ -70,31 +70,48 @@ def sample(data: TensorDataset, num_points: int):
     """
     BINS = 10
     reflectivity, coating = data.tensors
+    # average reflectivity over all wavelengths
     averaged = torch.sum(reflectivity, dim = -1) / reflectivity.shape[-1]
-    hist = torch.histc(averaged, bins = BINS, min = 0, max = 1)
 
-    # weights are inversely proportional to frequency in data
-    # small epsilon to avoid division by 0
-    weights = 1 / (hist + 0.001)
-    weights[torch.eq(hist, 0)] = 0
-    # normalise
-    weights = weights / torch.sum(weights)
-
-    # assign weight to point: if it is inside bracket (greater equal to lower bound, less than upper bound)
+    # divide into bins
     step_size = 1 / BINS
-    lower_bound = torch.linspace(0, 1 - step_size, BINS, device = CM().get('device'))
-    upper_bound = torch.linspace(step_size, 1, BINS, device = CM().get('device'))
-    print(f"averaged device: {averaged.device}")
-    print(f"bound device. {lower_bound.device}, {upper_bound.device}")
+    lower_bound = torch.linspace(0, 1 - step_size, BINS, device=CM().get('device'))
+    upper_bound = torch.linspace(step_size, 1, BINS, device=CM().get('device'))
     greater_equal = torch.ge(averaged[:, None].repeat(1, BINS), lower_bound)
     less_than = torch.lt(averaged[:, None].repeat(1, BINS), upper_bound)
     mask = torch.logical_and(greater_equal, less_than)
-    masked_weights = weights[None].repeat(reflectivity.shape[0], 1) * mask
-    point_weights = masked_weights.sum(dim=1)
-    # possibly num_samples to data.shape[0]
-    sampler = WeightedRandomSampler(weights = point_weights, num_samples = num_points, replacement = False)
-    dataloader = DataLoader(data, sampler = sampler, batch_size = num_points)
-    return TensorDataset(next(iter(dataloader))[0], next(iter(dataloader))[1])
+
+    # compute number of points per bin / strat
+    hist = torch.histc(averaged, bins = BINS, min = 0, max = 1)
+    points_per_strat = num_points // BINS
+    # if for some bins too few points were generated ...
+    below_threshold = hist < points_per_strat
+    minority_points = hist[below_threshold].sum()
+    # ... sample that many more of the majority classes
+    majority_points_per_strat = (num_points - minority_points) // (~below_threshold).count_nonzero()
+    hist[~below_threshold] = majority_points_per_strat
+    hist = hist.to(torch.int)
+
+    stratified_reflectivity = []
+    stratified_coating = []
+
+    for i in range(BINS):
+        # select bin
+        strat_reflectivity = reflectivity[mask[:, i]]
+        strat_coating = coating[mask[:, i]]
+        # select number of points for strat
+        stratified_reflectivity.append(strat_reflectivity[:hist[i]])
+        stratified_coating.append(strat_coating[:hist[i]])
+
+    reflectivity = torch.cat(stratified_reflectivity, dim = 0)
+    coating = torch.cat(stratified_coating, dim = 0)
+
+    # shuffle
+    indices = torch.randperm(reflectivity.shape[0])
+    reflectivity = reflectivity[indices]
+    coating = coating[indices]
+
+    return TensorDataset(reflectivity, coating)
 
 def generate_dataset(split):
     """
