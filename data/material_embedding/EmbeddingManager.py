@@ -160,6 +160,11 @@ class EmbeddingManager:
         materials_indices = [self.materials_indices[material.get_title()] for material in materials]
         return self.embeddings[materials_indices]
 
+    def get_nearest_neighbours(self, embedding: torch.Tensor):
+        distances = torch.cdist(embedding, self.embeddings)
+        indices = torch.argmin(distances, dim = -1)
+        return self.embeddings[indices]
+
     def decode(self, embedding: torch.Tensor):
         """
         Map embeddings to materials using nearest neighbour.
@@ -170,6 +175,7 @@ class EmbeddingManager:
         Returns:
             List of materials.
         """
+        # TODO: this is doubled with the method above
         distances = torch.cdist(embedding, self.embeddings)
         indices = torch.argmin(distances, dim = -1)
         materials = [[self.materials[index] for index in batch] for batch in indices]
