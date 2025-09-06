@@ -143,9 +143,9 @@ class BaseTrainableModel(BaseModel, ABC):
                 self.scale_gradients()
                 self.optimiser.step()
             epoch_loss /= len(self.dataloader)
-            if epoch % max(1, CM().get('training.num_epochs') / 10) == 0:
+            if epoch % max(1, CM().get('training.num_epochs') / 20) == 0:
                 if CM().get('training.save_model'):
-                    # logging at every 10% of training
+                    # logging at every 5% of training
                     self.update_checkpoint(epoch)
                 print(f"Loss in epoch {epoch + 1}: {epoch_loss.item()}")
                 # divide by dataset size instead of loss in epoch 0?
@@ -268,7 +268,10 @@ class BaseTrainableModel(BaseModel, ABC):
         """
         batch_size, num_layers, encoding_size = preds.shape
         scale_mean = batch_size * num_layers * encoding_size
-        return torch.sum((preds - labels) ** 2) / scale_mean
+        loss = torch.sum((preds - labels) ** 2) / scale_mean
+        regularisation = self.regularise(Coating(preds))
+        lmd = CM().get('training.reg_weight')
+        return loss + lmd * regularisation
 
     def compute_loss_free(self, preds: torch.Tensor, labels: torch.Tensor):
         """
@@ -285,7 +288,59 @@ class BaseTrainableModel(BaseModel, ABC):
         coating = Coating(preds)
         # convert predicted coating to reflectivity value
         preds = coating_to_reflectivity(coating)
-        return match(preds, pattern)
+        loss = match(preds, pattern)
+        regularisation = self.regularise(coating)
+        lmd = CM().get('training.reg_weight')
+        return loss + lmd * regularisation
+
+    def regularise(self, coating: Coating):
+        materials = EM().get_nearest_neighbours(coating.get_encoding()[:, :, 1:]) # (batch, |coating|, |materials_embedding|)
+        batch_size, num_layers, encoding_size = materials.shape
+        scale_factor = batch_size * num_layers * encoding_size
+
+        substrate = EM().get_material(CM().get('materials.substrate'))
+        air = EM().get_material(CM().get('materials.air'))
+        substrate_encoding, air_encoding = EM().encode([substrate, air])
+        substrate_encoding = substrate_encoding.reshape(encoding_size) # (|materials_embedding|)
+        air_encoding = air_encoding.reshape(encoding_size) # (|materials_embedding|)
+
+        # make mask for substrate
+        substrate_mask = torch.zeros_like(materials).to(CM().get('device')).to(torch.int) # (batch, |coating|, |materials_embedding|)
+        substrate_mask[:, 0] = 1
+        # test that substrate is at first position
+        substrate_pos = torch.zeros_like(materials).to(CM().get('device')) # (batch, |coating|, |materials_embedding|)
+        substrate_pos[substrate_mask] = substrate_encoding
+        # test that substrate is nowhere else
+        substrate_neg = torch.zeros_like(materials).to(CM().get('device')) # (batch, |coating|, |materials_embedding|)
+        substrate_neg[~substrate_mask] = substrate_encoding
+
+        # get index of last material before air
+        not_air = materials.ne(air_encoding) # (batch, |coating|, |materials_embedding|)
+        # logical or along dimension -1
+        not_air = not_air.int().sum(dim = -1).bool() # (batch, |coating|)
+        not_air_rev = not_air.flip(dims = [1]).to(torch.int) # (batch, |coating|)
+        last_mat_idx_rev = torch.argmax(not_air_rev, dim = -1) # (batch)
+        last_mat_idx = not_air.shape[-1] - last_mat_idx_rev - 1 # (batch)
+        # ensure at least last element is air
+        last_mat_idx = torch.minimum(last_mat_idx, torch.tensor(not_air.shape[-1] - 2))
+        # make mask for air block
+        range_coating = torch.arange(num_layers, device=CM().get('device')) # (|coating|)
+        air_mask = range_coating[None] >= (last_mat_idx + 1)[:, None]  # (batch, |coating|)
+        air_mask = air_mask[:, :, None].expand(-1, -1, encoding_size) # (batch, |coating|, |materials_embedding|)
+        # test that air block is at the end
+        air_pos = torch.zeros_like(materials).to(CM().get('device')) # (batch, |coating|, |materials_embedding|)
+        air_pos[air_mask] = air_encoding.repeat(air_pos[air_mask].shape[0] // encoding_size)
+        # test that air is nowhere else
+        air_neg = torch.zeros_like(materials).to(CM().get('device')) # (batch, |coating|, |materials_embedding|)
+        air_neg[~air_mask] = air_encoding.repeat(air_neg[~air_mask].shape[0] // encoding_size)
+
+        # calculate distances
+        substrate_pos_err = torch.sum(materials.ne(substrate_pos) * substrate_mask)
+        substrate_neg_err = torch.sum(materials.eq(substrate_neg) * ~substrate_mask)
+        air_pos_err = torch.sum(materials.ne(air_pos) * air_mask)
+        air_neg_err = torch.sum(materials.eq(air_neg) * ~air_mask)
+
+        return (substrate_pos_err + substrate_neg_err + air_pos_err + air_neg_err) / scale_factor
 
     @abstractmethod
     def get_model_output(self, src, tgt = None):
