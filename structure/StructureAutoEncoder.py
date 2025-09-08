@@ -2,6 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import sys
+
+from triton.language import zeros_like
+
 sys.path.append(sys.path[0] + '/..')
 from utils.ConfigManager import ConfigManager as CM
 from data.dataloaders.DynamicDataloader import DynamicDataloader
@@ -71,7 +74,7 @@ class StructureAutoEncoder():
 
         self.batch_size = 256
         self.learning_rate = 1e-3
-        self.num_epochs = 100
+        self.num_epochs = 10
 
         self.autoencoder = TrainableAutoEncoder(self.seq_len, self.embed_dim, latent_dim, self.vocab_size, num_layers)
         self.autoencoder = self.autoencoder.to(CM().get('device'))
@@ -93,6 +96,7 @@ class StructureAutoEncoder():
                 latent_vector = self.autoencoder.encode(input)
 
                 logits = self.autoencoder.decode(latent_vector)
+                logits = self.mask_logits(logits)
                 preds = self.decode(logits)
 
                 loss = self.compute_loss(preds, coating)
@@ -103,11 +107,61 @@ class StructureAutoEncoder():
                 gt = dataloader[0][1][None]
                 thicknesses = gt[:, :, 0]
                 materials = gt[:, :, 1]
-                print(gt.shape)
                 latent_vector = self.autoencoder.encode(materials)
                 logits = self.autoencoder.decode(latent_vector)
+                logits = self.mask_logits(logits)
                 preds = self.decode(logits)
                 print(f"loss in epoch {epoch}: {epoch_loss.item()}\n{Coating(torch.cat([thicknesses[:, :, None], preds], dim = -1))}")
+
+    def mask_logits(self, logits: torch.Tensor):
+        logits = logits.reshape(logits.shape[0], self.seq_len, self.vocab_size)
+        substrate = EM().get_material(CM().get('materials.substrate'))
+        air = EM().get_material(CM().get('materials.air'))
+        substrate_encoding, air_encoding = EM().encode([substrate, air])
+        # get index of substrate and air in embeddings lookup
+        substrate_index = EM().get_embeddings().eq(substrate_encoding).nonzero(as_tuple = True)[0].item()
+        not_substrate_indices = list(range(self.vocab_size))
+        del not_substrate_indices[substrate_index]
+        air_index = EM().get_embeddings().eq(air_encoding).nonzero(as_tuple = True)[0].item()
+        not_air_indices = list(range(self.vocab_size))
+        del not_air_indices[air_index]
+
+        # create substrate mask
+        substrate_position_mask = torch.zeros_like(logits)
+        # mask all other tokens at first position
+        substrate_position_mask[:, 0] = 1
+        # mask substrate at all other positions
+        substrate_index_mask = torch.zeros_like(logits)
+        substrate_index_mask[:, :, substrate_index] = 1
+        substrate_mask = torch.logical_xor(substrate_position_mask, substrate_index_mask)
+
+        # get index of last material to bound air block
+        not_air = logits.argmax(dim = -1, keepdim = True).ne(air_index) # (batch, |coating|, |materials_embedding|)
+        # logical or along dimension -1
+        not_air = not_air.int().sum(dim=-1).bool()  # (batch, |coating|)
+        not_air_rev = not_air.flip(dims=[1]).to(torch.int)  # (batch, |coating|)
+        last_mat_idx_rev = torch.argmax(not_air_rev, dim=-1)  # (batch)
+        last_mat_idx = not_air.shape[-1] - last_mat_idx_rev - 1  # (batch)
+        # ensure at least last element is air
+        last_mat_idx = torch.minimum(last_mat_idx, torch.tensor(not_air.shape[-1] - 2))
+        # create air mask
+        range_coating = torch.arange(self.seq_len, device=CM().get('device'))  # (|coating|)
+        # mask all other tokens at air block
+        air_position_mask = range_coating[None] >= (last_mat_idx + 1)[:, None]  # (batch, |coating|)
+        air_position_mask = air_position_mask[:, :, None].repeat(1, 1, self.vocab_size) # (batch, |coating|, |vocab|)
+        # mask air at all other positions
+        air_index_mask = torch.zeros_like(logits)
+        air_index_mask[:, :, air_index] = 1
+        air_mask = torch.logical_xor(air_position_mask, air_index_mask)
+
+        # mask logits
+        mask = torch.logical_or(substrate_mask, air_mask)
+        subtrahend = torch.zeros_like(logits)
+        subtrahend[mask] = torch.inf
+        logits = logits - subtrahend
+        # logits.masked_fill_(mask == 1, -torch.inf)
+        return logits
+        print("<3")
 
     def compute_loss(self, preds: torch.Tensor, label: torch.Tensor):
         # mse loss
@@ -120,6 +174,7 @@ class StructureAutoEncoder():
 
 
 if __name__ == '__main__':
+    torch.autograd.set_detect_anomaly(True)
     model = StructureAutoEncoder()
     model.train()
     ding()
