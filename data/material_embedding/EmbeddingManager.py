@@ -185,7 +185,7 @@ class EmbeddingManager:
     def get_refractive_indices_lookup(self):
         return self.materials_refractive_indices
 
-    def get_embeddings_lookup(self):
+    def get_embeddings(self):
         return self.embeddings
 
     def save_pca(self):

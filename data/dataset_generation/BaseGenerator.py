@@ -87,7 +87,7 @@ class BaseGenerator(ABC):
         return materials_choice.int()
 
     def get_materials_embeddings(self, materials_indices: torch.Tensor):
-        embeddings = EM().get_embeddings_lookup()
+        embeddings = EM().get_embeddings()
         return embeddings[materials_indices]
 
     @abstractmethod

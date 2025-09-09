@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -74,10 +75,14 @@ class StructureAutoEncoder():
 
         self.batch_size = 256
         self.learning_rate = 1e-3
-        self.num_epochs = 10
+        self.num_epochs = 100
 
         self.autoencoder = TrainableAutoEncoder(self.seq_len, self.embed_dim, latent_dim, self.vocab_size, num_layers)
         self.autoencoder = self.autoencoder.to(CM().get('device'))
+
+        self.model_path = "out/autoencoder.pt"
+        self.load()
+
 
     def train(self):
         dataloader = DynamicDataloader(self.batch_size, True)
@@ -96,10 +101,16 @@ class StructureAutoEncoder():
                 latent_vector = self.autoencoder.encode(input)
 
                 logits = self.autoencoder.decode(latent_vector)
-                logits = self.mask_logits(logits)
-                preds = self.decode(logits)
+                # logits = self.mask_logits(logits)
 
-                loss = self.compute_loss(preds, coating)
+                # # mse loss
+                # preds = self.decode(logits)
+                # loss = self.compute_loss(preds, coating)
+
+                # ce loss
+                target = self.get_coating_indices(coating)
+                loss = F.cross_entropy(logits.view(-1, self.vocab_size), target.view(-1))
+
                 epoch_loss += loss
                 loss.backward()
                 optimiser.step()
@@ -109,9 +120,16 @@ class StructureAutoEncoder():
                 materials = gt[:, :, 1]
                 latent_vector = self.autoencoder.encode(materials)
                 logits = self.autoencoder.decode(latent_vector)
-                logits = self.mask_logits(logits)
+                # logits = self.mask_logits(logits)
                 preds = self.decode(logits)
                 print(f"loss in epoch {epoch}: {epoch_loss.item()}\n{Coating(torch.cat([thicknesses[:, :, None], preds], dim = -1))}")
+
+    def get_coating_indices(self, coating: torch.Tensor):
+        coating = coating[:, :, None].repeat(1, 1, self.vocab_size, 1) # (batch, seq_len, vocab_size, embed_dim)
+        coating_eq = coating.eq(EM().get_embeddings()) # (batch, seq_len, vocab_size, embed_dim)
+        coating_indices = coating_eq.prod(dim = -1) # (batch, seq_len, vocab_size)
+        return coating_indices.argmax(dim = -1) # (batch, seq_len)
+
 
     def mask_logits(self, logits: torch.Tensor):
         logits = logits.reshape(logits.shape[0], self.seq_len, self.vocab_size)
@@ -165,16 +183,22 @@ class StructureAutoEncoder():
 
     def compute_loss(self, preds: torch.Tensor, label: torch.Tensor):
         # mse loss
-        return torch.sum((preds - label)**2)
+        return F.cross_entropy(input = preds, target = label)
 
     def decode(self, logits: torch.Tensor):
         logits = logits.reshape(logits.shape[0], self.seq_len, self.vocab_size)
         softmax_probabilities = F.softmax(logits, dim=-1)
         return softmax_probabilities @ EM().get_embeddings()
 
+    def load(self):
+        if os.path.exists(self.model_path):
+            self.autoencoder = torch.load(self.model_path, weights_only = False)
+        else:
+            print("No autoencoder found. Training model...")
+            self.train()
+            torch.save(self.autoencoder, self.model_path)
+
 
 if __name__ == '__main__':
-    torch.autograd.set_detect_anomaly(True)
     model = StructureAutoEncoder()
-    model.train()
     ding()
