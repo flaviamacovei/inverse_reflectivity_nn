@@ -5,6 +5,7 @@ sys.path.append(sys.path[0] + '/..')
 from prediction.BaseTrainableModel import BaseTrainableModel
 from data.dataloaders.BaseDataloader import BaseDataloader
 from utils.ConfigManager import ConfigManager as CM
+from structure.StructureAutoEncoder import StructureAutoEncoder, TrainableAutoEncoder
 
 class TrainableMLP(nn.Module):
     """
@@ -21,12 +22,16 @@ class TrainableMLP(nn.Module):
         forward: Propagate input through the model.
         get_output_size: Return output size of the network.
     """
-    def __init__(self):
+    def __init__(self, in_dim: int, out_dim: int):
         """Initialise a TrainableMLP instance."""
         super().__init__()
-        in_dim = 2 * CM().get('wavelengths').shape[0]
-        self.out_dim = (CM().get('layers.max') + 2) * (CM().get('material_embedding.dim') + 1)
-        dimensions = [in_dim] + CM().get('mlp.hidden_dims') + [self.out_dim]
+        self.in_dim = in_dim
+        # in_dim = 2 * CM().get('wavelengths').shape[0]
+        # self.out_dim = seq_len * (CM().get('material_embedding.dim') + 1)
+        # self.out_dim = seq_len * (CM().get('autoencoder.latent_dim') + 1)
+        # self.out_dim = self.seq_len * (self.vocab_size + 1)
+        self.out_dim = out_dim
+        dimensions = [self.in_dim] + CM().get('mlp.hidden_dims') + [self.out_dim]
         layers = []
         for i in range(len(dimensions) - 1):
             layers.append(nn.Linear(dimensions[i], dimensions[i + 1], device = CM().get('device')))
@@ -52,7 +57,11 @@ class MLP(BaseTrainableModel):
     """
     def __init__(self):
         """Initialise an MLP instance."""
-        super().__init__(TrainableMLP().to(CM().get('device')))
+        in_dim = 2 * CM().get('wavelengths').shape[0]
+        seq_len = CM().get('layers.max') + 2
+        vocab_size = len(CM().get('materials.thin_films')) + 2
+        out_dim = seq_len * (vocab_size + 1)
+        super().__init__(TrainableMLP(in_dim, out_dim).to(CM().get('device')))
 
     def get_model_output(self, src, tgt = None):
         """
