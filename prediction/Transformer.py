@@ -7,7 +7,8 @@ sys.path.append(sys.path[0] + '/..')
 from prediction.BaseTrainableModel import BaseTrainableModel
 from utils.ConfigManager import ConfigManager as CM
 from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
-
+from data.values.ReflectivityPattern import ReflectivityPattern
+from data.values.Coating import Coating
 
 class PositionalEncoding(nn.Module):
     def __init__(self, embed_dim: int, seq_len: int, dropout: float):
@@ -17,15 +18,15 @@ class PositionalEncoding(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
         # create matrix of shape (seq_len, embed_dim)
-        pe = torch.zeros(seq_len, embed_dim)
+        pe = torch.zeros(seq_len, embed_dim, device = CM().get('device'))
 
         # create a vector of shape (seq_len, 1) representing the position inside the sequence
-        position = torch.arange(0, seq_len, dtype = torch.float).unsqueeze(1) # (seq_len, 1)
-        div_term = torch.exp(torch.arange(0, embed_dim, 2).float() * (-math.log(10000.0) / embed_dim))
+        position = torch.arange(0, seq_len, dtype = torch.float, device = CM().get('device')).unsqueeze(1) # (seq_len, 1)
+        div_term = torch.exp(torch.arange(0, embed_dim).float().to(CM().get('device')) * (-math.log(10000.0) / embed_dim))
 
         # apply sin to even positions
-        pe[:, 0::2] = torch.sin(position * div_term)
-        pe[:, 1::2] = torch.cos(position * div_term)
+        pe[:, 0::2] = torch.sin(position * div_term[0::2])
+        pe[:, 1::2] = torch.cos(position * div_term[1::2])
 
         pe = pe.unsqueeze(0) # (1, seq_len, embed_dim)
 
@@ -266,8 +267,6 @@ class Transformer(BaseTrainableModel):
         """
         Get output of the model for given input.
 
-        For the Transformer architecture, the necessity of tgt depends on the guidance.
-
         Args:
             src: Input data.
             tgt: Target data.
@@ -275,7 +274,6 @@ class Transformer(BaseTrainableModel):
         Returns:
             Output of the model.
         """
-
         lower_bound, upper_bound = torch.chunk(src, 2, 1)
         src = torch.stack([lower_bound, upper_bound], dim = -1) # (batch, 2 * |wl|) --> (batch, |wl|, 2)
         if CM().get('transformer.src_mask'):
@@ -297,12 +295,13 @@ class Transformer(BaseTrainableModel):
             substrate = EM().get_material(CM().get('materials.substrate'))
             # beginning of any coating: thickness is 1.0, material is substrate
             thickness = torch.ones((src.shape[0], 1, 1), device = CM().get('device')) # (batch, 1, |coating| = 1, 1)
-            substrate_encoding = EM().encode([substrate])[:, None].repeat(src.shape[0], 1, 1) # (batch, |coating| = 1, 1)
-            tgt = torch.cat([thickness, substrate_encoding], dim = -1) # (batch, |coating| = 1, tgt_embed_dim + 1)
+            substrate_encoding = EM().encode([substrate]) # (batch, |coating| = 1, 1)
+            substrate_latent = self.structure_encoder.encode(substrate_encoding[None].repeat(src.shape[0], 1, 1))
+            tgt = torch.cat([thickness, substrate_latent], dim = -1) # (batch, |coating| = 1, tgt_embed_dim + 1)
             while tgt.shape[1] < self.tgt_seq_len:
                 tgt_mask = self.make_tgt_mask(tgt)  # (batch, 1, |coating|, |coating|), second dimension reserved for broadcasting across attn heads
                 decoder_output = self.model.decode(encoder_output, src_mask, tgt, tgt_mask)
-                projection = self.model.project(decoder_output[:, -1])[:, None] # take only the last item but keep the dimension
+                projection = self.model.project(decoder_output[:, -1])[:, None] # take only the last item but keep the dimension (batch, |coating|, vocab_size + 1)
                 tgt = torch.cat([tgt, projection], dim = 1)
             return tgt
 
@@ -314,14 +313,14 @@ class Transformer(BaseTrainableModel):
             struct_mask = tgt[:, :, 1][:, :, None].repeat(1, 1, 2) == masked_materials_encoding
             struct_mask = torch.logical_or(struct_mask[:, :, 0], struct_mask[:, :, 1])[:, :, None] # (batch, |coating|, 1)
             struct_mask_repeated = struct_mask.repeat(1, 1, tgt.shape[1])
-            tgt_struct_mask = struct_mask_repeated  | struct_mask_repeated.transpose(-2, -1) # (batch, |coating|, |coating|)
+            tgt_struct_mask = ~struct_mask_repeated & ~struct_mask_repeated.transpose(-2, -1) # (batch, |coating|, |coating|)
         else:
             tgt_struct_mask = torch.ones((tgt.shape[0], tgt.shape[1], tgt.shape[1]), device = CM().get('device')) # (batch, |coating|, |coating|)
         if CM().get('transformer.tgt_caus_mask'):
             tgt_caus_mask = self.causal_mask(tgt.shape[1]) # (1, |coating|, |coating|)
         else:
             tgt_caus_mask = torch.ones((tgt.shape[0], tgt.shape[1], tgt.shape[1]), device = CM().get('device')) # (batch, |coating|, |coating|)
-        return (tgt_struct_mask.to(torch.bool) | tgt_caus_mask.to(torch.bool))[:, None]
+        return (tgt_struct_mask.to(torch.bool) & tgt_caus_mask.to(torch.bool))[:, None]
 
 
     def scale_gradients(self):
@@ -330,13 +329,14 @@ class Transformer(BaseTrainableModel):
     def causal_mask(self, size):
         return torch.triu(torch.ones(size=(1, size, size), device=CM().get('device')), diagonal=1).type(torch.int) == 0
 
-    def build_transformer(self, src_seq_len: int, hidden_seq_len: int, tgt_seq_len: int, src_embed_dim: int = 2, tgt_embed_dim: int = 2, d_model: int = 512, N: int = 6, h: int = 8, dropout: float = 0.1, d_ff: int = 2048):
+    def build_transformer(self, src_seq_len: int, hidden_seq_len: int, tgt_seq_len: int, src_embed_dim: int = 2, tgt_embed_dim: int = 2, d_model: int = 512, N: int = 6, h: int = 8, dropout: float = 0.1, d_ff: int = 2048, latent_dim: int = 128, tgt_vocab_size = 11):
         # N is the number of blocks per encoder / decoder
         # values from original paper
 
         # positional encoding layers
         src_pos = PositionalEncoding(src_embed_dim, src_seq_len, dropout)
-        tgt_pos = PositionalEncoding(tgt_embed_dim, tgt_seq_len, dropout)
+        # tgt_pos = PositionalEncoding(tgt_embed_dim, tgt_seq_len, dropout)
+        tgt_pos = PositionalEncoding(latent_dim + 1, tgt_seq_len, dropout)
 
         # source input projection
         src_proj = BilinearProjectionLayer(src_seq_len, hidden_seq_len, src_embed_dim, d_model) # (batch, |wl|, 2) --> (batch, hidden_seq_len, d_model)
@@ -351,7 +351,7 @@ class Transformer(BaseTrainableModel):
             encoder_blocks.append(encoder_block)
 
         # target input projection
-        tgt_proj = ProjectionLayer(tgt_embed_dim, d_model)
+        tgt_proj = ProjectionLayer(latent_dim + 1, d_model)
 
         # decoder blocks
         decoder_blocks = []
@@ -367,7 +367,7 @@ class Transformer(BaseTrainableModel):
         decoder = Decoder(nn.ModuleList(decoder_blocks))
 
         # output projection layer
-        out_proj = ProjectionLayer(d_model, tgt_embed_dim)
+        out_proj = ProjectionLayer(d_model, latent_dim + 1)
 
         # transformer
         transformer = TrainableTransformer(encoder, decoder, src_pos, tgt_pos, src_proj, src_mask_proj, tgt_proj, out_proj)
