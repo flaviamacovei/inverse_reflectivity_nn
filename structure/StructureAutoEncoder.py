@@ -19,11 +19,11 @@ class TrainableAutoEncoder(nn.Module):
         super().__init__()
         self.seq_len = seq_len
         self.embed_dim = embed_dim
-        self.in_dim = self.seq_len * self.embed_dim
+        self.in_dim = self.embed_dim
         self.latent_dim = latent_dim
         self.vocab_size = vocab_size
         self.num_layers = num_layers
-        self.out_dim = self.seq_len * self.vocab_size
+        self.out_dim = self.vocab_size
 
         # TODO: logarithmic scale
         self.encoder_dims = [self.latent_dim + (self.in_dim - self.latent_dim) // self.num_layers * i for i in range(self.num_layers + 1)]
@@ -69,6 +69,7 @@ class StructureAutoEncoder():
     def __init__(self):
         self.seq_len = CM().get('num_layers') + 2
         self.embed_dim = CM().get('material_embedding.dim')
+        # latent_dim = self.seq_len * CM().get('autoencoder.latent_dim')
         latent_dim = CM().get('autoencoder.latent_dim')
         self.vocab_size = len(CM().get('materials.thin_films')) + 2
         num_layers = CM().get('autoencoder.num_layers')
@@ -80,7 +81,8 @@ class StructureAutoEncoder():
         self.autoencoder = TrainableAutoEncoder(self.seq_len, self.embed_dim, latent_dim, self.vocab_size, num_layers)
         self.autoencoder = self.autoencoder.to(CM().get('device'))
 
-        self.model_path = "out/autoencoder.pt"
+        own_path = os.path.realpath(__file__)
+        self.model_path = os.path.join(os.path.dirname(os.path.dirname(own_path)), "out/autoencoder_unmasked.pt")
         self.load()
 
 
@@ -96,12 +98,14 @@ class StructureAutoEncoder():
                 self.autoencoder.train()
                 optimiser.zero_grad()
                 coating = batch[1][:, :, 1:]
-                input = coating.flatten(start_dim = 1).to(CM().get('device'))
+                # input = coating.flatten(start_dim = 1).to(CM().get('device'))
+                input = coating.to(CM().get('device'))
 
                 latent_vector = self.autoencoder.encode(input)
 
                 logits = self.autoencoder.decode(latent_vector)
                 # logits = self.mask_logits(logits)
+                softmax_probabilities = F.softmax(logits, dim = -1)
 
                 # # mse loss
                 # preds = self.decode(logits)
@@ -109,20 +113,20 @@ class StructureAutoEncoder():
 
                 # ce loss
                 target = self.get_coating_indices(coating)
-                loss = F.cross_entropy(logits.view(-1, self.vocab_size), target.view(-1))
+                loss = F.cross_entropy(softmax_probabilities.view(-1, self.vocab_size), target.view(-1))
 
                 epoch_loss += loss
                 loss.backward()
                 optimiser.step()
             if epoch % (self.num_epochs / 20) == 0:
                 gt = dataloader[0][1][None]
-                thicknesses = gt[:, :, 0]
-                materials = gt[:, :, 1]
+                thicknesses = gt[:, :, :1]
+                materials = gt[:, :, 1:]
                 latent_vector = self.autoencoder.encode(materials)
                 logits = self.autoencoder.decode(latent_vector)
                 # logits = self.mask_logits(logits)
-                preds = self.decode(logits)
-                print(f"loss in epoch {epoch}: {epoch_loss.item()}\n{Coating(torch.cat([thicknesses[:, :, None], preds], dim = -1))}")
+                preds = self.logits_to_materials(logits)
+                print(f"loss in epoch {epoch}: {epoch_loss.item()}\n{Coating(torch.cat([thicknesses, preds], dim = -1))}")
 
     def get_coating_indices(self, coating: torch.Tensor):
         coating = coating[:, :, None].repeat(1, 1, self.vocab_size, 1) # (batch, seq_len, vocab_size, embed_dim)
@@ -138,11 +142,7 @@ class StructureAutoEncoder():
         substrate_encoding, air_encoding = EM().encode([substrate, air])
         # get index of substrate and air in embeddings lookup
         substrate_index = EM().get_embeddings().eq(substrate_encoding).nonzero(as_tuple = True)[0].item()
-        not_substrate_indices = list(range(self.vocab_size))
-        del not_substrate_indices[substrate_index]
         air_index = EM().get_embeddings().eq(air_encoding).nonzero(as_tuple = True)[0].item()
-        not_air_indices = list(range(self.vocab_size))
-        del not_air_indices[air_index]
 
         # create substrate mask
         substrate_position_mask = torch.zeros_like(logits)
@@ -185,20 +185,31 @@ class StructureAutoEncoder():
         # mse loss
         return F.cross_entropy(input = preds, target = label)
 
-    def decode(self, logits: torch.Tensor):
+    def logits_to_materials(self, logits: torch.Tensor):
         logits = logits.reshape(logits.shape[0], self.seq_len, self.vocab_size)
         softmax_probabilities = F.softmax(logits, dim=-1)
         return softmax_probabilities @ EM().get_embeddings()
 
+    def decode(self, latent_vector: torch.Tensor):
+        logits = self.autoencoder.decode(latent_vector)
+        masked_logits = self.mask_logits(logits)
+        return self.logits_to_materials(masked_logits)
+
+    def encode(self, materials: torch.Tensor):
+        # latent_materials = self.autoencoder.encode(materials.flatten(start_dim = 1))
+        return self.autoencoder.encode(materials)
+
     def load(self):
         if os.path.exists(self.model_path):
-            self.autoencoder = torch.load(self.model_path, weights_only = False)
+            tmp = torch.load(self.model_path, weights_only = False)
+            self.autoencoder = tmp
+            self.autoencoder = self.autoencoder.to(CM().get('device'))
         else:
             print("No autoencoder found. Training model...")
             self.train()
             torch.save(self.autoencoder, self.model_path)
 
-
 if __name__ == '__main__':
     model = StructureAutoEncoder()
+    model.train()
     ding()
