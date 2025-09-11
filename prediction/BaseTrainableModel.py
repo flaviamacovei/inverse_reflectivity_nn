@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 import torch
 import torch.nn as nn
 import torch.nn.init as init
+import torch.nn.functional as F
 import wandb
 import os
 from datetime import datetime
@@ -21,6 +22,7 @@ from data.dataloaders.DynamicDataloader import DynamicDataloader
 from ui.visualise import visualise
 from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
 from utils.data_utils import get_saved_model_path
+from structure.StructureAutoEncoder import StructureAutoEncoder, TrainableAutoEncoder
 
 class BaseTrainableModel(BaseModel, ABC):
     """
@@ -70,6 +72,11 @@ class BaseTrainableModel(BaseModel, ABC):
         self.current_leg = -1
         self.guidance = None
         self.checkpoint = None
+
+        self.seq_len = CM().get('layers.max') + 2
+        self.vocab_size = len(CM().get('materials.thin_films')) + 2
+
+        self.structure_encoder = StructureAutoEncoder()
 
     def get_current_leg(self, epoch):
         """Return current leg of the guidance schedule."""
@@ -126,7 +133,17 @@ class BaseTrainableModel(BaseModel, ABC):
                 # in free mode, reflectivity is simultaneously input and ground truth
                 # in guided mode, coating encodings are ground truth
                 labels = reflectivity if self.guidance == 'free' else coating_encoding
-                preds = self.get_model_output(reflectivity, coating_encoding)
+
+                if len(coating_encoding.shape) == 1:
+                    tgt_input = None
+                else:
+                    thicknesses = coating_encoding[:, :, :1]
+                    materials = coating_encoding[:, :, 1:]
+                    latent_materials = self.structure_encoder.encode(materials)
+                    tgt_input = torch.cat([thicknesses, latent_materials], dim = -1)
+                latent_result = self.get_model_output(reflectivity, tgt_input)
+                preds = self.decode_latent(latent_result)
+
                 preds = preds.reshape((reflectivity.shape[0], (CM().get('layers.max') + 2), CM().get('material_embedding.dim') + 1))
                 loss = self.compute_loss(preds, labels)
                 epoch_loss += loss.item()
@@ -169,13 +186,20 @@ class BaseTrainableModel(BaseModel, ABC):
         lower_bound, upper_bound = reflectivity.chunk(2, dim=1)
         refs = ReflectivityPattern(lower_bound, upper_bound)
         with torch.no_grad():
-            output = self.get_model_output(reflectivity, coating_encoding)
+            if len(coating_encoding.shape) == 1:
+                tgt_input = None
+            else:
+                thicknesses = coating_encoding[:, :, :1]
+                materials = coating_encoding[:, :, 1:]
+                tgt_input = torch.cat([thicknesses, self.structure_encoder.encode(materials)], dim = -1)
+            latent = self.get_model_output(reflectivity, tgt_input)
+            output = self.decode_latent(latent)
         output = output.reshape(
             (reflectivity.shape[0], (CM().get('layers.max') + 2), CM().get('material_embedding.dim') + 1))
         coating = Coating(output)
         preds = coating_to_reflectivity(coating)
         print(coating.get_batch(0))
-        visualise(preds, refs, f"from_training_epoch_{epoch}")
+        visualise(preds, refs, f"transformer/enc_unmasked/from_training_epoch_{epoch}")
 
     def update_checkpoint(self, epoch: int):
         new_checkpoint = get_unique_filename(f"out/models/checkpoint_{short_hash(self.model) + short_hash(epoch)}.pt")
@@ -251,7 +275,8 @@ class BaseTrainableModel(BaseModel, ABC):
         # convert input to shape expected by model
         model_input = torch.cat((target.get_lower_bound(), target.get_upper_bound()), dim = 1)
         # predict encoding of coating
-        preds = self.get_model_output(model_input)
+        latent_result = self.get_model_output(model_input)
+        preds = self.decode_latent(latent_result)
         preds = preds.reshape(
             (model_input.shape[0], (CM().get('layers.max') + 2), CM().get('material_embedding.dim') + 1))
         return Coating(preds)
@@ -381,6 +406,15 @@ class BaseTrainableModel(BaseModel, ABC):
             self.model = torch.load(model_filename, weights_only = False)
             self.model = self.model.to(CM().get('device'))
 
+    def decode_latent(self, model_output: torch.Tensor):
+        batch_size = model_output.shape[0]
+        seq_len = CM().get('layers.max') + 2
+        latent_dim = CM().get('autoencoder.latent_dim')
+        model_output = model_output.reshape(batch_size, seq_len, (latent_dim + 1))
+        materials = model_output[:, :, 1:]
+        thicknesses = model_output[:, :, :1]
+        materials = self.structure_encoder.decode(materials)
+        return torch.cat([thicknesses, materials], dim = -1)
 
 
     @abstractmethod
