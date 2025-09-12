@@ -27,7 +27,6 @@ from data.dataset_generation.MaskedPatternGenerator import MaskedPatternGenerato
 from data.dataset_generation.ExplicitPatternGenerator import ExplicitPatternGenerator
 from tmm_clean.tmm_core import compute_multilayer_optics
 from score_model import score_model
-from structure.StructureAutoEncoder import StructureAutoEncoder, TrainableAutoEncoder
 
 def train_model():
     """Instantiate and train model."""
