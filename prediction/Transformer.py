@@ -233,35 +233,10 @@ class TrainableTransformer(nn.Module):
 
 class Transformer(BaseTrainableModel):
     def __init__(self):
-
-        # some values:
-        # d_model = hyperparameter that needs to be tuned, the dimension in which patterns will be encoded, I think > material_embed_dim + 1
-        # d_ff = let's try 2048 but that might be too big
-
-        # src_seq_len = |wl|
-        self.src_seq_len = CM().get('wavelengths').shape[0]
-        # hyperparameter that needs to be tuned, should be < src_seq_len so that cuda doesn't cry
-        self.hidden_seq_len = CM().get('transformer.hidden_seq_len')
-        # tgt_seq_len = |coating|
-        self.tgt_seq_len = CM().get('num_layers') + 2
-        # src_embed_dim = 2 (lower and upper bound)
-        self.src_embed_dim = 2
-        # tgt_embed_dim = embedding size of coatings
-        self.tgt_embed_dim = CM().get('material_embedding.dim') + 1
-        # hyperparameter that needs to be tuned
-        self.d_model = CM().get('transformer.d_model')
-        # num layers (hyperparamter)
-        self.N = CM().get('transformer.num_layers')
-        # num attn heads
-        self.h = CM().get('transformer.num_heads')
-        # dropout hyperparameter
-        self.dropout = CM().get('transformer.dropout') # maybe move this under training if I can use it in other architectures too
-        # feed-forward dimension (hyperparameter)
-        self.d_ff = CM().get('transformer.d_ff')
+        super().__init__()
 
 
-        model = self.build_transformer(self.src_seq_len, self.hidden_seq_len, self.tgt_seq_len, self.src_embed_dim, self.tgt_embed_dim, self.d_model, self.N, self.h, self.dropout, self.d_ff)
-        super().__init__(model.to(CM().get('device')))
+        # model = self.build_model(self.tgt_vocab_size, self.src_seq_len, self.hidden_seq_len, self.tgt_seq_len, self.src_embed_dim, self.tgt_embed_dim, self.d_model, self.N, self.h, self.dropout, self.d_ff)
 
     def get_model_output(self, src, tgt = None):
         """
@@ -274,8 +249,6 @@ class Transformer(BaseTrainableModel):
         Returns:
             Output of the model.
         """
-        lower_bound, upper_bound = torch.chunk(src, 2, 1)
-        src = torch.stack([lower_bound, upper_bound], dim = -1) # (batch, 2 * |wl|) --> (batch, |wl|, 2)
         if CM().get('transformer.src_mask'):
             # mask out regions where lower bound is 0 and upper bound is 1
             src_mask = ~((src[:, :, 0] == 0).to(torch.bool) & (src[:, :, 1] == 1).to(torch.bool))
@@ -286,21 +259,22 @@ class Transformer(BaseTrainableModel):
 
         if tgt is not None and len(tgt.shape) != 1:
             # in training mode, target is specified
-            # in training mode explicit leg, target is dummy data (len(shape) == 3) and should be ignored -> move to inference block
+            # in training mode explicit leg, target is dummy data (len(shape) == 1) and should be ignored -> move to inference block
             tgt_mask = self.make_tgt_mask(tgt) # (batch, 1, |coating|, |coating|)
             decoder_output = self.model.decode(encoder_output, src_mask, tgt, tgt_mask)
             return self.model.project(decoder_output)
         else:
             # in inference mode, target is not specified
-            substrate = EM().get_material(CM().get('materials.substrate'))
             # beginning of any coating: thickness is 1.0, material is substrate
-            thickness = torch.ones((src.shape[0], 1, 1), device = CM().get('device')) # (batch, 1, |coating| = 1, 1)
-            substrate_encoding = EM().encode([substrate]) # (batch, |coating| = 1, 1)
-            substrate_latent = self.structure_encoder.encode(substrate_encoding[None].repeat(src.shape[0], 1, 1))
-            tgt = torch.cat([thickness, substrate_latent], dim = -1) # (batch, |coating| = 1, tgt_embed_dim + 1)
+            thickness = torch.ones((1, 1, 1), device = CM().get('device')) # (1, 1, |coating| = 1, 1)
+            substrate_logits = self.get_bos_logits()
+            tgt = torch.cat([thickness, substrate_logits], dim = -1).repeat(src.shape[0], 1, 1) # (batch, |coating| = 1, tgt_vocab_size + 1)
             while tgt.shape[1] < self.tgt_seq_len:
                 tgt_mask = self.make_tgt_mask(tgt)  # (batch, 1, |coating|, |coating|), second dimension reserved for broadcasting across attn heads
-                decoder_output = self.model.decode(encoder_output, src_mask, tgt, tgt_mask)
+                thicknesses = tgt[:, :, :1]
+                material_logits = tgt[:, :, 1:]
+                materials = self.sample(material_logits)
+                decoder_output = self.model.decode(encoder_output, src_mask, torch.cat([thicknesses, materials], dim = -1), tgt_mask)
                 projection = self.model.project(decoder_output[:, -1])[:, None] # take only the last item but keep the dimension (batch, |coating|, vocab_size + 1)
                 tgt = torch.cat([tgt, projection], dim = 1)
             return tgt
@@ -329,37 +303,51 @@ class Transformer(BaseTrainableModel):
     def causal_mask(self, size):
         return torch.triu(torch.ones(size=(1, size, size), device=CM().get('device')), diagonal=1).type(torch.int) == 0
 
-    def build_transformer(self, src_seq_len: int, hidden_seq_len: int, tgt_seq_len: int, src_embed_dim: int = 2, tgt_embed_dim: int = 2, d_model: int = 512, N: int = 6, h: int = 8, dropout: float = 0.1, d_ff: int = 2048, latent_dim: int = 128, tgt_vocab_size = 11):
-        # N is the number of blocks per encoder / decoder
-        # values from original paper
+    def build_model(self):
+        # some values:
+        # d_model = hyperparameter that needs to be tuned, the dimension in which patterns will be encoded, I think > material_embed_dim + 1
+        # d_ff = let's try 2048 but that might be too big
+
+        # hyperparameter that needs to be tuned, should be < src_seq_len so that cuda doesn't cry
+        self.hidden_seq_len = CM().get('transformer.hidden_seq_len')
+        # hyperparameter that needs to be tuned
+        self.d_model = CM().get('transformer.d_model')
+        # num layers (hyperparamter)
+        self.N = CM().get('transformer.num_layers')
+        # num attn heads
+        self.h = CM().get('transformer.num_heads')
+        # dropout hyperparameter
+        self.dropout = CM().get(
+            'transformer.dropout')  # maybe move this under training if I can use it in other architectures too
+        # feed-forward dimension (hyperparameter)
+        self.d_ff = CM().get('transformer.d_ff')
 
         # positional encoding layers
-        src_pos = PositionalEncoding(src_embed_dim, src_seq_len, dropout)
-        # tgt_pos = PositionalEncoding(tgt_embed_dim, tgt_seq_len, dropout)
-        tgt_pos = PositionalEncoding(latent_dim + 1, tgt_seq_len, dropout)
+        src_pos = PositionalEncoding(self.src_dim, self.src_seq_len, self.dropout)
+        tgt_pos = PositionalEncoding(self.tgt_dim, self.tgt_seq_len, self.dropout)
 
         # source input projection
-        src_proj = BilinearProjectionLayer(src_seq_len, hidden_seq_len, src_embed_dim, d_model) # (batch, |wl|, 2) --> (batch, hidden_seq_len, d_model)
-        src_mask_proj = ProjectionLayer(src_seq_len, hidden_seq_len) # (batch, |wl|) --> (batch, hiddens_seq_len)
+        src_proj = BilinearProjectionLayer(self.src_seq_len, self.hidden_seq_len, self.src_dim, self.d_model) # (batch, |wl|, 2) --> (batch, hidden_seq_len, d_model)
+        src_mask_proj = ProjectionLayer(self.src_seq_len, self.hidden_seq_len) # (batch, |wl|) --> (batch, hiddens_seq_len)
 
         # encoder blocks
         encoder_blocks = []
-        for _ in range(N):
-            encoder_self_attention_block = MultiHeadAttentionBlock(d_model, h, dropout)
-            feed_forward_block = FeedForwardBlock(d_model, d_ff, dropout)
-            encoder_block = EncoderBlock(encoder_self_attention_block, feed_forward_block, dropout)
+        for _ in range(self.N):
+            encoder_self_attention_block = MultiHeadAttentionBlock(self.d_model, self.h, self.dropout)
+            feed_forward_block = FeedForwardBlock(self.d_model, self.d_ff, self.dropout)
+            encoder_block = EncoderBlock(encoder_self_attention_block, feed_forward_block, self.dropout)
             encoder_blocks.append(encoder_block)
 
         # target input projection
-        tgt_proj = ProjectionLayer(latent_dim + 1, d_model)
+        tgt_proj = ProjectionLayer(self.tgt_dim, self.d_model)
 
         # decoder blocks
         decoder_blocks = []
-        for _ in range(N):
-            decoder_self_attention_block = MultiHeadAttentionBlock(d_model, h, dropout)
-            decoder_cross_attention_block = MultiHeadAttentionBlock(d_model, h, dropout)
-            feed_forward_block = FeedForwardBlock(d_model, d_ff, dropout)
-            decoder_block = DecoderBlock(decoder_self_attention_block, decoder_cross_attention_block, feed_forward_block, dropout)
+        for _ in range(self.N):
+            decoder_self_attention_block = MultiHeadAttentionBlock(self.d_model, self.h, self.dropout)
+            decoder_cross_attention_block = MultiHeadAttentionBlock(self.d_model, self.h, self.dropout)
+            feed_forward_block = FeedForwardBlock(self.d_model, self.d_ff, self.dropout)
+            decoder_block = DecoderBlock(decoder_self_attention_block, decoder_cross_attention_block, feed_forward_block, self.dropout)
             decoder_blocks.append(decoder_block)
 
         # encoder and decoder
@@ -367,7 +355,7 @@ class Transformer(BaseTrainableModel):
         decoder = Decoder(nn.ModuleList(decoder_blocks))
 
         # output projection layer
-        out_proj = ProjectionLayer(d_model, latent_dim + 1)
+        out_proj = ProjectionLayer(self.d_model, self.tgt_vocab_size + 1) # one for the thicknesses
 
         # transformer
         transformer = TrainableTransformer(encoder, decoder, src_pos, tgt_pos, src_proj, src_mask_proj, tgt_proj, out_proj)
@@ -377,7 +365,7 @@ class Transformer(BaseTrainableModel):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
 
-        return transformer
+        return transformer.to(CM().get('device'))
 
     def get_architecture_name(self):
         """

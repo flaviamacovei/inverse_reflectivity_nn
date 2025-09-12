@@ -1,3 +1,4 @@
+import math
 import torch
 import torch.nn as nn
 import sys
@@ -5,7 +6,6 @@ sys.path.append(sys.path[0] + '/..')
 from prediction.BaseTrainableModel import BaseTrainableModel
 from data.dataloaders.BaseDataloader import BaseDataloader
 from utils.ConfigManager import ConfigManager as CM
-from structure.StructureAutoEncoder import StructureAutoEncoder, TrainableAutoEncoder
 
 class TrainableMLP(nn.Module):
     """
@@ -26,10 +26,6 @@ class TrainableMLP(nn.Module):
         """Initialise a TrainableMLP instance."""
         super().__init__()
         self.in_dim = in_dim
-        # in_dim = 2 * CM().get('wavelengths').shape[0]
-        # self.out_dim = seq_len * (CM().get('material_embedding.dim') + 1)
-        # self.out_dim = seq_len * (CM().get('autoencoder.latent_dim') + 1)
-        # self.out_dim = self.seq_len * (self.vocab_size + 1)
         self.out_dim = out_dim
         dimensions = [self.in_dim] + CM().get('mlp.hidden_dims') + [self.out_dim]
         layers = []
@@ -56,12 +52,14 @@ class MLP(BaseTrainableModel):
         model: Instance of TrainableMLP.
     """
     def __init__(self):
+        super().__init__()
         """Initialise an MLP instance."""
-        in_dim = 2 * CM().get('wavelengths').shape[0]
-        seq_len = CM().get('layers.max') + 2
-        vocab_size = len(CM().get('materials.thin_films')) + 2
-        out_dim = seq_len * (vocab_size + 1)
-        super().__init__(TrainableMLP(in_dim, out_dim).to(CM().get('device')))
+
+    def build_model(self):
+        self.flattened_in_dim = math.prod(self.in_dim)
+        self.flattened_out_dim = math.prod(self.out_dim)
+
+        return TrainableMLP(self.flattened_in_dim, self.flattened_out_dim)
 
     def get_model_output(self, src, tgt = None):
         """
@@ -76,7 +74,9 @@ class MLP(BaseTrainableModel):
         Returns:
             Output of the model.
         """
-        return self.model(src)
+        src = src.reshape(-1, self.flattened_in_dim)
+        out = self.model(src)
+        return out.reshape(-1, self.out_dim[0], self.out_dim[1])
 
     def scale_gradients(self):
         if self.guidance == "free":

@@ -36,12 +36,8 @@ class RNNBlock(nn.Module):
         return torch.zeros(1, self.hidden_dim).to(CM().get('device'))
 
 class Encoder(nn.Module):
-    def __init__(self):
+    def __init__(self, in_dim: int, hidden_dim: int, out_dim: int):
         super().__init__()
-        in_dim = 2 # lower and upper bound
-        hidden_dim = CM().get('rnn.encoder_dim')
-        out_dim = CM().get('rnn.decoder_dim')
-
         self.rnn = RNNBlock(in_dim, hidden_dim, out_dim)
 
     def forward(self, x):
@@ -53,11 +49,8 @@ class Encoder(nn.Module):
         return out
 
 class Decoder(nn.Module):
-    def __init__(self):
+    def __init__(self, in_dim: int, hidden_dim: int, out_dim: int):
         super().__init__()
-        in_dim = CM().get('material_embedding.dim') + 1
-        hidden_dim = CM().get('rnn.decoder_dim')
-        out_dim = CM().get('material_embedding.dim') + 1
         
         self.rnn = RNNBlock(in_dim, hidden_dim, out_dim)
     
@@ -71,16 +64,20 @@ class Decoder(nn.Module):
         return torch.abs(sequence)
 
 class TrainableRNN(nn.Module):
-    def __init__(self):
+    def __init__(self, enc_in_dim: int, enc_hidden_dim: int, enc_out_dim: int, dec_in_dim: int, dec_hidden_dim: int, dec_out_dim: int, out_dim: int):
         super().__init__()
-        self.encoder = Encoder()
-        self.decoder = Decoder()
+        self.encoder = Encoder(enc_in_dim, enc_hidden_dim, enc_out_dim)
+        self.decoder = Decoder(dec_in_dim, dec_hidden_dim, dec_out_dim)
+        self.projection = nn.Linear(dec_out_dim, out_dim)
 
     def encode(self, src):
         return self.encoder(src)
 
     def decode(self, encoder_output, tgt):
         return self.decoder(tgt, encoder_output)
+
+    def project(self, x):
+        return self.projection(x)
 
 class RNN(BaseTrainableModel):
     """
@@ -91,7 +88,17 @@ class RNN(BaseTrainableModel):
     """
     def __init__(self):
         """Initialise an MLP instance."""
-        super().__init__(TrainableRNN().to(CM().get('device')))
+        super().__init__()
+
+    def build_model(self):
+        enc_in_dim = 2  # lower and upper bound
+        enc_hidden_dim = CM().get('rnn.encoder_dim')
+        enc_out_dim = CM().get('rnn.decoder_dim')
+        dec_in_dim = self.tgt_dim
+        dec_hidden_dim = CM().get('rnn.decoder_dim')
+        dec_out_dim = self.tgt_dim
+        out_dim = self.out_dim[1]
+        return TrainableRNN(enc_in_dim, enc_hidden_dim, enc_out_dim, dec_in_dim, dec_hidden_dim, dec_out_dim, out_dim).to(CM().get('device'))
 
     def get_model_output(self, src, tgt = None):
         """
@@ -104,25 +111,23 @@ class RNN(BaseTrainableModel):
         Returns:
             Output of the model.
         """
-        lower_bound, upper_bound = torch.chunk(src, 2, 1)
-        src = torch.stack([lower_bound, upper_bound], dim=-1)  # (batch, 2 * |wl|) --> (batch, |wl|, 2)
-        encoder_output = self.model.encode(src)
+        encoder_output = self.model.encode(src) # (batch_size, encoder_hidden_dim)
         if tgt is not None and len(tgt.shape) != 1:
             # in training mode, target is specified
-            # in training mode explicit leg, target is dummy data (len(shape) == 3) and should be ignored -> move to inference block
+            # in training mode explicit leg, target is dummy data (len(shape) == 1) and should be ignored -> move to inference block
             decoder_output = self.model.decode(encoder_output, tgt)
-            return decoder_output
+            projection = self.model.project(decoder_output)
+            return projection
         else:
             # in inference mode, target is not specified
-            substrate = EM().get_material(CM().get('materials.substrate'))
-            # beginning of any coating: thickness is 1.0, material is substrate
-            thickness = torch.ones((src.shape[0], 1, 1), device=CM().get('device'))  # (batch, 1, |coating| = 1, 1)
-            substrate_encoding = EM().encode([substrate])[:, None].repeat(src.shape[0], 1, 1)  # (batch, |coating| = 1, 1)
-            tgt = torch.cat([thickness, substrate_encoding], dim=-1)  # (batch, |coating| = 1, tgt_embed_dim + 1)
-            tgt_seq_len = CM().get('num_layers') + 2
-            while tgt.shape[1] < tgt_seq_len:
-                tgt = self.model.decode(encoder_output, tgt)
-            return tgt
+            thickness = torch.ones((1, 1, 1)).to(CM().get('device'))
+            bos = self.get_bos()
+            tgt = torch.cat([thickness, bos], dim = -1).repeat(encoder_output.shape[0], 1, 1)
+            while tgt.shape[1] < self.out_dim[0]:
+                next = self.model.decode(encoder_output, tgt)
+                tgt = torch.cat([tgt, next], dim = 1)
+            projection = self.model.project(tgt)
+            return projection
 
     def scale_gradients(self):
         if self.guidance == "free":
