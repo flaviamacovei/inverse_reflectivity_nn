@@ -207,6 +207,9 @@ class TrainableTransformer(nn.Module):
         self.decoder_projection = decoder_projection
         self.output_projection = output_projection
 
+    def project_bos(self, bos):
+        return self.decoder_projection(bos)
+
     def disjoin_mask(self, mask):
         mask = self.encoder_mask_projection(mask).to(torch.bool) # (batch, |wl|) --> (batch, hidden_seq_len)
         # disjunction of mask with itself
@@ -235,9 +238,6 @@ class Transformer(BaseTrainableModel):
     def __init__(self):
         super().__init__()
 
-
-        # model = self.build_model(self.tgt_vocab_size, self.src_seq_len, self.hidden_seq_len, self.tgt_seq_len, self.src_embed_dim, self.tgt_embed_dim, self.d_model, self.N, self.h, self.dropout, self.d_ff)
-
     def get_model_output(self, src, tgt = None):
         """
         Get output of the model for given input.
@@ -260,9 +260,12 @@ class Transformer(BaseTrainableModel):
         if tgt is not None and len(tgt.shape) != 1:
             # in training mode, target is specified
             # in training mode explicit leg, target is dummy data (len(shape) == 1) and should be ignored -> move to inference block
-            tgt_mask = self.make_tgt_mask(tgt) # (batch, 1, |coating|, |coating|)
-            decoder_output = self.model.decode(encoder_output, src_mask, tgt, tgt_mask)
-            return self.model.project(decoder_output)
+            decoder_input = tgt[:, :-1, :]
+            bos = self.model.project_bos(tgt[:, :1, :])
+            tgt_mask = self.make_tgt_mask(decoder_input) # (batch, 1, |coating|, |coating|)
+            decoder_output = self.model.decode(encoder_output, src_mask, decoder_input, tgt_mask)
+            connected = torch.cat([bos, decoder_output], dim = 1)
+            return self.model.project(connected)
         else:
             # in inference mode, target is not specified
             # beginning of any coating: thickness is 1.0, material is substrate
@@ -324,7 +327,7 @@ class Transformer(BaseTrainableModel):
 
         # positional encoding layers
         src_pos = PositionalEncoding(self.src_dim, self.src_seq_len, self.dropout)
-        tgt_pos = PositionalEncoding(self.tgt_dim, self.tgt_seq_len, self.dropout)
+        tgt_pos = PositionalEncoding(self.tgt_dim, self.tgt_seq_len - 1, self.dropout)
 
         # source input projection
         src_proj = BilinearProjectionLayer(self.src_seq_len, self.hidden_seq_len, self.src_dim, self.d_model) # (batch, |wl|, 2) --> (batch, hidden_seq_len, d_model)
