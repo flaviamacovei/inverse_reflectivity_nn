@@ -24,7 +24,7 @@ class ExplicitPatternGenerator(BaseGenerator):
         """Initialise an ExplicitPatternGenerator instance."""
         super().__init__(num_points, batch_size)
         self.MIN_NUM_REGIONS = 1
-        self.MAX_NUM_REGIONS = 7
+        self.MAX_NUM_REGIONS = 4
 
     def generate_random_value(self):
         """
@@ -36,7 +36,7 @@ class ExplicitPatternGenerator(BaseGenerator):
         Returns:
             A random value between 0 and 1.
         """
-        if random.random() < 0.5:
+        if random.random() < 0.8:
             return random.choice([0, 1])
         else:
             return random.random()
