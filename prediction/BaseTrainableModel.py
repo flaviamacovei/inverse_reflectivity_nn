@@ -8,6 +8,8 @@ import os
 from datetime import datetime
 import sys
 import yaml
+from triton.language import softmax
+
 sys.path.append(sys.path[0] + '/..')
 from prediction.BaseModel import BaseModel
 from data.values.ReflectivityPattern import ReflectivityPattern
@@ -79,6 +81,14 @@ class BaseTrainableModel(BaseModel, ABC):
         self.current_leg = -1
         self.guidance = None
         self.checkpoint = None
+
+        sampling_functions = {
+            "soft": self.soft_sample,
+            "greedy": self.greedy_sample
+        }
+        self.sample = sampling_functions[CM().get('sampling')]
+
+        self.vocab = EM().get_embeddings()
 
         self.model = self.build_model()
         self.optimiser = torch.optim.Adam(self.model.parameters())
@@ -190,16 +200,26 @@ class BaseTrainableModel(BaseModel, ABC):
 
     def get_bos_logits(self):
         bos = self.get_bos()
-        bos_index = EM().get_embeddings().eq(bos).nonzero(as_tuple=True)[0].item()
+        bos_index = self.vocab.eq(bos).nonzero(as_tuple=True)[0].item()
         bos_logits = torch.ones(1, 1, self.tgt_vocab_size).to(CM().get('device'))
         bos_logits = bos_logits * -torch.inf
         bos_logits[:, :, bos_index] = 1
         return bos_logits
 
-    def sample(self, logits: torch.Tensor):
-        # logits = logits.reshape(logits.shape[0], self.tgt_seq_len, self.tgt_vocab_size)
-        softmax_probabilities = F.softmax(logits, dim=-1)
-        return softmax_probabilities @ EM().get_embeddings()
+    def soft_sample(self, logits: torch.Tensor):
+        softmax_probabilities = F.softmax(logits, dim = -1)
+        return softmax_probabilities @ self.vocab
+
+    def greedy_sample(self, logits: torch.Tensor):
+        # compute soft probabilities of nearest neighbours
+        # this vector remains connected to the computational graph to maintain differentiability
+        greedy_probs_soft = torch.exp(-torch.abs(logits))
+        # compute hard probabilities of nearest neighbours
+        # this is a one-hot vector but disconnected from the computational graph
+        greedy_probs_hard = torch.zeros_like(greedy_probs_soft).scatter_(-1, greedy_probs_soft.argmin(dim=-1, keepdim=True), 1.0)
+        # attach computational graph from soft probabilities to hard probabilities
+        greedy_probabilities = greedy_probs_hard + (greedy_probs_soft - greedy_probs_soft.detach())
+        return greedy_probabilities @ self.vocab
 
     def visualise_epoch(self, epoch: int):
         # visualise first item of batch
