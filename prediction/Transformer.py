@@ -278,19 +278,20 @@ class Transformer(BaseTrainableModel):
                 material_logits = tgt[:, :, 1:]
                 materials = self.sample(material_logits)
                 decoder_output = self.model.decode(encoder_output, src_mask, torch.cat([thicknesses, materials], dim = -1), tgt_mask)
-                projection = self.model.project(decoder_output[:, -1])[:, None] # take only the last item but keep the dimension (batch, |coating|, vocab_size + 1)
+                projection = self.model.project(decoder_output[:, -1:]) # take only the last item but keep the dimension (batch, |coating|, vocab_size + 1)
                 tgt = torch.cat([tgt, projection], dim = 1)
             return tgt
 
     def make_tgt_mask(self, tgt):
         if CM().get('transformer.tgt_struct_mask'):
-            substrate = EM().get_material(CM().get('materials.substrate'))
-            air = EM().get_material(CM().get('materials.air'))
-            masked_materials_encoding = EM().encode([substrate, air]).squeeze()[None, None] # (1, 1, 2)
+            substrate = self.get_bos()
+            air = self.get_eos()
+            masked_materials_encoding = torch.cat([substrate, air], dim = -1) # (1, 1, 2)
             struct_mask = tgt[:, :, 1][:, :, None].repeat(1, 1, 2) == masked_materials_encoding
             struct_mask = torch.logical_or(struct_mask[:, :, 0], struct_mask[:, :, 1])[:, :, None] # (batch, |coating|, 1)
             struct_mask_repeated = struct_mask.repeat(1, 1, tgt.shape[1])
             tgt_struct_mask = ~struct_mask_repeated & ~struct_mask_repeated.transpose(-2, -1) # (batch, |coating|, |coating|)
+            tgt_struct_mask.diagonal(dim1 = 1, dim2 = 2).copy_(1) # each position is unmasked wrt itself
         else:
             tgt_struct_mask = torch.ones((tgt.shape[0], tgt.shape[1], tgt.shape[1]), device = CM().get('device')) # (batch, |coating|, |coating|)
         if CM().get('transformer.tgt_caus_mask'):
