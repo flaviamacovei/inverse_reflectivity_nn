@@ -159,12 +159,8 @@ class BaseTrainableModel(BaseModel, ABC):
                 labels = reflectivity if self.guidance == 'free' else coating_encoding
 
                 output = self.get_model_output(reflectivity, coating_encoding)
-                thicknesses = output[:, :, :1]
-                logits = output[:, :, 1:]
-                materials = self.sample(logits)
-                preds = torch.cat([thicknesses, materials], dim = -1)
 
-                loss = self.compute_loss(preds, labels)
+                loss = self.compute_loss(output, labels)
                 epoch_loss += loss.item()
 
                 if CM().get('wandb.log'):
@@ -195,8 +191,13 @@ class BaseTrainableModel(BaseModel, ABC):
 
     def get_bos(self):
         substrate = EM().get_material(CM().get('materials.substrate'))
-        bos = EM().encode([substrate])[None]  # (batch, |coating| = 1, 1)
+        bos = EM().encode([substrate])[None] # (batch, |coating| = 1, 1)
         return bos
+
+    def get_eos(self):
+        air = EM().get_material(CM().get('materials.air'))
+        eos = EM().encode([air])[None] # (batch, |coating| = 1, 1)
+        return eos
 
     def get_bos_logits(self):
         bos = self.get_bos()
@@ -243,7 +244,7 @@ class BaseTrainableModel(BaseModel, ABC):
         coating = Coating(output)
         preds = coating_to_reflectivity(coating)
         print(coating.get_batch(0))
-        visualise(preds, refs, f"transformer/enc_unmasked/from_training_epoch_{epoch}")
+        visualise(preds, refs, f"from_training_epoch_{epoch}")
 
     def update_checkpoint(self, epoch: int):
         new_checkpoint = get_unique_filename(f"out/models/checkpoint_{short_hash(self.model) + short_hash(epoch)}.pt")
@@ -326,24 +327,40 @@ class BaseTrainableModel(BaseModel, ABC):
         preds = torch.cat([thicknesses, materials], dim=-1)
         return Coating(preds)
 
-    def compute_loss_guided(self, preds: torch.Tensor, labels: torch.Tensor):
+    def get_coating_indices(self, coating: torch.Tensor):
+        coating = coating[:, :, None].repeat(1, 1, self.tgt_vocab_size, 1) # (batch, seq_len, vocab_size, embed_dim)
+        coating_eq = coating.eq(self.vocab) # (batch, seq_len, vocab_size, embed_dim)
+        coating_indices = coating_eq.prod(dim = -1) # (batch, seq_len, vocab_size)
+        return coating_indices.argmax(dim = -1) # (batch, seq_len)
+
+    def compute_loss_guided(self, input: torch.Tensor, labels: torch.Tensor):
         """
         Compute guided loss of a batch of data.
 
         Guided loss is the scaled L2 loss between the predicted coating and the ground truth coating.
 
         Args:
-            preds: Model output.
+            input: Model output.
             labels: Ground truth coating encoding.
         """
-        batch_size, num_layers, encoding_size = preds.shape
-        scale_mean = batch_size * num_layers * encoding_size
-        loss = torch.sum((preds - labels) ** 2) / scale_mean
-        regularisation = self.regularise(Coating(preds))
-        lmd = CM().get('training.reg_weight')
-        return loss + lmd * regularisation
+        batch_size, seq_len, _ = input.shape
+        scale_mean = batch_size * seq_len
+        input_thicknesses = input[:, :, :1]
+        input_logits = input[:, :, 1:]
+        label_thicknesses = labels[:, :, :1]
+        label_materials = labels[:, :, 1:]
 
-    def compute_loss_free(self, preds: torch.Tensor, labels: torch.Tensor):
+        indices = self.get_coating_indices(label_materials)
+        softmax_probabilities = F.softmax(input_logits, dim = -1)
+        material_loss = F.cross_entropy(softmax_probabilities.view(-1, self.tgt_vocab_size), indices.view(-1)) / scale_mean
+        thickness_loss = F.mse_loss(input_thicknesses, label_thicknesses) / scale_mean
+        loss = material_loss + thickness_loss
+
+        regularisation_loss = self.regularise(Coating(torch.cat([input_thicknesses, self.sample(input_logits)], dim = -1)))
+        lmd = CM().get('training.reg_weight')
+        return loss + lmd * regularisation_loss
+
+    def compute_loss_free(self, input: torch.Tensor, labels: torch.Tensor):
         """
         Compute free loss of a batch of data.
 
@@ -354,7 +371,11 @@ class BaseTrainableModel(BaseModel, ABC):
         """
         # create reflectivity pattern for match operation
         pattern = ReflectivityPattern(labels[:, :, 0], labels[:, :, 1])
-        coating = Coating(preds)
+        input_thicknesses = input[:, :, :1]
+        input_logits = input[:, :, 1:]
+        input_materials = self.sample(input_logits)
+        coating_encoding = torch.cat([input_thicknesses, input_materials], dim = -1)
+        coating = Coating(coating_encoding)
         # convert predicted coating to reflectivity value
         preds = coating_to_reflectivity(coating)
         loss = match(preds, pattern)
@@ -363,15 +384,13 @@ class BaseTrainableModel(BaseModel, ABC):
         return loss + lmd * regularisation
 
     def regularise(self, coating: Coating):
-        materials = EM().get_nearest_neighbours(coating.get_encoding()[:, :, 1:]) # (batch, |coating|, |materials_embedding|)
-        batch_size, num_layers, encoding_size = materials.shape
-        scale_factor = batch_size * num_layers * encoding_size
+        # materials = EM().get_nearest_neighbours(coating.get_encoding()[:, :, 1:]) # (batch, |coating|, |materials_embedding|)
+        materials = coating.get_encoding()[:, :, 1:]
+        batch_size, seq_len, encoding_size = materials.shape
+        scale_factor = batch_size * seq_len * encoding_size
 
-        substrate = EM().get_material(CM().get('materials.substrate'))
-        air = EM().get_material(CM().get('materials.air'))
-        substrate_encoding, air_encoding = EM().encode([substrate, air])
-        substrate_encoding = substrate_encoding.reshape(encoding_size) # (|materials_embedding|)
-        air_encoding = air_encoding.reshape(encoding_size) # (|materials_embedding|)
+        substrate_encoding = self.get_bos().reshape(encoding_size) # (|materials_embedding|)
+        air_encoding = self.get_eos().reshape(encoding_size) # (|materials_embedding|)
 
         # make mask for substrate
         substrate_mask = torch.zeros_like(materials).to(CM().get('device')).to(torch.int) # (batch, |coating|, |materials_embedding|)
@@ -393,7 +412,7 @@ class BaseTrainableModel(BaseModel, ABC):
         # ensure at least last element is air
         last_mat_idx = torch.minimum(last_mat_idx, torch.tensor(not_air.shape[-1] - 2))
         # make mask for air block
-        range_coating = torch.arange(num_layers, device=CM().get('device')) # (|coating|)
+        range_coating = torch.arange(seq_len, device=CM().get('device')) # (|coating|)
         air_mask = range_coating[None] >= (last_mat_idx + 1)[:, None]  # (batch, |coating|)
         air_mask = air_mask[:, :, None].expand(-1, -1, encoding_size) # (batch, |coating|, |materials_embedding|)
         # test that air block is at the end
