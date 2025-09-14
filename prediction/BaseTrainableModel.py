@@ -384,26 +384,24 @@ class BaseTrainableModel(BaseModel, ABC):
         return loss + lmd * regularisation
 
     def regularise(self, coating: Coating):
-        # materials = EM().get_nearest_neighbours(coating.get_encoding()[:, :, 1:]) # (batch, |coating|, |materials_embedding|)
         materials = coating.get_encoding()[:, :, 1:]
         batch_size, seq_len, encoding_size = materials.shape
         scale_factor = batch_size * seq_len * encoding_size
 
-        substrate_encoding = self.get_bos().reshape(encoding_size) # (|materials_embedding|)
-        air_encoding = self.get_eos().reshape(encoding_size) # (|materials_embedding|)
+        substrate = self.get_bos().reshape(encoding_size)
+        air = self.get_eos().reshape(encoding_size)
 
         # make mask for substrate
         substrate_mask = torch.zeros_like(materials).to(CM().get('device')).to(torch.int) # (batch, |coating|, |materials_embedding|)
         substrate_mask[:, 0] = 1
+        substrate_mask = substrate_mask.bool()
         # test that substrate is at first position
-        substrate_pos = torch.zeros_like(materials).to(CM().get('device')) # (batch, |coating|, |materials_embedding|)
-        substrate_pos[substrate_mask] = substrate_encoding
+        substrate_pos = substrate_mask * substrate
         # test that substrate is nowhere else
-        substrate_neg = torch.zeros_like(materials).to(CM().get('device')) # (batch, |coating|, |materials_embedding|)
-        substrate_neg[~substrate_mask] = substrate_encoding
+        substrate_neg = ~substrate_mask * substrate
 
         # get index of last material before air
-        not_air = materials.ne(air_encoding) # (batch, |coating|, |materials_embedding|)
+        not_air = materials.ne(air) # (batch, |coating|, |materials_embedding|)
         # logical or along dimension -1
         not_air = not_air.int().sum(dim = -1).bool() # (batch, |coating|)
         not_air_rev = not_air.flip(dims = [1]).to(torch.int) # (batch, |coating|)
@@ -417,10 +415,10 @@ class BaseTrainableModel(BaseModel, ABC):
         air_mask = air_mask[:, :, None].expand(-1, -1, encoding_size) # (batch, |coating|, |materials_embedding|)
         # test that air block is at the end
         air_pos = torch.zeros_like(materials).to(CM().get('device')) # (batch, |coating|, |materials_embedding|)
-        air_pos[air_mask] = air_encoding.repeat(air_pos[air_mask].shape[0] // encoding_size)
+        air_pos[air_mask] = air.repeat(air_pos[air_mask].shape[0] // encoding_size)
         # test that air is nowhere else
         air_neg = torch.zeros_like(materials).to(CM().get('device')) # (batch, |coating|, |materials_embedding|)
-        air_neg[~air_mask] = air_encoding.repeat(air_neg[~air_mask].shape[0] // encoding_size)
+        air_neg[~air_mask] = air.repeat(air_neg[~air_mask].shape[0] // encoding_size)
 
         # calculate distances
         substrate_pos_err = torch.sum(materials.ne(substrate_pos) * substrate_mask)
