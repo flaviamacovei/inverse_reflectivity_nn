@@ -92,6 +92,7 @@ class BaseTrainableModel(BaseModel, ABC):
 
         self.model = self.build_model()
         self.optimiser = torch.optim.Adam(self.model.parameters())
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimiser, mode = 'min', patience = 2)
 
     @abstractmethod
     def build_model(self):
@@ -165,6 +166,7 @@ class BaseTrainableModel(BaseModel, ABC):
 
                 if CM().get('wandb.log'):
                     wandb.log({"loss": loss.item()})
+                    wandb.log({"lr": self.optimiser.param_groups[0]['lr']})
 
                 loss.backward()
 
@@ -174,6 +176,7 @@ class BaseTrainableModel(BaseModel, ABC):
 
                 self.scale_gradients()
                 self.optimiser.step()
+                self.scheduler.step(loss.item())
             epoch_loss /= len(self.dataloader)
             if epoch % max(1, CM().get('training.num_epochs') / 20) == 0:
                 if CM().get('training.save_model'):
