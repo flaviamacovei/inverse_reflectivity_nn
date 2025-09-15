@@ -28,11 +28,15 @@ class Hybrid(BaseTrainableModel):
             "rnn": RNN,
             "transformer": Transformer,
         }
-        ModelClass = types[trainable_type]
-        trainable = ModelClass()
-        super().__init__(trainable.model)
-        self.trainable = trainable
+        trainable_type = trainable_type
+        self.ModelClass = types[trainable_type]
+        super().__init__()
+        # self.trainable = self.model
         self.gradient = GradientModel()
+
+    def build_model(self):
+        self.trainable = self.ModelClass()
+        return self.trainable.model
 
     def get_model_output(self, src, tgt = None):
         return self.trainable.get_model_output(src, tgt)

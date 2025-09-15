@@ -33,13 +33,15 @@ class TrainableCNN(nn.Module):
         forward: Propagate input through the model.
         get_output_size: Return output size of the network.
     """
-    def __init__(self, in_dim: list[int], out_dim: list[int], channel_dims: list[int], kernel_size: int, stride: int, padding: int):
+    def __init__(self, in_dims: dict, out_dims: dict, channel_dims: list[int], kernel_size: int, stride: int, padding: int):
         """Initialise a TrainableCNN instance."""
         super().__init__()
-        self.in_dim = in_dim
-        src_width, src_height = in_dim
-        self.out_dim = out_dim
-        tgt_width, tgt_height = out_dim
+        self.in_dims = in_dims
+        src_width = self.in_dims['seq_len']
+        src_height = self.in_dims['dim']
+        self.out_dims = out_dims # seq_len, vocab_size, 1
+        tgt_width = self.out_dims['seq_len']
+        tgt_height = self.out_dims['thickness'] + self.out_dims['material']
         self.channel_dims = [1] + channel_dims + [1]
         self.num_layers = len(self.channel_dims) - 1 # each convolution connects one channel dim to the next
         # kernel size for (untransposed) convolutions
@@ -67,6 +69,7 @@ class TrainableCNN(nn.Module):
                 nn.Conv2d(in_channels = self.channel_dims[i], out_channels = self.channel_dims[i + 1], kernel_size = self.kernel_size, stride = self.stride, padding = self.padding),
                 nn.ConvTranspose2d(in_channels = self.channel_dims[i + 1], out_channels = self.channel_dims[i + 1], kernel_size = self.transpose_kernel_size, stride = self.stride, padding = 0),
                 nn.MaxPool2d(kernel_size = self.pooling_size),
+                nn.BatchNorm2d(self.channel_dims[i + 1]),
             )
             conv_blocks.append(block)
         self.convolutions = nn.ModuleList(conv_blocks)
@@ -75,9 +78,15 @@ class TrainableCNN(nn.Module):
         self.conv_width = math.floor(src_width / (width_pooling ** self.num_layers))
         # achieved height after convolutions with rounded kernel
         self.conv_height = math.floor(src_height + (height_pooling - 1) * self.num_layers)
-        self.linear = nn.Linear(self.conv_width * self.conv_height, tgt_width * tgt_height)
-
-        self.final_pool = nn.MaxPool2d(kernel_size = (2, 1))
+        encoder_dim = self.conv_width * self.conv_height
+        # self.linear = nn.Linear(self.conv_width * self.conv_height, tgt_width * tgt_height)
+        self.thickness_head = nn.Sequential(
+            nn.Linear(encoder_dim, self.out_dims['seq_len'] * self.out_dims['thickness']),
+        )
+        self.material_head = nn.Sequential(
+            nn.Linear(encoder_dim, self.out_dims['seq_len'] * self.out_dims['material']),
+            nn.ReLU(),
+        )
 
 
     def forward(self, x):
@@ -86,9 +95,11 @@ class TrainableCNN(nn.Module):
         for layer in self.convolutions:
             x = layer(x)
         x = x.reshape(-1, self.conv_width * self.conv_height)
-        x = self.linear(x)
-        x = x.reshape(-1, self.out_dim[0], self.out_dim[1])
-        return x + torch.abs(x)
+        thickness_output = torch.abs(self.thickness_head(x))
+        material_output = self.material_head(x)
+        thickness_output = thickness_output.reshape(-1, self.out_dims['seq_len'], self.out_dims['thickness'])
+        material_output = material_output.reshape(-1, self.out_dims['seq_len'], self.out_dims['material'])
+        return thickness_output, material_output
 
     def get_output_size(self):
         """Return output size of the model."""
@@ -111,7 +122,7 @@ class CNN(BaseTrainableModel):
         kernel_size = CM().get('cnn.kernel_size')
         stride = 1
         padding = kernel_size // 2
-        return TrainableCNN(self.in_dim, self.out_dim, channel_dims, kernel_size, stride, padding).to(CM().get('device'))
+        return TrainableCNN(self.in_dims, self.out_dims, channel_dims, kernel_size, stride, padding).to(CM().get('device'))
 
     def get_model_output(self, src, tgt = None):
         """
@@ -126,7 +137,8 @@ class CNN(BaseTrainableModel):
         Returns:
             Output of the model.
         """
-        return self.model(src)
+        thicknesses, materials = self.model(src)
+        return torch.cat([thicknesses, materials], dim = -1)
 
     def scale_gradients(self):
         pass

@@ -22,27 +22,47 @@ class TrainableMLP(nn.Module):
         forward: Propagate input through the model.
         get_output_size: Return output size of the network.
     """
-    def __init__(self, in_dim: int, out_dim: int):
+    def __init__(self, in_dims: dict, out_dims: dict):
         """Initialise a TrainableMLP instance."""
         super().__init__()
-        self.in_dim = in_dim
-        self.out_dim = out_dim
-        dimensions = [self.in_dim] + CM().get('mlp.hidden_dims') + [self.out_dim]
-        layers = []
+        self.in_dim = in_dims['seq_len'] * in_dims['dim']
+        self.out_dims = out_dims
+        dimensions = [self.in_dim] + CM().get('mlp.hidden_dims')
+
+        shared_layers = []
         for i in range(len(dimensions) - 1):
-            layers.append(nn.Linear(dimensions[i], dimensions[i + 1], device = CM().get('device')))
-            layers.append(nn.ReLU())
-        self.net = nn.ModuleList(layers)
+            shared_layers.append(nn.Linear(dimensions[i], dimensions[i + 1]))
+            shared_layers.append(nn.ReLU())
+            shared_layers.append(nn.BatchNorm1d(dimensions[i + 1]))
+        self.shared_net = nn.ModuleList(shared_layers)
+        self.thickness_head = nn.Sequential(
+            nn.Linear(dimensions[-1], out_dims['seq_len'] * out_dims['thickness']),
+            nn.Sigmoid(),
+        )
+        self.thickness_norm = nn.LayerNorm((out_dims['seq_len'] - 2) * out_dims['thickness'])
+
+        self.material_head = nn.Sequential(
+            nn.Linear(dimensions[-1], out_dims['seq_len'] * out_dims['material']),
+            nn.ReLU(),
+        )
 
     def forward(self, x):
         """Propagate input through the model."""
-        for layer in self.net:
+        for layer in self.shared_net:
             x = layer(x)
-        return x + torch.abs(x)
+        thickness_outputs = torch.abs(self.thickness_head(x))
+        thickness_outputs = thickness_outputs.reshape(-1, self.out_dims['seq_len'], self.out_dims['thickness'])
+        substrate_thickness = thickness_outputs[:, 0]
+        air_thickness = thickness_outputs[:, -1]
+        thin_film_thickness = thickness_outputs[:, 1:-1].flatten(start_dim = 1)
+        normalised_thin_film_thickness = self.thickness_norm(thin_film_thickness)
+        thickness_outputs = torch.cat([substrate_thickness, normalised_thin_film_thickness, air_thickness], dim = -1)
+        material_outputs = self.material_head(x)
+        return torch.abs(thickness_outputs), material_outputs
 
     def get_output_size(self):
         """Return output size of the network."""
-        return self.out_dim
+        return self.out_dims
 
 class MLP(BaseTrainableModel):
     """
@@ -56,10 +76,8 @@ class MLP(BaseTrainableModel):
         """Initialise an MLP instance."""
 
     def build_model(self):
-        self.flattened_in_dim = math.prod(self.in_dim)
-        self.flattened_out_dim = math.prod(self.out_dim)
 
-        return TrainableMLP(self.flattened_in_dim, self.flattened_out_dim)
+        return TrainableMLP(self.in_dims, self.out_dims).to(CM().get('device'))
 
     def get_model_output(self, src, tgt = None):
         """
@@ -74,9 +92,11 @@ class MLP(BaseTrainableModel):
         Returns:
             Output of the model.
         """
-        src = src.reshape(-1, self.flattened_in_dim)
-        out = self.model(src)
-        return out.reshape(-1, self.out_dim[0], self.out_dim[1])
+        src = src.reshape(-1, self.in_dims['seq_len'] * self.in_dims['dim'])
+        out_thicknesses, out_materials = self.model(src)
+        out_thicknesses = out_thicknesses.reshape(-1, self.tgt_seq_len, 1)
+        out_materials = out_materials.reshape(-1, self.tgt_seq_len, self.tgt_vocab_size)
+        return torch.cat([out_thicknesses, out_materials], dim = -1)
 
     def scale_gradients(self):
         if self.guidance == "free":

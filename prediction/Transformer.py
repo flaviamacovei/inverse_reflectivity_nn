@@ -10,7 +10,7 @@ from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
 from data.values.ReflectivityPattern import ReflectivityPattern
 from data.values.Coating import Coating
 
-class PositionalEncoding(nn.Module):
+class SinusoidalPositionalEncoding(nn.Module):
     def __init__(self, embed_dim: int, seq_len: int, dropout: float):
         super().__init__()
         self.embed_dim = embed_dim
@@ -34,6 +34,19 @@ class PositionalEncoding(nn.Module):
 
     def forward(self, x):
         x = x + (self.pe[:, :x.shape[1], :]).requires_grad_(False)
+        return self.dropout(x)
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, embed_dim: int, seq_len: int, dropout: float = 0.1):
+        super().__init__()
+        self.dropout = nn.Dropout(dropout)
+        # learned embeddings: (seq_len, embed_dim)
+        self.pe = nn.Embedding(seq_len, embed_dim)
+
+    def forward(self, x):
+        # x: (batch, seq_len, embed_dim)
+        positions = torch.arange(0, x.size(1), device=x.device).unsqueeze(0)  # (1, seq_len)
+        x = x + self.pe(positions)  # broadcast add
         return self.dropout(x)
 
 class LayerNormalisation(nn.Module):
@@ -196,7 +209,7 @@ class BilinearProjectionLayer(nn.Module):
         return x
 
 class TrainableTransformer(nn.Module):
-    def __init__(self, encoder: Encoder, decoder: Decoder, src_pos: PositionalEncoding, tgt_pos: PositionalEncoding, encoder_projection: BilinearProjectionLayer, encoder_mask_projection: ProjectionLayer, decoder_projection: ProjectionLayer, output_projection: ProjectionLayer):
+    def __init__(self, encoder: Encoder, decoder: Decoder, src_pos: PositionalEncoding, tgt_pos: PositionalEncoding, encoder_projection: BilinearProjectionLayer, encoder_mask_projection: ProjectionLayer, decoder_projection: ProjectionLayer, thickness_out_projection: ProjectionLayer, material_out_projection: ProjectionLayer):
         super().__init__()
         self.encoder = encoder
         self.decoder = decoder
@@ -205,7 +218,8 @@ class TrainableTransformer(nn.Module):
         self.encoder_projection = encoder_projection
         self.encoder_mask_projection = encoder_mask_projection
         self.decoder_projection = decoder_projection
-        self.output_projection = output_projection
+        self.thickness_out_projection = thickness_out_projection
+        self.material_out_projection = material_out_projection
 
     def project_bos(self, bos):
         return self.decoder_projection(bos)
@@ -232,7 +246,9 @@ class TrainableTransformer(nn.Module):
         return self.decoder(tgt, encoder_output, src_mask, tgt_mask)
 
     def project(self, x):
-        return torch.abs(self.output_projection(x))
+        projected_thickness = torch.abs(self.thickness_out_projection(x))
+        projected_material = torch.abs(self.material_out_projection(x))
+        return projected_thickness, projected_material
 
 class Transformer(BaseTrainableModel):
     def __init__(self):
@@ -256,6 +272,7 @@ class Transformer(BaseTrainableModel):
         else:
             src_mask = torch.ones(src.shape[0], src.shape[1], device = CM().get('device'))
         encoder_output = self.model.encode(src, src_mask)
+        encoder_output = torch.rand(encoder_output.shape, device = CM().get('device'))
 
         if tgt is not None and len(tgt.shape) != 1:
             # in training mode, target is specified
@@ -264,8 +281,13 @@ class Transformer(BaseTrainableModel):
             bos = self.model.project_bos(tgt[:, :1, :])
             tgt_mask = self.make_tgt_mask(decoder_input) # (batch, 1, |coating|, |coating|)
             decoder_output = self.model.decode(encoder_output, src_mask, decoder_input, tgt_mask)
+            self.visualise_matrix(decoder_output[0], "decoder_output_random")
             connected = torch.cat([bos, decoder_output], dim = 1)
-            return self.model.project(connected)
+            projected_thickness, projected_material = self.model.project(connected)
+            # self.visualise_matrix(projected_material[0], "logits_0")
+            # self.visualise_matrix(self.model.material_out_projection.proj.weight, "weight")
+            # self.visualise_matrix(self.model.material_out_projection.proj.bias[:, None], "bias")
+            return torch.cat([projected_thickness, projected_material], dim = -1)
         else:
             # in inference mode, target is not specified
             # beginning of any coating: thickness is 1.0, material is substrate
@@ -278,8 +300,9 @@ class Transformer(BaseTrainableModel):
                 material_logits = tgt[:, :, 1:]
                 materials = self.sample(material_logits)
                 decoder_output = self.model.decode(encoder_output, src_mask, torch.cat([thicknesses, materials], dim = -1), tgt_mask)
-                projection = self.model.project(decoder_output[:, -1:]) # take only the last item but keep the dimension (batch, |coating|, vocab_size + 1)
-                tgt = torch.cat([tgt, projection], dim = 1)
+                projected_thickness, projected_material = self.model.project(decoder_output[:, -1:]) # take only the last item but keep the dimension (batch, |coating|, vocab_size + 1)
+                next = torch.cat([projected_thickness, projected_material], dim = -1)
+                tgt = torch.cat([tgt, next], dim = 1)
             return tgt
 
     def make_tgt_mask(self, tgt):
@@ -343,7 +366,7 @@ class Transformer(BaseTrainableModel):
             encoder_blocks.append(encoder_block)
 
         # target input projection
-        tgt_proj = ProjectionLayer(self.tgt_dim, self.d_model)
+        tgt_proj = ProjectionLayer(self.tgt_dim + self.out_dims['thickness'], self.d_model)
 
         # decoder blocks
         decoder_blocks = []
@@ -359,10 +382,11 @@ class Transformer(BaseTrainableModel):
         decoder = Decoder(nn.ModuleList(decoder_blocks))
 
         # output projection layer
-        out_proj = ProjectionLayer(self.d_model, self.tgt_vocab_size + 1) # one for the thicknesses
+        thickness_proj = ProjectionLayer(self.d_model, self.out_dims['thickness'])
+        material_proj = ProjectionLayer(self.d_model, self.out_dims['material'])
 
         # transformer
-        transformer = TrainableTransformer(encoder, decoder, src_pos, tgt_pos, src_proj, src_mask_proj, tgt_proj, out_proj)
+        transformer = TrainableTransformer(encoder, decoder, src_pos, tgt_pos, src_proj, src_mask_proj, tgt_proj, thickness_proj, material_proj)
 
         # initialise params with xavier
         for p in transformer.parameters():
