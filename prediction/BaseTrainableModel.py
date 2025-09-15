@@ -8,7 +8,6 @@ import os
 from datetime import datetime
 import sys
 import yaml
-from triton.language import softmax
 
 sys.path.append(sys.path[0] + '/..')
 from prediction.BaseModel import BaseModel
@@ -66,9 +65,9 @@ class BaseTrainableModel(BaseModel, ABC):
         self.src_dim = 2 # lower bound and upper bound
         self.tgt_seq_len = CM().get('num_layers') + 2 # thin films + substrate + air
         self.tgt_vocab_size = len(CM().get('materials.thin_films')) + 2 # available thin films + substrate + air
-        self.tgt_dim = CM().get('material_embedding.dim') + 1 # embedding + thickness
-        self.in_dim = [self.src_seq_len, self.src_dim]
-        self.out_dim = [self.tgt_seq_len, self.tgt_vocab_size + 1] # vocab_size + thickness
+        self.tgt_dim = CM().get('material_embedding.dim')
+        self.in_dims = {'seq_len': self.src_seq_len, 'dim': self.src_dim}
+        self.out_dims = {'seq_len': self.tgt_seq_len, 'material': self.tgt_vocab_size, 'thickness': 1}
 
         self.init_dataloader()
 
@@ -92,7 +91,7 @@ class BaseTrainableModel(BaseModel, ABC):
 
         self.model = self.build_model()
         self.optimiser = torch.optim.Adam(self.model.parameters())
-        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimiser, mode = 'min', patience = 2)
+        # self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimiser, mode = 'min', patience = 5, cooldown = 5)
 
     @abstractmethod
     def build_model(self):
@@ -162,11 +161,12 @@ class BaseTrainableModel(BaseModel, ABC):
                 output = self.get_model_output(reflectivity, coating_encoding)
 
                 loss = self.compute_loss(output, labels)
+                # print(loss.item())
                 epoch_loss += loss.item()
 
                 if CM().get('wandb.log'):
                     wandb.log({"loss": loss.item()})
-                    wandb.log({"lr": self.optimiser.param_groups[0]['lr']})
+                    # wandb.log({"lr": self.optimiser.param_groups[0]['lr']})
 
                 loss.backward()
 
@@ -176,8 +176,8 @@ class BaseTrainableModel(BaseModel, ABC):
 
                 self.scale_gradients()
                 self.optimiser.step()
-                self.scheduler.step(loss.item())
             epoch_loss /= len(self.dataloader)
+            # self.scheduler.step(epoch_loss)
             if epoch % max(1, CM().get('training.num_epochs') / 20) == 0:
                 if CM().get('training.save_model'):
                     # logging at every 5% of training
@@ -225,6 +225,53 @@ class BaseTrainableModel(BaseModel, ABC):
         greedy_probabilities = greedy_probs_hard + (greedy_probs_soft - greedy_probs_soft.detach())
         return greedy_probabilities @ self.vocab
 
+    def mask_logits(self, logits: torch.Tensor):
+        return logits
+        seq_len = logits.shape[1]
+        # logits = logits.reshape(logits.shape[0], self.seq_len, self.vocab_size)
+        substrate = EM().get_material(CM().get('materials.substrate'))
+        air = EM().get_material(CM().get('materials.air'))
+        substrate_encoding, air_encoding = EM().encode([substrate, air])
+        # get index of substrate and air in embeddings lookup
+        substrate_index = EM().get_embeddings().eq(substrate_encoding).nonzero(as_tuple=True)[0].item()
+        air_index = EM().get_embeddings().eq(air_encoding).nonzero(as_tuple=True)[0].item()
+
+        # create substrate mask
+        substrate_position_mask = torch.zeros_like(logits)
+        # mask all other tokens at first position
+        substrate_position_mask[:, 0] = 1
+        # mask substrate at all other positions
+        substrate_index_mask = torch.zeros_like(logits)
+        substrate_index_mask[:, :, substrate_index] = 1
+        substrate_mask = torch.logical_xor(substrate_position_mask, substrate_index_mask)
+
+        # get index of last material to bound air block
+        not_air = logits.argmax(dim=-1, keepdim=True).ne(air_index)  # (batch, |coating|, |materials_embedding|)
+        # logical or along dimension -1
+        not_air = not_air.int().sum(dim=-1).bool()  # (batch, |coating|)
+        not_air_rev = not_air.flip(dims=[1]).to(torch.int)  # (batch, |coating|)
+        last_mat_idx_rev = torch.argmax(not_air_rev, dim=-1)  # (batch)
+        last_mat_idx = not_air.shape[-1] - last_mat_idx_rev - 1  # (batch)
+        # ensure at least last element is air
+        last_mat_idx = torch.minimum(last_mat_idx, torch.tensor(not_air.shape[-1] - 2))
+        # create air mask
+        range_coating = torch.arange(seq_len, device=CM().get('device'))  # (|coating|)
+        # mask all other tokens at air block
+        air_position_mask = range_coating[None] >= (last_mat_idx + 1)[:, None]  # (batch, |coating|)
+        air_position_mask = air_position_mask[:, :, None].repeat(1, 1, self.vocab_size)  # (batch, |coating|, |vocab|)
+        # mask air at all other positions
+        air_index_mask = torch.zeros_like(logits)
+        air_index_mask[:, :, air_index] = 1
+        air_mask = torch.logical_xor(air_position_mask, air_index_mask)
+
+        # mask logits
+        mask = torch.logical_or(substrate_mask, air_mask)
+        subtrahend = torch.zeros_like(logits)
+        subtrahend[mask] = torch.inf
+        logits = logits - subtrahend
+        # logits.masked_fill_(mask == 1, -torch.inf)
+        return logits
+
     def visualise_epoch(self, epoch: int):
         # visualise first item of batch
         self.model.eval()
@@ -247,7 +294,7 @@ class BaseTrainableModel(BaseModel, ABC):
         coating = Coating(output)
         preds = coating_to_reflectivity(coating)
         print(coating.get_batch(0))
-        visualise(preds, refs, f"from_training_epoch_{epoch}")
+        visualise(preds, refs, f"{self.get_architecture_name()}/from_training_epoch_{epoch}")
 
     def update_checkpoint(self, epoch: int):
         new_checkpoint = get_unique_filename(f"out/models/checkpoint_{short_hash(self.model) + short_hash(epoch)}.pt")
@@ -276,7 +323,8 @@ class BaseTrainableModel(BaseModel, ABC):
             "stratified_sampling": CM().get('stratified_sampling'),
             "tolerance": CM().get('tolerance'),
             "num_points": CM().get('training.dataset_size'),
-            "epochs": CM().get('training.num_epochs')
+            "epochs": CM().get('training.num_epochs'),
+            "guidance_schedule": CM().get('training.guidance_schedule'),
         }
         model_filename = get_unique_filename(f"out/models/model_{short_hash(props_dict)}.pt")
 
@@ -326,6 +374,7 @@ class BaseTrainableModel(BaseModel, ABC):
         output = self.get_model_output(model_input)
         thicknesses = output[:, :, :1]
         logits = output[:, :, 1:]
+        # logits = self.mask_logits(logits)
         materials = self.sample(logits)
         preds = torch.cat([thicknesses, materials], dim=-1)
         return Coating(preds)
@@ -355,8 +404,11 @@ class BaseTrainableModel(BaseModel, ABC):
 
         indices = self.get_coating_indices(label_materials)
         softmax_probabilities = F.softmax(input_logits, dim = -1)
-        material_loss = F.cross_entropy(softmax_probabilities.view(-1, self.tgt_vocab_size), indices.view(-1)) / scale_mean
-        thickness_loss = F.mse_loss(input_thicknesses, label_thicknesses) / scale_mean
+        material_loss = F.cross_entropy(softmax_probabilities.transpose(1, 2), indices) / batch_size
+        # material_loss = F.mse_loss(self.sample(input_logits), label_materials)
+        # material_loss = 0
+        thickness_loss = F.mse_loss(input_thicknesses, label_thicknesses) / batch_size
+        # thickness_loss = 0
         loss = material_loss + thickness_loss
 
         regularisation_loss = self.regularise(Coating(torch.cat([input_thicknesses, self.sample(input_logits)], dim = -1)))
@@ -387,7 +439,9 @@ class BaseTrainableModel(BaseModel, ABC):
         return loss + lmd * regularisation
 
     def regularise(self, coating: Coating):
+        return 0
         materials = coating.get_encoding()[:, :, 1:]
+        thicknesses = coating.get_encoding()[:, :, :1]
         batch_size, seq_len, encoding_size = materials.shape
         scale_factor = batch_size * seq_len * encoding_size
 
@@ -429,7 +483,12 @@ class BaseTrainableModel(BaseModel, ABC):
         air_pos_err = torch.sum(materials.ne(air_pos) * air_mask)
         air_neg_err = torch.sum(materials.eq(air_neg) * ~air_mask)
 
-        return (substrate_pos_err + substrate_neg_err + air_pos_err + air_neg_err) / scale_factor
+        materials_err = (substrate_pos_err + substrate_neg_err + air_pos_err + air_neg_err) / scale_factor
+
+        thicknesses_err = (thicknesses.numel() - thicknesses.count_nonzero()) / (batch_size * seq_len)
+        # thicknesses_err = 0
+
+        return materials_err + thicknesses_err
 
     @abstractmethod
     def get_model_output(self, src, tgt = None):
@@ -474,7 +533,7 @@ class BaseTrainableModel(BaseModel, ABC):
     @abstractmethod
     def scale_gradients(self):
         """Scale gradients of trainable model. Must be implemented by subclasses."""
-
+        ...
 
     def get_num_params(self):
         return sum(p.numel() for p in self.model.parameters())
