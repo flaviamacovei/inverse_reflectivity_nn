@@ -110,7 +110,8 @@ class DynamicDataloader(BaseDataloader):
         filepath = get_dataset_name("training", density)
         self.load_data(filepath, weights_only = False)
         # TODO: turn this into an actual dataloader class maybe?
-        self.dataloader = DataLoader(self.dataset, batch_size = self.batch_size, shuffle = self.shuffle)
+        drop_last = len(self.dataset) > self.batch_size
+        self.dataloader = DataLoader(self.dataset, batch_size = self.batch_size, shuffle = self.shuffle, drop_last = drop_last)
 
     def load_data(self, filepath: str = None, weights_only: bool = True):
         """

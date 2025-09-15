@@ -13,14 +13,19 @@ def match(input: ReflectivityValue, target: ReflectivityPattern):
         input: reflectivity value object.
         target: reflectivity pattern object.
     """
-    batch_size = input.get_value().shape[0]
-    wl_size = input.get_value().shape[1]
-    scale_mean = batch_size * wl_size
-    upper_error = input.get_value() - target.get_upper_bound()
+    lower_bound = target.get_lower_bound()
+    upper_bound = target.get_upper_bound()
+    value = input.get_value()
+
+    masked = lower_bound.eq(0) & upper_bound.eq(1)
+    masked_factor = masked.sum(dim = -1, keepdim = True)
+    batch_size, wl_size = value.shape
+    scale_mean = batch_size * (wl_size - masked_factor)
+    upper_error = value - upper_bound
     upper_error = upper_error.clamp(min = 0)
-    lower_error = target.get_lower_bound() - input.get_value()
+    lower_error = lower_bound - value
     lower_error = lower_error.clamp(min = 0)
 
-    total_error = torch.sum(upper_error ** 2 + lower_error ** 2) / scale_mean
+    total_error = torch.sum((upper_error ** 2 + lower_error ** 2) / scale_mean)
 
     return total_error
