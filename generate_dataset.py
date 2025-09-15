@@ -11,6 +11,7 @@ from data.dataset_generation.MaskedPatternGenerator import MaskedPatternGenerato
 from data.dataset_generation.ExplicitPatternGenerator import ExplicitPatternGenerator
 from utils.os_utils import short_hash, get_unique_filename
 from utils.data_utils import get_dataset_name
+from ui.cl_interact import ding
 
 
 def convert_to_dataset(generated):
@@ -178,6 +179,8 @@ def generate_dataset(split):
             # segmentation needed
             for i in range(num_points // MAX_POINTS_PER_SEGMENT + 1):
                 num_points_segment = min(num_points - i * MAX_POINTS_PER_SEGMENT, MAX_POINTS_PER_SEGMENT)
+                if num_points_segment == 0:
+                    break
                 generation_points = num_points_segment * OVERSAMPLING_FACTOR if CM().get('stratified_sampling') else num_points_segment
                 dataset_generator = Generator(generation_points)
                 generated_data = dataset_generator.generate()
@@ -196,4 +199,5 @@ if __name__ == "__main__":
     # default split (no argument specified) is "training"
     split = "training" if len(sys.argv) == 1 else sys.argv[1]
     generate_dataset(split)
+    ding()
 

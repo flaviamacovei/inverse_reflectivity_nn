@@ -1,4 +1,7 @@
 from abc import ABC, abstractmethod
+import torch
+import numpy as np
+import matplotlib.pyplot as plt
 import sys
 sys.path.append(sys.path[0] + '/..')
 from data.values.ReflectivityPattern import ReflectivityPattern
@@ -33,3 +36,12 @@ class BaseModel(ABC):
         Return name of model architecture. Must be implemented by subclasses.
         """
         pass
+
+    def visualise_matrix(self, matrix: torch.Tensor, title: str = "visualisation"):
+        assert len(matrix.shape) == 2, f"Expected two-dimensional matrix found {len(matrix.shape)}"
+        matrix_np = matrix.detach().cpu().numpy()
+        fig, ax = plt.subplots()
+        ax.set_title(title)
+        ax.imshow(matrix_np, cmap='viridis')
+        plt.savefig(f"out/{title}.png")
+        plt.close()
