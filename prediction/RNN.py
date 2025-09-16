@@ -5,6 +5,7 @@ sys.path.append(sys.path[0] + '/..')
 from utils.ConfigManager import ConfigManager as CM
 from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
 from prediction.BaseTrainableModel import BaseTrainableModel
+from ui.visualise import visualise_matrix
 
 class RNNBlock(nn.Module):
     def __init__(self, in_dim: int, hidden_dim: int, out_dim: int):
@@ -124,9 +125,7 @@ class RNN(BaseTrainableModel):
             # in training mode, target is specified
             # in training mode explicit leg, target is dummy data (len(shape) == 1) and should be ignored -> move to inference block
             decoded_thicknesses, decoded_materials = self.model.decode(encoder_output, tgt)
-            self.visualise_matrix(decoded_materials[0], "rnn_decoded_materials")
             projected_materials = self.model.project(decoded_materials.flatten(start_dim = 1)).reshape(-1, self.tgt_seq_len, self.tgt_vocab_size)
-            self.visualise_matrix(projected_materials[0], "rnn_projected_materials")
             return torch.cat([decoded_thicknesses, projected_materials], dim = -1)
         else:
             # in inference mode, target is not specified

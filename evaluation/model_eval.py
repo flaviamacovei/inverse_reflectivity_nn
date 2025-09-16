@@ -18,31 +18,15 @@ def evaluate_model(model: BaseModel):
     Args:
         model: Prediction model to evaluate.
     """
-    print("Evaluating model...")
     densities = ["complete", "masked", "explicit"]
-    density_errors = []
+    density_errors = dict()
     for density in densities:
         try:
             dataloader = init_dataloader(density)
         except FileNotFoundError:
             raise FileNotFoundError("Dataset in current configuration not found. Please run generate_dataset.py first.")
-            return
         error = evaluate_per_density(model, dataloader, save_visualisation = False)
-        try:
-            if CM().get('wandb.log'):
-                wandb.log({f"{density}_error": error})
-        except:
-            pass
-        print(f"{density} error: {error}")
-        density_errors.append(error)
-    total_error = sum(density_errors)
-    try:
-        if CM().get('wandb.log'):
-            wandb.log({"total_error": total_error})
-    except:
-        pass
-    print(f"total error: {total_error}")
-    print("Evaluation complete.")
+        density_errors[density] = error
     return density_errors
 
 def init_dataloader(density: str):
@@ -91,15 +75,8 @@ def test_model(model: BaseModel):
     Args:
         model: Prediction model to evaluate.
     """
-    print("Testing model...")
     batch_size = 1
     dataset = torch.load(f"data/datasets/test_data/test_data.pt", weights_only = False)
     dataloader = DataLoader(dataset, batch_size = batch_size, shuffle = False)
     test_error = evaluate_per_density(model, dataloader, save_visualisation = True)
-    try:
-        if CM().get('wandb.log'):
-            wandb.log({"test_error": test_error})
-    except:
-        pass
-    print(f"test error: {test_error}")
     return test_error

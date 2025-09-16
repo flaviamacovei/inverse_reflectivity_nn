@@ -23,7 +23,7 @@ class BaseGenerator(ABC):
         make_point: Generate a single point. Must be implemented by subclasses.
     """
 
-    def __init__(self, num_points: int = 1, batch_size: int = 256):
+    def __init__(self, num_points: int = 1, batch_size: int = 1024):
         """
         Initialise a BaseGenerator instance.
 

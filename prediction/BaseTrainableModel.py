@@ -23,6 +23,7 @@ from data.dataloaders.DynamicDataloader import DynamicDataloader
 from ui.visualise import visualise
 from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
 from utils.data_utils import get_saved_model_path
+from evaluation.model_eval import evaluate_model
 
 class BaseTrainableModel(BaseModel, ABC):
     """
@@ -184,7 +185,7 @@ class BaseTrainableModel(BaseModel, ABC):
                     self.update_checkpoint(epoch)
                 print(f"Loss in epoch {epoch + 1}: {epoch_loss.item()}")
                 # divide by dataset size instead of loss in epoch 0?
-                self.visualise_epoch(epoch)
+                self.evaluate_epoch(epoch)
         print("Training complete.")
         # save final trained model
         if CM().get('training.save_model'):
@@ -226,7 +227,6 @@ class BaseTrainableModel(BaseModel, ABC):
         return greedy_probabilities @ self.vocab
 
     def mask_logits(self, logits: torch.Tensor):
-        return logits
         seq_len = logits.shape[1]
         # logits = logits.reshape(logits.shape[0], self.seq_len, self.vocab_size)
         substrate = EM().get_material(CM().get('materials.substrate'))
@@ -258,7 +258,7 @@ class BaseTrainableModel(BaseModel, ABC):
         range_coating = torch.arange(seq_len, device=CM().get('device'))  # (|coating|)
         # mask all other tokens at air block
         air_position_mask = range_coating[None] >= (last_mat_idx + 1)[:, None]  # (batch, |coating|)
-        air_position_mask = air_position_mask[:, :, None].repeat(1, 1, self.vocab_size)  # (batch, |coating|, |vocab|)
+        air_position_mask = air_position_mask[:, :, None].repeat(1, 1, self.tgt_vocab_size)  # (batch, |coating|, |vocab|)
         # mask air at all other positions
         air_index_mask = torch.zeros_like(logits)
         air_index_mask[:, :, air_index] = 1
@@ -272,7 +272,7 @@ class BaseTrainableModel(BaseModel, ABC):
         # logits.masked_fill_(mask == 1, -torch.inf)
         return logits
 
-    def visualise_epoch(self, epoch: int):
+    def evaluate_epoch(self, epoch: int):
         # visualise first item of batch
         self.model.eval()
         first_batch = self.dataloader[0]
@@ -287,13 +287,23 @@ class BaseTrainableModel(BaseModel, ABC):
             output = self.get_model_output(reflectivity, coating_encoding)
 
             thicknesses = output[:, :, :1]
-            logits = output[:, :, 1:]
-            materials = self.sample(logits)
-            output = torch.cat([thicknesses, materials], dim = -1)
+            unmasked_logits = output[:, :, 1:]
+            masked_logits = self.mask_logits(unmasked_logits)
+            unmasked_materials = self.sample(unmasked_logits)
+            unmasked_output = torch.cat([thicknesses, unmasked_materials], dim = -1)
+            masked_materials = self.sample(masked_logits)
+            masked_output = torch.cat([thicknesses, masked_materials], dim = -1)
 
-        coating = Coating(output)
-        preds = coating_to_reflectivity(coating)
-        print(coating.get_batch(0))
+        unmasked_coating = Coating(unmasked_output)
+        masked_coating = Coating(masked_output)
+        preds = coating_to_reflectivity(masked_coating)
+        print(unmasked_coating.get_batch(0))
+        if CM().get('wandb.log'):
+            validation_error = sum(evaluate_model(self))
+
+            wandb.log({"validation error": validation_error})
+            structure_error = self.regularise(unmasked_coating)
+            wandb.log({"structure error": structure_error})
         visualise(preds, refs, f"{self.get_architecture_name()}/from_training_epoch_{epoch}")
 
     def update_checkpoint(self, epoch: int):
@@ -374,7 +384,7 @@ class BaseTrainableModel(BaseModel, ABC):
         output = self.get_model_output(model_input)
         thicknesses = output[:, :, :1]
         logits = output[:, :, 1:]
-        # logits = self.mask_logits(logits)
+        logits = self.mask_logits(logits)
         materials = self.sample(logits)
         preds = torch.cat([thicknesses, materials], dim=-1)
         return Coating(preds)
@@ -396,7 +406,6 @@ class BaseTrainableModel(BaseModel, ABC):
             labels: Ground truth coating encoding.
         """
         batch_size, seq_len, _ = input.shape
-        scale_mean = batch_size * seq_len
         input_thicknesses = input[:, :, :1]
         input_logits = input[:, :, 1:]
         label_thicknesses = labels[:, :, :1]
@@ -405,15 +414,8 @@ class BaseTrainableModel(BaseModel, ABC):
         indices = self.get_coating_indices(label_materials)
         softmax_probabilities = F.softmax(input_logits, dim = -1)
         material_loss = F.cross_entropy(softmax_probabilities.transpose(1, 2), indices) / batch_size
-        # material_loss = F.mse_loss(self.sample(input_logits), label_materials)
-        # material_loss = 0
         thickness_loss = F.mse_loss(input_thicknesses, label_thicknesses) / batch_size
-        # thickness_loss = 0
-        loss = material_loss + thickness_loss
-
-        regularisation_loss = self.regularise(Coating(torch.cat([input_thicknesses, self.sample(input_logits)], dim = -1)))
-        lmd = CM().get('training.reg_weight')
-        return loss + lmd * regularisation_loss
+        return material_loss + thickness_loss
 
     def compute_loss_free(self, input: torch.Tensor, labels: torch.Tensor):
         """
@@ -434,12 +436,9 @@ class BaseTrainableModel(BaseModel, ABC):
         # convert predicted coating to reflectivity value
         preds = coating_to_reflectivity(coating)
         loss = match(preds, pattern)
-        regularisation = self.regularise(coating)
-        lmd = CM().get('training.reg_weight')
-        return loss + lmd * regularisation
+        return loss
 
     def regularise(self, coating: Coating):
-        return 0
         materials = coating.get_encoding()[:, :, 1:]
         thicknesses = coating.get_encoding()[:, :, :1]
         batch_size, seq_len, encoding_size = materials.shape
