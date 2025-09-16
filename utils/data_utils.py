@@ -68,7 +68,8 @@ def get_props_dict(attributes: dict = None):
         "stratified_sampling": CM().get('stratified_sampling'),
         "tolerance": CM().get('tolerance'),
         "num_points": CM().get('training.dataset_size'),
-        "epochs": CM().get('training.num_epochs')
+        "epochs": CM().get('training.num_epochs'),
+        "guidance_schedule": CM().get('training.guidance_schedule')
     }
     # architecture is special: it also is the reference to the model_details
     if "architecture" in attributes.keys():
@@ -88,6 +89,7 @@ def get_props_dict(attributes: dict = None):
 
 def get_saved_model_path(attributes = None):
     props_dict = get_props_dict(attributes)
+    props_dict = round_guidance_schedule(props_dict)
     ownpath = os.path.realpath(__file__)
     models_data_file = os.path.join(os.path.dirname(os.path.dirname(ownpath)), "out/models/models_metadata.yaml")
 
@@ -96,10 +98,16 @@ def get_saved_model_path(attributes = None):
             content = yaml.safe_load(f)
             # search for properties dictionary match in metadata
             for model in content["models"]:
-                if model["properties"] == props_dict:
+                model_props = model['properties']
+                if 'guidance_schedule' in model_props.keys():
+                    model_props = round_guidance_schedule(model_props)
+                if model_props == props_dict:
                     return os.path.join(os.path.dirname(os.path.dirname(ownpath)), model["title"])
     return None
 
+def round_guidance_schedule(props_dict: dict):
+    props_dict['guidance_schedule'] = [{'guidance': item['guidance'], 'density': item['density'], 'percent': round(item['percent'], 4)} for item in props_dict['guidance_schedule']]
+    return props_dict
 
 def load_config(config_id: int):
     configs = {

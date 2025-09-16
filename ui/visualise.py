@@ -8,6 +8,7 @@ sys.path.append(sys.path[0] + '/..')
 from data.values.ReflectivityPattern import ReflectivityPattern
 from data.values.ReflectivityValue import ReflectivityValue
 from utils.ConfigManager import ConfigManager as CM
+from utils.os_utils import get_unique_filename
 
 
 def visualise_spline(preds: ReflectivityValue = None, refs: ReflectivityPattern = None, filename: str = "visualisation"):
@@ -39,8 +40,8 @@ def visualise_spline(preds: ReflectivityValue = None, refs: ReflectivityPattern 
         upper_bound = refs.get_upper_bound()[0].detach().cpu()
         wl_ub_spline = make_interp_spline(wavelengths_cpu, upper_bound)
         upper_bound_spline = np.clip(wl_ub_spline(wavelengths_spline), 0, 1)
-        plt.plot(wavelengths_spline, lower_bound_spline, color='#8ED973')
-        plt.plot(wavelengths_spline, upper_bound_spline, color='#C04F15')
+        plt.fill_between(wavelengths_spline, lower_bound_spline,
+                         upper_bound_spline, color='#D4D4D4')
 
     if preds:
         # if preds specified, convert to spline and plot
@@ -48,12 +49,13 @@ def visualise_spline(preds: ReflectivityValue = None, refs: ReflectivityPattern 
         value = preds.get_value()[0].detach().cpu()
         wl_vl_spline = make_interp_spline(wavelengths_cpu, value)
         value_spline = np.clip(wl_vl_spline(wavelengths_spline), 0, 1)
-        plt.plot(wavelengths_spline, value_spline, color='#D86ECC')
+        plt.plot(wavelengths_spline, value_spline, color='#33638D')
 
-    plt.ylim(0, 1.1)
+    plt.ylim(-0.01, 1.01)
     plt.savefig(f"out/{filename}.png")
+    plt.close()
 
-def visualise(preds: ReflectivityValue = None, refs: ReflectivityPattern = None, filename: str = "visualisation"):
+def visualise(preds: ReflectivityValue = None, refs: ReflectivityPattern = None, filename: str = "visualisation", svg: bool = False, min_x: int = 0, max_x: int = -1):
     """
     Visualise prediction using linear interpolation.
 
@@ -69,20 +71,22 @@ def visualise(preds: ReflectivityValue = None, refs: ReflectivityPattern = None,
     plt.clf()
 
     wavelengths_cpu = CM().get('wavelengths').to("cpu")
+    wavelengths_cpu = wavelengths_cpu[min_x:max_x]
 
     if refs:
         # plot refs if specified
         refs = refs.to("cpu")
-        plt.plot(wavelengths_cpu, refs.get_lower_bound()[0].detach().cpu(), color='#8ED973')
-        plt.plot(wavelengths_cpu, refs.get_upper_bound()[0].detach().cpu(), color='#C04F15')
+        plt.fill_between(wavelengths_cpu, refs.get_lower_bound()[0, min_x:max_x].detach().cpu(), refs.get_upper_bound()[0, min_x:max_x].detach().cpu(), color = '#D4D4D4')
 
     if preds:
         # plot preds if specified
         preds = preds.to("cpu")
-        plt.plot(wavelengths_cpu, preds.get_value()[0].detach().cpu(), color='#D86ECC')
+        plt.plot(wavelengths_cpu, preds.get_value()[0, min_x:max_x].detach().cpu(), color='#33638D')
 
-    plt.ylim(0, 1.1)
-    plt.savefig(f"out/{filename}.png")
+    plt.ylim(-0.01, 1.01)
+    extention = "svg" if svg else "png"
+    plt.savefig(f"out/{filename}.{extention}")
+    plt.close()
 
 def visualise_errors(errors: pd.DataFrame, filename: str = "errors_graph", log_scale: bool = False):
     sorted = errors.sort_values(by='median').reset_index(drop=True)
@@ -110,3 +114,14 @@ def visualise_errors(errors: pd.DataFrame, filename: str = "errors_graph", log_s
     ax.set_title('Models Prediction Error')
     plt.tight_layout()
     plt.savefig(f"out/{filename}.png")
+    plt.close(fig)
+
+def visualise_matrix(matrix: torch.Tensor, title: str = "visualisation"):
+    assert len(matrix.shape) == 2, f"Expected two-dimensional matrix found {len(matrix.shape)}"
+    matrix_np = matrix.detach().cpu().numpy()
+    fig, ax = plt.subplots()
+    ax.set_title(title)
+    ax.imshow(matrix_np, cmap='viridis')
+    filename = get_unique_filename(f"out/{title}.png")
+    plt.savefig(filename)
+    plt.close()

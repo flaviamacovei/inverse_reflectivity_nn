@@ -102,19 +102,19 @@ def evaluate_all_models(type_data: str):
     }
     model_classes = {
         # 'random': {'class': RandomModel},
-        'gradient': {'class': GradientModel},
+        # 'gradient': {'class': GradientModel},
         # 'mlp': {'class': MLP},
         # 'mlp+gradient': {'class': lambda: Hybrid('mlp')},
         # 'cnn': {'class': CNN},
         # 'cnn+gradient': {'class': lambda: Hybrid('cnn')},
-        'transformer_no_masks+gradient': {'class': lambda: Hybrid('transformer'), 'attrs': {'src_mask': False, 'tgt_struct_mask': False, 'tgt_caus_mask': False}},
-        'transformer_caus_mask+gradient': {'class': lambda: Hybrid('transformer'), 'attrs': {'src_mask': False, 'tgt_struct_mask': False, 'tgt_caus_mask': True}},
-        'transformer_struct_mask+gradient': {'class': lambda: Hybrid('transformer'), 'attrs': {'src_mask': False, 'tgt_struct_mask': True, 'tgt_caus_mask': False}},
-        'transformer_struct_caus_mask+gradient': {'class': lambda: Hybrid('transformer'), 'attrs': {'src_mask': False, 'tgt_struct_mask': True, 'tgt_caus_mask': True}},
-        'transformer_src_mask+gradient': {'class': lambda: Hybrid('transformer'), 'attrs': {'src_mask': True, 'tgt_struct_mask': False, 'tgt_caus_mask': False}},
-        'transformer_src_caus_mask+gradient': {'class': lambda: Hybrid('transformer'), 'attrs': {'src_mask': True, 'tgt_struct_mask': False, 'tgt_caus_mask': True}},
-        'transformer_src_struct_mask+gradient': {'class': lambda: Hybrid('transformer'), 'attrs': {'src_mask': True, 'tgt_struct_mask': True, 'tgt_caus_mask': False}},
-        'transformer_all_masks+gradient': {'class': lambda: Hybrid('transformer'), 'attrs': {'src_mask': True, 'tgt_struct_mask': True, 'tgt_caus_mask': True}},
+        'transformer_no_masks': {'class': Transformer, 'attrs': {'src_mask': False, 'tgt_struct_mask': False, 'tgt_caus_mask': False}},
+        'transformer_caus_mask': {'class': Transformer, 'attrs': {'src_mask': False, 'tgt_struct_mask': False, 'tgt_caus_mask': True}},
+        'transformer_struct_mask': {'class': Transformer, 'attrs': {'src_mask': False, 'tgt_struct_mask': True, 'tgt_caus_mask': False}},
+        'transformer_struct_caus_mask': {'class': Transformer, 'attrs': {'src_mask': False, 'tgt_struct_mask': True, 'tgt_caus_mask': True}},
+        'transformer_src_mask': {'class': Transformer, 'attrs': {'src_mask': True, 'tgt_struct_mask': False, 'tgt_caus_mask': False}},
+        'transformer_src_caus_mask': {'class': Transformer, 'attrs': {'src_mask': True, 'tgt_struct_mask': False, 'tgt_caus_mask': True}},
+        'transformer_src_struct_mask': {'class': Transformer, 'attrs': {'src_mask': True, 'tgt_struct_mask': True, 'tgt_caus_mask': False}},
+        'transformer_all_masks': {'class': Transformer, 'attrs': {'src_mask': True, 'tgt_struct_mask': True, 'tgt_caus_mask': True}},
         # 'transformer+gradient': {'class': lambda: Hybrid('transformer')},
     }
     for type in model_classes.keys():
@@ -144,7 +144,8 @@ def remove_files():
         yaml.dump(content, f, sort_keys=False)
 
 if __name__ == '__main__':
-    for type_data in ['validation', 'test']:
+    for type_data in ['test']:
+    # for type_data in ['validation', 'test']:
         results = evaluate_all_models(type_data)
         print("-" * 50 + f"\n{type_data.upper()} DATA\n" + "-" * 50)
         with pd.option_context('display.max_rows', None,
@@ -152,6 +153,6 @@ if __name__ == '__main__':
                                'display.precision', 3,
                                ):
             print(results)
-        visualise_errors(results, f"{type_data}_errors_graph", log_scale = True)
-        results.to_csv(f"out/{type_data}_errors.csv")
+        visualise_errors(results, f"{type_data}_errors_t_graph", log_scale = True)
+        results.to_csv(f"out/{type_data}_t_errors.csv")
         ding()

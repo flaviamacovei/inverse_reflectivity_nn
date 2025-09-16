@@ -32,7 +32,7 @@ class UserInput():
         """Append region after validating it against existing regions."""
         assert region, "Region must not be None."
         assert CM().get('wavelengths')[0] <= region.get_start_wl() and CM().get('wavelengths')[-1] >= region.get_end_wl(), "Region must be within frame."
-        assert isinstance(get_wavelength_index(region.get_start_wl()), int) and isinstance(get_wavelength_index(region.get_end_wl()), int), "Region must be interval of frame."
+        assert region.get_start_wl() in torch.round(CM().get('wavelengths'), decimals = 3) and region.get_end_wl() in torch.round(CM().get('wavelengths'), decimals = 3), "Region must be interval of frame."
         for existing_region in self.regions:
             if not (
                     region.get_start_wl() >= existing_region.get_end_wl() or region.get_end_wl() <= existing_region.get_start_wl()):

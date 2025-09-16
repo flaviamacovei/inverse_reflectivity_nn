@@ -1,10 +1,7 @@
 import torch
 from torch.utils.data import TensorDataset
 from ui.UserInput import UserInput
-from utils.ConfigManager import ConfigManager as CM
 
-torch.set_printoptions(profile="full")
-print(f"wavelengths: {CM().get('wavelengths')}")
 patterns = []
 continue_reading = True
 while continue_reading:
@@ -19,4 +16,4 @@ for pattern in patterns:
     feature_tensors.append(feature_tensor)
 
 feature_tensors = torch.stack(feature_tensors)
-torch.save(TensorDataset(feature_tensors), "data/test_data_short.pt")
+torch.save(TensorDataset(feature_tensors), "data/datasets/test_data/test_data_new.pt")

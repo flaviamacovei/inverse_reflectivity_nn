@@ -281,12 +281,8 @@ class Transformer(BaseTrainableModel):
             bos = self.model.project_bos(tgt[:, :1, :])
             tgt_mask = self.make_tgt_mask(decoder_input) # (batch, 1, |coating|, |coating|)
             decoder_output = self.model.decode(encoder_output, src_mask, decoder_input, tgt_mask)
-            self.visualise_matrix(decoder_output[0], "decoder_output_random")
             connected = torch.cat([bos, decoder_output], dim = 1)
             projected_thickness, projected_material = self.model.project(connected)
-            # self.visualise_matrix(projected_material[0], "logits_0")
-            # self.visualise_matrix(self.model.material_out_projection.proj.weight, "weight")
-            # self.visualise_matrix(self.model.material_out_projection.proj.bias[:, None], "bias")
             return torch.cat([projected_thickness, projected_material], dim = -1)
         else:
             # in inference mode, target is not specified
