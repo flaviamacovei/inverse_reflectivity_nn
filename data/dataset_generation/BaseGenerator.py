@@ -8,7 +8,6 @@ import sys
 sys.path.append(sys.path[0] + '/../..')
 from data.values.Coating import Coating
 from utils.ConfigManager import ConfigManager as CM
-from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
 
 class BaseGenerator(ABC):
     """
@@ -86,9 +85,6 @@ class BaseGenerator(ABC):
 
         return materials_choice.int()
 
-    def get_materials_embeddings(self, materials_indices: torch.Tensor):
-        embeddings = EM().get_embeddings()
-        return embeddings[materials_indices]
 
     @abstractmethod
     def make_points(self, num_points: int):

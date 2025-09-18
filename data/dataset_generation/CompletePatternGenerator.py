@@ -5,7 +5,6 @@ from data.dataset_generation.BaseGenerator import BaseGenerator
 from data.values.Coating import Coating
 from data.values.ReflectivityPattern import ReflectivityPattern
 from forward.forward_tmm import coating_to_reflectivity
-from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
 
 class CompletePatternGenerator(BaseGenerator):
     """
@@ -34,8 +33,7 @@ class CompletePatternGenerator(BaseGenerator):
         thicknesses = self.make_thicknesses(materials_indices)
 
         # make features
-        embedding = self.get_materials_embeddings(materials_indices)
-        coating_encoding = torch.cat([thicknesses[:, :, None], embedding], dim = 2).float()
+        coating_encoding = torch.cat([thicknesses[:, :, None], materials_indices[:, :, None]], dim = -1).float()
         coating = Coating(coating_encoding)
 
         # make labels

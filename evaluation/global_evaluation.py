@@ -21,7 +21,6 @@ from prediction.CNN import CNN
 from prediction.Hybrid import Hybrid
 from prediction.Transformer import Transformer
 from forward.forward_tmm import coating_to_reflectivity
-from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
 from ui.visualise import visualise_errors
 from ui.cl_interact import ding
 

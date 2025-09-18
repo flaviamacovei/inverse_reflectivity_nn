@@ -63,8 +63,7 @@ class MaskedPatternGenerator(BaseGenerator):
         thicknesses = self.make_thicknesses(materials_indices)
 
         # make features
-        embedding = self.get_materials_embeddings(materials_indices)
-        coating_encoding = torch.cat([thicknesses[:, :, None], embedding], dim=2).float()
+        coating_encoding = torch.cat([thicknesses[:, :, None], materials_indices[:, :, None]], dim=2).float()
         coating = Coating(coating_encoding)
 
         mask = self.make_mask(num_points)

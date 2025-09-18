@@ -7,7 +7,6 @@ sys.path.append(sys.path[0] + '/../..')
 
 from data.dataloaders.BaseDataloader import BaseDataloader
 from utils.ConfigManager import ConfigManager as CM
-from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
 from utils.data_utils import get_dataset_name
 
 class SegmentedDataset(Dataset):

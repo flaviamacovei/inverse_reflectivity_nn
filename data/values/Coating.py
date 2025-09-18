@@ -12,14 +12,14 @@ class Coating():
 
     Attributes:
         num_layers: Number of layers in coating. Includes substrate and air.
-        material_encodings: Tensor representing materials encodings. Shape: (batch_size, |coating|, embedding_dim).
+        material_indices: Tensor representing materials encodings. Shape: (batch_size, |coating|, embedding_dim).
         thicknesses: Tensor representing layer thicknesses. Shape: (batch_size, |coating|).
         em: Embedding Manager
 
     Methods:
         get_encoding: Return encoding of Coating object.
         get_thicknesses: Return thicknesses.
-        get_material_encodings: Return material encodings.
+        get_material_indices: Return material encodings.
         get_refractive_indices: Return tensor representing refractive indices for object materials.
         get_materials: Return list of materials.
         get_batch: Return batch at specified index.
@@ -35,23 +35,23 @@ class Coating():
                        for one batch for one layer: encoding[0] = thickness, encoding[1:] = material encodings
         """
         assert len(encoding.shape) == 3, f"Encoding must have 3 dimensions, found {len(encoding.shape)}"
-        assert encoding.shape[2] == CM().get('material_embedding.dim') + 1, f"Final dimension of encoding must be embedding_dim + 1, found {encoding.shape[2]}"
+        assert encoding.shape[2] == 2, f"Final dimension of encoding must be 2, found {encoding.shape[2]}"
         self.num_layers = encoding.shape[1]
-        self.material_encodings = encoding[:, :, 1:]
+        self.material_indices = encoding[:, :, 1].to(torch.int16)
         self.thicknesses = encoding[:, :, 0]
 
     def get_encoding(self):
         """Return encoding of Coating object."""
-        result = torch.cat([self.thicknesses[:, :, None], self.material_encodings], dim = 2)
+        result = torch.stack([self.thicknesses, self.material_indices], dim = -1)
         return result
 
     def get_thicknesses(self):
         """Return thicknesses."""
         return self.thicknesses
 
-    def get_material_encodings(self):
+    def get_material_indices(self):
         """Return material encodings."""
-        return self.material_encodings
+        return self.material_indices
 
     def get_refractive_indices(self):
         """
@@ -60,16 +60,16 @@ class Coating():
         Returns:
             Refractive indices tensor. Shape: (batch_size, |coating|, |wl|)
         """
-        return EM().embeddings_to_refractive_indices(self.material_encodings)
+        return EM().get_refractive_indices(self.material_indices)
 
     def get_materials(self):
         """Return list of materials."""
-        return EM().decode(self.material_encodings)
+        return EM().indices_to_materials(self.material_indices)
 
     def get_batch(self, index: int):
         """Return batch at specified index."""
         assert index < len(self.thicknesses)
-        return Coating(torch.cat([self.thicknesses[index][None, :, None], self.material_encodings[index][None]], dim = 2))
+        return Coating(torch.stack([self.thicknesses[index][None], self.material_indices[index][None]], dim = -1))
 
     # TODO: implement __getitem__
 
@@ -81,7 +81,7 @@ class Coating():
         layers = ''
         for i in range(len(materials)):
             for j in range(len(materials[i])):
-                layers += f"{materials[i][j].get_title().ljust(max_title_length)}: {self.thicknesses[i, j]}\n"
+                layers += f"{materials[i][j].get_title().ljust(max_title_length)}: {self.thicknesses[i, j].item()}\n"
             layers += '-------\n'
         return f"Coating with {len(materials)} {'batches' if len(materials) > 1 else 'batch'} of {self.num_layers} layers:\n{layers}"
 
@@ -96,7 +96,7 @@ class Coating():
             True if other is Coating object with same material encodings and thicknesses.
         """
         if isinstance(other, Coating):
-            return torch.equal(self.get_thicknesses(), other.get_thicknesses()) and torch.equal(self.get_material_encodings(), other.get_material_encodings())
+            return torch.equal(self.get_thicknesses(), other.get_thicknesses()) and torch.equal(self.get_material_indices(), other.get_material_indices())
         return False
 
     def to(self, device: str):

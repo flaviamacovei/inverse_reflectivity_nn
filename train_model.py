@@ -21,10 +21,6 @@ from ui.FileInput import FileInput
 from data.values.ReflectivityPattern import ReflectivityPattern
 from utils.ConfigManager import ConfigManager as CM
 from evaluation.model_eval import evaluate_model, test_model
-from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
-from data.dataset_generation.CompletePatternGenerator import CompletePatternGenerator
-from data.dataset_generation.MaskedPatternGenerator import MaskedPatternGenerator
-from data.dataset_generation.ExplicitPatternGenerator import ExplicitPatternGenerator
 from tmm_clean.tmm_core import compute_multilayer_optics
 from score_model import score_model
 
