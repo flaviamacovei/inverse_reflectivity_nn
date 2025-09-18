@@ -1,12 +1,8 @@
-import os.path
-
 import torch
-import torch.nn as nn
-import itertools
+import torch.nn.functional as F
 import yaml
-from torch_pca import PCA
-from pickle import load, dump
 import sys
+
 sys.path.append(sys.path[0] + '/..')
 from data.values.BaseMaterial import BaseMaterial
 from data.values.SellmeierMaterial import SellmeierMaterial
@@ -28,7 +24,7 @@ class EmbeddingManager:
     Attributes:
         materials: List of materials.
         num_materials: Number of materials.
-        materials_refractive_indices: Refractive indices of materials. Shape: (num_materials, |wavelengths|).
+        refractive_indices: Refractive indices of materials. Shape: (num_materials, |wavelengths|).
         model: Embedding model.
         SAVEPATH: Path for saving / loading embeddings.
         embeddings: Embeddings model parameter. Shape: (num_materials, embedding_dim).
@@ -50,17 +46,12 @@ class EmbeddingManager:
         self.materials_indices = dict()
         self.load_materials()
         self.num_materials = len(self.materials)
-        self.materials_refractive_indices = torch.stack([m.get_refractive_indices() for m in self.materials])
-        # pca_lowrank instead of pca?
-        self.pca = PCA(n_components = CM().get('material_embedding.dim'))
-        own_path = os.path.realpath(__file__)
-        self.SAVEPATH = os.path.join(os.path.dirname(os.path.dirname(own_path)), f'material_embedding/embeddings_{self.hash_materials()}.pt')
-        self.scale_coeffs = []
-        self.load_pca()
+        self.refractive_indices = torch.stack([m.get_refractive_indices() for m in self.materials])
 
-        self.embeddings = self.refractive_indices_to_embeddings(self.materials_refractive_indices)
+    def get_material_indices(self, materials):
+        return torch.tensor([self.materials_indices[m] for m in materials])
 
-    def load_materials(self) -> list[BaseMaterial]:
+    def load_materials(self):
         # TODO: map benutzen und filter wenn nötig (wie in CM)
         """
         Load materials from data file.
@@ -124,91 +115,39 @@ class EmbeddingManager:
     def hash_materials(self):
         """Hash materials to use as filename for saving / loading embeddings."""
         # does this need more information?
-        material_hashes = [hash(material) for material in self.materials] + [CM().get('material_embedding.dim')]
+        material_hashes = [hash(material) for material in self.materials]
         return short_hash(tuple(material_hashes))
 
-    def refractive_indices_to_embeddings(self, refractive_indices: torch.Tensor):
-        assert len(refractive_indices.shape) == 2 or len(refractive_indices.shape) == 3, \
-            f"Refractive indices must be of shape (batch_size, |coating|, |wl|) or (|coating|, |wl|)\nFound shape: {refractive_indices.shape}"
-        embeddings = self.pca.transform(refractive_indices)
-        if len(self.scale_coeffs) == 0:
-            # first time running this function
-            self.scale_coeffs = [embeddings.min(), embeddings.max() - embeddings.min()]
-        embeddings = (embeddings - self.scale_coeffs[0]) / self.scale_coeffs[1]
-        return embeddings
+    def get_refractive_indices(self, material_indices: torch.Tensor):
+        # this needs to be differentiable
+        # input of shape (batch, seq_len, 1)
+        assert len(material_indices.shape) == 2
+        assert material_indices.dtype in [torch.int8, torch.int16, torch.int32, torch.int64], "Indices must be integer values"
+        long_indices = material_indices.to(torch.long)
+        mask = F.one_hot(long_indices, len(self.refractive_indices)).to(torch.float)
+        return mask @ self.refractive_indices
 
-    def embeddings_to_refractive_indices(self, embeddings: torch.Tensor):
-        assert len(embeddings.shape) == 2 or len(embeddings.shape) == 3, \
-            f"Embeddings must be of shape (batch_size, |coating|, embedding_dim) or (|coating|, embedding_dim)\nFound shape: {embeddings.shape}"
-        embeddings = embeddings * self.scale_coeffs[1] + self.scale_coeffs[0]
-        refractive_indices = self.pca.inverse_transform(embeddings)
-        return refractive_indices
-
-    def encode(self, materials: list[BaseMaterial]):
-        # TODO: redo with lookup
-        """
-        Map materials to embeddings.
-
-        Args:
-            materials: List of materials.
-
-        Returns:
-            Tensor of embeddings. Shape: (batch_size, embedding_dim).
-        """
-        assert len(materials) > 0, "No materials provided"
-        assert isinstance(materials[0], BaseMaterial), "Materials must be of type Material"
-        materials_indices = [self.materials_indices[material.get_title()] for material in materials]
-        return self.embeddings[materials_indices]
-
-    def get_nearest_neighbours(self, embedding: torch.Tensor):
-        distances = torch.cdist(embedding, self.embeddings)
-        indices = torch.argmin(distances, dim = -1)
-        return self.embeddings[indices]
-
-    def decode(self, embedding: torch.Tensor):
-        """
-        Map embeddings to materials using nearest neighbour.
-
-        Args:
-            embedding: Input tensor. Shape: (batch_size, embedding_dim).
-
-        Returns:
-            List of materials.
-        """
-        # TODO: this is doubled with the method above
-        distances = torch.cdist(embedding, self.embeddings)
-        indices = torch.argmin(distances, dim = -1)
-        materials = [[self.materials[index] for index in batch] for batch in indices]
+    def indices_to_materials(self, material_indices: torch.Tensor):
+        materials = []
+        for sequence in material_indices:
+            seq_materials = [self.materials[i] for i in sequence]
+            materials.append(seq_materials)
         return materials
 
+    def materials_to_indices(self, materials: list[list[BaseMaterial]]):
+        # bidimensional list
+        assert len(materials) > 0, "No materials provided"
+        return torch.tensor([[self.materials_indices[m.get_title()] for m in sequence] for sequence in materials], device = CM().get('device'))
 
-    def get_refractive_indices_lookup(self):
-        return self.materials_refractive_indices
+    def get_refractive_indices_table(self):
+        return self.refractive_indices
 
-    def get_embeddings(self):
-        return self.embeddings
-
-    def save_pca(self):
-        """Save embeddings model."""
-        with open(self.SAVEPATH, 'wb') as f:
-            dump(self.pca, f, protocol = 5)
-
-    def load_pca(self):
-        """Load embeddings model from file or train if file not found."""
-        try:
-            with open(self.SAVEPATH, 'rb') as f:
-                self.pca = load(f)
-                self.pca.to(CM().get('device'))
-        except FileNotFoundError:
-            print(f"Saved embeddings not found. Performing PCA.")
-            self.pca.fit(self.materials_refractive_indices)
-            self.save_pca()
 
     def get_materials(self):
         """Return list of materials."""
         return self.materials
 
-    def get_material(self, title: str):
+    def get_material_by_title(self, title: str):
         """Return material with given title."""
         try:
             return list(filter(lambda m: m.get_title() == title, self.materials))[0]
@@ -217,10 +156,4 @@ class EmbeddingManager:
 
     def __str__(self):
         """Return string representation of EmbeddingManager instance."""
-        # format by longest material title
-        max_title_length = max(len(material.get_title()) for material in self.materials)
-        material_embeddings = ''
-        for material in self.materials:
-            embedding = self.embeddings.cpu().detach().numpy()
-            material_embeddings += f"{material.get_title().ljust(max_title_length)}: {embedding}\n"
-        return f"Embedding Manager with {len(self.materials)} materials:\n{material_embeddings}"
+        return f"Embedding Manager with {len(self.materials)} materials:\n{self.materials}"
