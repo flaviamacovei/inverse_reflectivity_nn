@@ -3,7 +3,6 @@ import torch.nn as nn
 import sys
 sys.path.append(sys.path[0] + '/..')
 from utils.ConfigManager import ConfigManager as CM
-from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
 from prediction.BaseTrainableModel import BaseTrainableModel
 from ui.visualise import visualise_matrix
 
@@ -100,12 +99,12 @@ class RNN(BaseTrainableModel):
         enc_in_dim = self.src_dim
         enc_hidden_dim = CM().get('rnn.encoder_dim')
         enc_out_dim = CM().get('rnn.decoder_dim')
-        dec_thickness_in_dim = self.out_dims['thickness']
-        dec_material_in_dim = self.tgt_dim
+        dec_thickness_in_dim = 1
+        dec_material_in_dim = 1
         dec_hidden_dim = CM().get('rnn.decoder_dim')
         dec_thickness_out_dim = self.out_dims['thickness']
-        dec_material_out_dim = self.tgt_dim
-        flattened_material_dim = self.out_dims['seq_len'] * self.tgt_dim
+        dec_material_out_dim = 1
+        flattened_material_dim = self.out_dims['seq_len']
         out_dim = self.out_dims['seq_len'] * self.out_dims['material']
         return TrainableRNN(enc_in_dim, enc_hidden_dim, enc_out_dim, dec_thickness_in_dim, dec_material_in_dim, dec_hidden_dim, dec_thickness_out_dim, dec_material_out_dim, flattened_material_dim, out_dim).to(CM().get('device'))
 
@@ -131,7 +130,7 @@ class RNN(BaseTrainableModel):
             # in inference mode, target is not specified
             thickness = torch.ones((1, 1, 1)).to(CM().get('device'))
             bos = self.get_bos()
-            tgt = torch.cat([thickness, bos], dim = -1).repeat(encoder_output.shape[0], 1, 1)
+            tgt = torch.cat([thickness, bos[None]], dim = -1).repeat(encoder_output.shape[0], 1, 1)
             while tgt.shape[1] < self.tgt_seq_len:
                 decoded_thicknesses, decoded_materials = self.model.decode(encoder_output, tgt)
                 next = torch.cat([decoded_thicknesses, decoded_materials], dim = -1)

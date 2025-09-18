@@ -66,7 +66,7 @@ class BaseTrainableModel(BaseModel, ABC):
         self.src_dim = 2 # lower bound and upper bound
         self.tgt_seq_len = CM().get('num_layers') + 2 # thin films + substrate + air
         self.tgt_vocab_size = len(CM().get('materials.thin_films')) + 2 # available thin films + substrate + air
-        self.tgt_dim = CM().get('material_embedding.dim')
+        self.tgt_dim = 2
         self.in_dims = {'seq_len': self.src_seq_len, 'dim': self.src_dim}
         self.out_dims = {'seq_len': self.tgt_seq_len, 'material': self.tgt_vocab_size, 'thickness': 1}
 
@@ -88,7 +88,7 @@ class BaseTrainableModel(BaseModel, ABC):
         }
         self.sample = sampling_functions[CM().get('sampling')]
 
-        self.vocab = EM().get_embeddings()
+        self.vocab = EM().get_refractive_indices_table()
 
         self.model = self.build_model()
         self.optimiser = torch.optim.Adam(self.model.parameters())
@@ -194,26 +194,24 @@ class BaseTrainableModel(BaseModel, ABC):
             os.remove(self.checkpoint)
 
     def get_bos(self):
-        substrate = EM().get_material(CM().get('materials.substrate'))
-        bos = EM().encode([substrate])[None] # (batch, |coating| = 1, 1)
+        substrate = EM().get_material_by_title(CM().get('materials.substrate'))
+        bos = EM().materials_to_indices([[substrate]]) # (batch, |coating| = 1, 1)
         return bos
 
     def get_eos(self):
-        air = EM().get_material(CM().get('materials.air'))
-        eos = EM().encode([air])[None] # (batch, |coating| = 1, 1)
+        air = EM().get_material_by_title(CM().get('materials.air'))
+        eos = EM().materials_to_indices([[air]]) # (batch, |coating| = 1, 1)
         return eos
 
-    def get_bos_logits(self):
-        bos = self.get_bos()
-        bos_index = self.vocab.eq(bos).nonzero(as_tuple=True)[0].item()
-        bos_logits = torch.ones(1, 1, self.tgt_vocab_size).to(CM().get('device'))
-        bos_logits = bos_logits * -torch.inf
-        bos_logits[:, :, bos_index] = 1
-        return bos_logits
+    def indices_to_probs(self, material_indices: torch.Tensor):
+        long_indices = material_indices.to(torch.long).squeeze()
+        return F.one_hot(long_indices, len(self.vocab)).to(torch.float)
+
 
     def soft_sample(self, logits: torch.Tensor):
         softmax_probabilities = F.softmax(logits, dim = -1)
-        return softmax_probabilities @ self.vocab
+        _, max_indices = softmax_probabilities.max(dim = -1, keepdim = True)
+        return max_indices
 
     def greedy_sample(self, logits: torch.Tensor):
         # compute soft probabilities of nearest neighbours
@@ -224,17 +222,12 @@ class BaseTrainableModel(BaseModel, ABC):
         greedy_probs_hard = torch.zeros_like(greedy_probs_soft).scatter_(-1, greedy_probs_soft.argmin(dim=-1, keepdim=True), 1.0)
         # attach computational graph from soft probabilities to hard probabilities
         greedy_probabilities = greedy_probs_hard + (greedy_probs_soft - greedy_probs_soft.detach())
-        return greedy_probabilities @ self.vocab
+        return greedy_probabilities
 
     def mask_logits(self, logits: torch.Tensor):
         seq_len = logits.shape[1]
-        # logits = logits.reshape(logits.shape[0], self.seq_len, self.vocab_size)
-        substrate = EM().get_material(CM().get('materials.substrate'))
-        air = EM().get_material(CM().get('materials.air'))
-        substrate_encoding, air_encoding = EM().encode([substrate, air])
-        # get index of substrate and air in embeddings lookup
-        substrate_index = EM().get_embeddings().eq(substrate_encoding).nonzero(as_tuple=True)[0].item()
-        air_index = EM().get_embeddings().eq(air_encoding).nonzero(as_tuple=True)[0].item()
+        substrate = self.get_bos()
+        air = self.get_eos()
 
         # create substrate mask
         substrate_position_mask = torch.zeros_like(logits)
@@ -242,11 +235,11 @@ class BaseTrainableModel(BaseModel, ABC):
         substrate_position_mask[:, 0] = 1
         # mask substrate at all other positions
         substrate_index_mask = torch.zeros_like(logits)
-        substrate_index_mask[:, :, substrate_index] = 1
+        substrate_index_mask[:, :, substrate] = 1
         substrate_mask = torch.logical_xor(substrate_position_mask, substrate_index_mask)
 
         # get index of last material to bound air block
-        not_air = logits.argmax(dim=-1, keepdim=True).ne(air_index)  # (batch, |coating|, |materials_embedding|)
+        not_air = logits.argmax(dim=-1, keepdim=True).ne(air)  # (batch, |coating|, |materials_embedding|)
         # logical or along dimension -1
         not_air = not_air.int().sum(dim=-1).bool()  # (batch, |coating|)
         not_air_rev = not_air.flip(dims=[1]).to(torch.int)  # (batch, |coating|)
@@ -261,7 +254,7 @@ class BaseTrainableModel(BaseModel, ABC):
         air_position_mask = air_position_mask[:, :, None].repeat(1, 1, self.tgt_vocab_size)  # (batch, |coating|, |vocab|)
         # mask air at all other positions
         air_index_mask = torch.zeros_like(logits)
-        air_index_mask[:, :, air_index] = 1
+        air_index_mask[:, :, air] = 1
         air_mask = torch.logical_xor(air_position_mask, air_index_mask)
 
         # mask logits
@@ -299,7 +292,7 @@ class BaseTrainableModel(BaseModel, ABC):
         preds = coating_to_reflectivity(masked_coating)
         print(unmasked_coating.get_batch(0))
         if CM().get('wandb.log'):
-            validation_error = sum(evaluate_model(self))
+            validation_error = sum(evaluate_model(self).values())
 
             wandb.log({"validation error": validation_error})
             structure_error = self.regularise(unmasked_coating)
@@ -389,11 +382,6 @@ class BaseTrainableModel(BaseModel, ABC):
         preds = torch.cat([thicknesses, materials], dim=-1)
         return Coating(preds)
 
-    def get_coating_indices(self, coating: torch.Tensor):
-        coating = coating[:, :, None].repeat(1, 1, self.tgt_vocab_size, 1) # (batch, seq_len, vocab_size, embed_dim)
-        coating_eq = coating.eq(self.vocab) # (batch, seq_len, vocab_size, embed_dim)
-        coating_indices = coating_eq.prod(dim = -1) # (batch, seq_len, vocab_size)
-        return coating_indices.argmax(dim = -1) # (batch, seq_len)
 
     def compute_loss_guided(self, input: torch.Tensor, labels: torch.Tensor):
         """
@@ -406,14 +394,13 @@ class BaseTrainableModel(BaseModel, ABC):
             labels: Ground truth coating encoding.
         """
         batch_size, seq_len, _ = input.shape
-        input_thicknesses = input[:, :, :1]
+        input_thicknesses = input[:, :, 0]
         input_logits = input[:, :, 1:]
-        label_thicknesses = labels[:, :, :1]
-        label_materials = labels[:, :, 1:]
+        label_thicknesses = labels[:, :, 0]
+        label_materials = labels[:, :, 1]
 
-        indices = self.get_coating_indices(label_materials)
         softmax_probabilities = F.softmax(input_logits, dim = -1)
-        material_loss = F.cross_entropy(softmax_probabilities.transpose(1, 2), indices) / batch_size
+        material_loss = F.cross_entropy(softmax_probabilities.transpose(1, 2), label_materials.to(torch.long)) / batch_size
         thickness_loss = F.mse_loss(input_thicknesses, label_thicknesses) / batch_size
         return material_loss + thickness_loss
 
@@ -441,11 +428,11 @@ class BaseTrainableModel(BaseModel, ABC):
     def regularise(self, coating: Coating):
         materials = coating.get_encoding()[:, :, 1:]
         thicknesses = coating.get_encoding()[:, :, :1]
-        batch_size, seq_len, encoding_size = materials.shape
-        scale_factor = batch_size * seq_len * encoding_size
+        batch_size, seq_len, _ = materials.shape
+        scale_factor = batch_size * seq_len
 
-        substrate = self.get_bos().reshape(encoding_size)
-        air = self.get_eos().reshape(encoding_size)
+        substrate = self.get_bos().to(torch.float)
+        air = self.get_eos().to(torch.float)
 
         # make mask for substrate
         substrate_mask = torch.zeros_like(materials).to(CM().get('device')).to(torch.int) # (batch, |coating|, |materials_embedding|)
@@ -468,13 +455,13 @@ class BaseTrainableModel(BaseModel, ABC):
         # make mask for air block
         range_coating = torch.arange(seq_len, device=CM().get('device')) # (|coating|)
         air_mask = range_coating[None] >= (last_mat_idx + 1)[:, None]  # (batch, |coating|)
-        air_mask = air_mask[:, :, None].expand(-1, -1, encoding_size) # (batch, |coating|, |materials_embedding|)
+        air_mask = air_mask[:, :, None] # (batch, |coating|, 1)
         # test that air block is at the end
         air_pos = torch.zeros_like(materials).to(CM().get('device')) # (batch, |coating|, |materials_embedding|)
-        air_pos[air_mask] = air.repeat(air_pos[air_mask].shape[0] // encoding_size)
+        air_pos[air_mask] = air.squeeze().repeat(air_pos[air_mask].shape[0])
         # test that air is nowhere else
         air_neg = torch.zeros_like(materials).to(CM().get('device')) # (batch, |coating|, |materials_embedding|)
-        air_neg[~air_mask] = air.repeat(air_neg[~air_mask].shape[0] // encoding_size)
+        air_neg[~air_mask] = air.squeeze().repeat(air_neg[~air_mask].shape[0])
 
         # calculate distances
         substrate_pos_err = torch.sum(materials.ne(substrate_pos) * substrate_mask)

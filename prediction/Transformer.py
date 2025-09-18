@@ -6,7 +6,6 @@ import sys
 sys.path.append(sys.path[0] + '/..')
 from prediction.BaseTrainableModel import BaseTrainableModel
 from utils.ConfigManager import ConfigManager as CM
-from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
 from data.values.ReflectivityPattern import ReflectivityPattern
 from data.values.Coating import Coating
 
@@ -287,9 +286,9 @@ class Transformer(BaseTrainableModel):
         else:
             # in inference mode, target is not specified
             # beginning of any coating: thickness is 1.0, material is substrate
-            thickness = torch.ones((1, 1, 1), device = CM().get('device')) # (1, 1, |coating| = 1, 1)
-            substrate_logits = self.get_bos_logits()
-            tgt = torch.cat([thickness, substrate_logits], dim = -1).repeat(src.shape[0], 1, 1) # (batch, |coating| = 1, tgt_vocab_size + 1)
+            thickness = torch.ones((1, 1, 1), device = CM().get('device')) # (1, |coating| = 1, 1)
+            substrate_probs = self.indices_to_probs(self.get_bos())[None, None] # (1, |coating| = 1, tgt_vocab_size)
+            tgt = torch.cat([thickness, substrate_probs], dim = -1).repeat(src.shape[0], 1, 1) # (batch, |coating| = 1, tgt_vocab_size + 1)
             while tgt.shape[1] < self.tgt_seq_len:
                 tgt_mask = self.make_tgt_mask(tgt)  # (batch, 1, |coating|, |coating|), second dimension reserved for broadcasting across attn heads
                 thicknesses = tgt[:, :, :1]
@@ -362,7 +361,7 @@ class Transformer(BaseTrainableModel):
             encoder_blocks.append(encoder_block)
 
         # target input projection
-        tgt_proj = ProjectionLayer(self.tgt_dim + self.out_dims['thickness'], self.d_model)
+        tgt_proj = ProjectionLayer(self.tgt_dim, self.d_model)
 
         # decoder blocks
         decoder_blocks = []
