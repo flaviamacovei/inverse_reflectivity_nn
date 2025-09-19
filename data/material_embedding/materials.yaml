@@ -1,57 +1,161 @@
 materials:
-   - title: "Suprasil Heraeus"
-     B: [0.47311559, 0.63103872, 0.9064045]
-     C: [0.012995717, 0.0041280922, 98.7685322]
-
-   - title: "TiO2 IBS"
-     B: [2.43161564, 1.93219481, 1.05492971]
-     C: [0.008848733, 0.0799794008, 32.5006598013]
-
-   - title: "SiO2 IBS"
-     B: [0.20462278, 0.9824492, 0.43848684]
-     C: [0.0207894564, 0.0073949701, 35.3158017024]
-
-   - title: "Air"
-     B: [0.0, 0.0, 0.0]
-     C: [0.0, 0.0, 0.0]
-
-   - title: "Suprasil"
-     B: [1.05956269362497, 0, 0]
-     C: [0.010533947501, 0, 0]
-
-   - title: "BK7"
-     B: [1.03961212, 0.231792344, 1.01046945]
-     C: [0.00600069867, 0.0200179144, 103.560653]
-
-   - title: "DC_Substrate"
-     R: 1.52
-
-   - title: "DC_Air"
-     R: 1.00
-
-   - title: "H"
-     R: 2.25
-
-   - title: "L"
-     R: 1.45
-
-   - title: "A"
-     R: 1.65
-
-   - title: "F"
-     R: 2.00
-
-   - title: "M"
-     R: 1.38
-
-   - title: "T"
-     R: 2.15
-
-   - title: "Ag"
-     R: 0.12
-
-   - title: "Au"
-     R: 0.306
-
-   - title: "Ni"
-     R: 1.8
+- title: Suprasil Heraeus
+  B:
+  - 0.47311559
+  - 0.63103872
+  - 0.9064045
+  C:
+  - 0.012995717
+  - 0.0041280922
+  - 98.7685322
+- title: TiO2 IBS
+  B:
+  - 2.43161564
+  - 1.93219481
+  - 1.05492971
+  C:
+  - 0.008848733
+  - 0.0799794008
+  - 32.5006598013
+- title: SiO2 IBS
+  B:
+  - 0.20462278
+  - 0.9824492
+  - 0.43848684
+  C:
+  - 0.0207894564
+  - 0.0073949701
+  - 35.3158017024
+- title: Air
+  B:
+  - 0.0
+  - 0.0
+  - 0.0
+  C:
+  - 0.0
+  - 0.0
+  - 0.0
+- title: Suprasil
+  B:
+  - 1.05956269362497
+  - 0
+  - 0
+  C:
+  - 0.010533947501
+  - 0
+  - 0
+- title: BK7
+  B:
+  - 1.03961212
+  - 0.231792344
+  - 1.01046945
+  C:
+  - 0.00600069867
+  - 0.0200179144
+  - 103.560653
+- title: DC_Substrate
+  N: 1.52
+- title: DC_Air
+  N: 1.0
+- title: H
+  N: 2.25
+- title: L
+  N: 1.45
+- title: A
+  N: 1.65
+- title: F
+  N: 2.0
+- title: M
+  N: 1.38
+- title: T
+  N: 2.15
+- title: Ag
+  N: 0.12
+- title: Au
+  N: 0.306
+- title: Ni
+  N: 1.8
+- title: M_Ti_HZ
+  F: Ti_HZ.csv
+- title: M_Glass_Substrate
+  F: Glass_Substrate.csv
+- title: M_Al
+  F: Al.csv
+- title: M_ZnS
+  F: ZnS.csv
+- title: M_Cr_HZ
+  F: Cr_HZ.csv
+- title: M_Si_HZ
+  F: Si_HZ.csv
+- title: M_MgO
+  F: MgO.csv
+- title: M_Au
+  F: Au.csv
+- title: M_Al2O3_HZ
+  F: Al2O3_HZ.csv
+- title: M_Si3N4
+  F: Si3N4.csv
+- title: M_HfO2
+  F: HfO2.csv
+- title: M_AlN
+  F: AlN.csv
+- title: M_Ta2O5
+  F: Ta2O5.csv
+- title: M_SiO2_HZ
+  F: SiO2_HZ.csv
+- title: M_SiO2
+  F: SiO2.csv
+- title: M_Al2O3
+  F: Al2O3.csv
+- title: M_ZnO
+  F: ZnO.csv
+- title: M_Ag_HZ
+  F: Ag_HZ.csv
+- title: M_ZnS_HZ
+  F: ZnS_HZ.csv
+- title: M_ZnSe_HZ
+  F: ZnSe_HZ.csv
+- title: M_Ni_HZ
+  F: Ni_HZ.csv
+- title: M_ZnO_HZ
+  F: ZnO_HZ.csv
+- title: M_Cr
+  F: Cr.csv
+- title: M_ZnSe
+  F: ZnSe.csv
+- title: M_Fe2O3_HZ
+  F: Fe2O3_HZ.csv
+- title: M_Al_HZ
+  F: Al_HZ.csv
+- title: M_TiO2_HZ
+  F: TiO2_HZ.csv
+- title: M_Ge_2
+  F: Ge_2.csv
+- title: M_HfO2_HZ
+  F: HfO2_HZ.csv
+- title: M_MgF2_HZ
+  F: MgF2_HZ.csv
+- title: M_Si
+  F: Si.csv
+- title: M_TiN
+  F: TiN.csv
+- title: M_Ge_1
+  F: Ge_1.csv
+- title: M_MgF2
+  F: MgF2.csv
+- title: M_SiO2_Substrate
+  F: SiO2_Substrate.csv
+- title: M_Ge
+  F: Ge.csv
+- title: M_TiO2
+  F: TiO2.csv
+- title: M_ITO
+  F: ITO.csv
+- title: M_Si_Substrate
+  F: Si_Substrate.csv
+- title: M_Ge_HZ
+  F: Ge_HZ.csv
+- title: M_Ag
+  F: Ag.csv
+- title: M_Air
+  F: Air.csv

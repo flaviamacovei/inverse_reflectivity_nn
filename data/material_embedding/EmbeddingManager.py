@@ -7,6 +7,7 @@ sys.path.append(sys.path[0] + '/..')
 from data.values.BaseMaterial import BaseMaterial
 from data.values.SellmeierMaterial import SellmeierMaterial
 from data.values.ConstantRIMaterial import ConstantRIMaterial
+from data.values.MeasuredMaterial import MeasuredMaterial
 from utils.ConfigManager import ConfigManager as CM
 from utils.os_utils import short_hash
 
@@ -79,11 +80,14 @@ class EmbeddingManager:
             if 'B' in m and 'C' in m:
                 # material has Sellmeier coefficients B and C
                 materials.append(SellmeierMaterial(m['title'], m['B'], m['C']))
-            elif 'R' in m:
+            elif 'N' in m:
                 # material has single-value refractive index
-                materials.append(ConstantRIMaterial(m['title'], m['R']))
+                materials.append(ConstantRIMaterial(m['title'], m['N']))
+            elif 'F' in m:
+                # material information saved in file
+                materials.append(MeasuredMaterial(m['title'], m['F']))
             else:
-                raise ValueError(f"Material {m['title']} must have either 'B' and 'C' or 'R'")
+                raise ValueError(f"Material {m['title']} must have either 'B' and 'C', 'N', or 'F'")
         # sort so that all features have the same material order
         materials.sort()
         # prepend substrate and air
@@ -91,17 +95,21 @@ class EmbeddingManager:
             if m['title'] == CM().get('materials.substrate'):
                 if 'B' in m and 'C' in m:
                     substrate = SellmeierMaterial(m['title'], m['B'], m['C'])
-                elif 'R' in m:
-                    substrate = ConstantRIMaterial(m['title'], m['R'])
+                elif 'N' in m:
+                    substrate = ConstantRIMaterial(m['title'], m['N'])
+                elif 'F' in m:
+                    substrate = MeasuredMaterial(m['title'], m['F'])
                 else:
-                    raise ValueError(f"Material {m['title']} must have either 'B' and 'C' or 'R'")
+                    raise ValueError(f"Material {m['title']} must have either 'B' and 'C', 'N', or 'F'")
             if m['title'] == CM().get('materials.air'):
                 if 'B' in m and 'C' in m:
                     air = SellmeierMaterial(m['title'], m['B'], m['C'])
-                elif 'R' in m:
-                    air = ConstantRIMaterial(m['title'], m['R'])
+                elif 'N' in m:
+                    air = ConstantRIMaterial(m['title'], m['N'])
+                elif 'F' in m:
+                    air = MeasuredMaterial(m['title'], m['F'])
                 else:
-                    raise ValueError(f"Material {m['title']} must have either 'B' and 'C' or 'R'")
+                    raise ValueError(f"Material {m['title']} must have either 'B' and 'C', 'N', or 'F'")
         materials = [substrate, air] + materials
 
         # ensure all materials have same type

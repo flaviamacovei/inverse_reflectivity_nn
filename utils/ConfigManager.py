@@ -55,19 +55,6 @@ class ConfigManager:
             # set materials location
             self.config['material_embedding']['data_file'] = os.path.join(dir, self.config['material_embedding']['data_file'])
 
-            # set materials embedding dim
-            substrate_title = self.config['materials']['substrate']
-            with open(self.config['material_embedding']['data_file'], 'r') as file:
-                material_data = yaml.safe_load(file)["materials"]
-            # filter out materials with wrong name
-            material_data = list(filter(lambda d: d["title"] == substrate_title, material_data))
-            # count defining dimensions per material
-            material_data = list(map(lambda d: {"title": d["title"], "dim": sum([len(d[key]) if isinstance(d[key], list) else 1 for key in [k for k in d.keys() if k != "title"]])}, material_data))
-            assert len(material_data) == 1, "More than one substrate provided"
-            defining_dim = material_data[0]["dim"]
-            specified_dim = self.config['material_embedding']['dim']
-            self.config['material_embedding']['dim'] = min(specified_dim, defining_dim)
-
             self.config['training']['num_legs'] = len(self.config['training']['guidance_schedule'])
 
         except BaseException as e:

@@ -1,5 +1,5 @@
-numpy
-torch
+numpy == 2.2.6
+torch == 2.8.0
 matplotlib
 scipy
 wandb
@@ -7,3 +7,5 @@ torch-pca
 pyyaml
 altair
 vl-convert-python
+colormaps
+pandas
