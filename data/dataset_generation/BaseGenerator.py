@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
 import random
+from typing import Union
+
 import torch
 import numpy as np
 import math
@@ -59,6 +61,22 @@ class BaseGenerator(ABC):
 
         return thicknesses
 
+    def sample_with_delayed_replacement(self, a: int,  size: Union[int, list[int]]):
+        assert isinstance(size, int) or ((isinstance(size, list) or isinstance(size, tuple)) and len(size) == 2), f"size must be of type integer, list, or tuple. Found {type(size)}"
+        if isinstance(size, int):
+            batch_size = 1
+            seq_len = size
+        else:
+            batch_size, seq_len = size
+        rng = np.random.default_rng()
+
+        choice_for_first = rng.choice(a, size = (batch_size, 1), replace = True)
+        choice_for_subsqnt = rng.choice(a - 1, size = (batch_size, seq_len - 1), replace = True) + 1
+
+        first_choice = np.concat([choice_for_first, choice_for_subsqnt], axis = -1)
+        cumulated = np.cumsum(first_choice, axis = -1)
+        return cumulated % a
+
     def make_materials_choice(self, num_points: int):
         # number of layers per coating
         num_thin_films = CM().get('num_layers')
@@ -66,7 +84,8 @@ class BaseGenerator(ABC):
         num_materials = len(CM().get('materials.thin_films'))
         # index 0 and 1 reserved for substrate and air respectively
         # as soon as torch supports random choice, change this to torch
-        materials_choice = np.random.choice(num_materials, size=(num_points, num_thin_films), replace=True) + 2
+        materials_choice = self.sample_with_delayed_replacement(num_materials, size = (num_points, num_thin_films)) + 2
+        # materials_choice = np.random.choice(num_materials, size=(num_points, num_thin_films), replace=True) + 2
         materials_choice = torch.from_numpy(materials_choice).int()
         materials_choice = materials_choice.to(CM().get('device'))
 
