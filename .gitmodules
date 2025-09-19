@@ -4,3 +4,6 @@
 [submodule "tmm_clean"]
 	path = tmm_clean
 	url = https://github.com/ml-uhh/tmm
+[submodule "inverse_distance_weighting"]
+	path = inverse_distance_weighting
+	url = https://github.com/paulbrodersen/inverse_distance_weighting.git
