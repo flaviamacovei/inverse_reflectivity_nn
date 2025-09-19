@@ -12,7 +12,7 @@ class MeasuredMaterial(BaseMaterial):
         ownpath = os.path.realpath(__file__)
         material_path = os.path.join(os.path.dirname(os.path.dirname(ownpath)), 'data_files', 'material_measurements', filename)
         assert os.path.exists(material_path), f"No such file: {filename}"
-        super().__init__(title.replace('M_', ''))
+        super().__init__(title)
         self.material_path = material_path
 
         data = pd.read_csv(self.material_path)
@@ -32,6 +32,7 @@ class MeasuredMaterial(BaseMaterial):
 
     def get_coeffs(self):
         ...
+
 
     def __str__(self):
         """Return string representation of object. Must be implemented by subclasses."""
