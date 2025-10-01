@@ -3,7 +3,7 @@ import torch.nn as nn
 import sys
 sys.path.append(sys.path[0] + '/..')
 from utils.ConfigManager import ConfigManager as CM
-from prediction.BaseTrainableModel import BaseTrainableModel
+from prediction.BaseTrainableModel import BaseTrainableModel, ThicknessPostProcess
 from ui.visualise import visualise_matrix
 
 class RNNBlock(nn.Module):
@@ -83,8 +83,11 @@ class TrainableRNN(nn.Module):
         self.encoder = Encoder(d_model, encoder_dims['hidden'])
         self.decoder_projection = nn.Linear(decoder_dims['in'], d_model)
         self.decoder = Decoder(d_model, decoder_dims['hidden'])
-        self.material_out_projection = nn.Linear(d_model, decoder_dims['material_out'])
-        self.thickness_out_projection = nn.Linear(d_model, decoder_dims['thickness_out'])
+        self.material_out = nn.Linear(d_model, decoder_dims['material_out'])
+        self.thickness_out = nn.Sequential(
+            nn.Linear(d_model, decoder_dims['thickness_out']),
+            ThicknessPostProcess(decoder_dims['seq_len'])
+        )
 
     def project_encoder(self, src):
         return self.encoder_projection(src)
@@ -99,10 +102,10 @@ class TrainableRNN(nn.Module):
         return self.decoder(tgt, encoder_output)
 
     def project_thicknesses(self, thicknesses):
-        return self.thickness_out_projection(thicknesses)
+        return self.thickness_out(thicknesses)
 
     def project_materials(self, materials):
-        return self.material_out_projection(materials)
+        return self.material_out(materials)
 
 class RNN(BaseTrainableModel):
     """
@@ -125,7 +128,8 @@ class RNN(BaseTrainableModel):
             'in': self.tgt_dim,
             'hidden': CM().get('rnn.decoder_dims'),
             'thickness_out': self.out_dims['thickness'],
-            'material_out': self.out_dims['material']
+            'material_out': self.out_dims['material'],
+            'seq_len': self.out_dims['seq_len']
         }
         return TrainableRNN(d_model, encoder_dims, decoder_dims).to(CM().get('device'))
 

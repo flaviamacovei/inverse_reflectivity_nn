@@ -3,7 +3,7 @@ import torch.nn as nn
 import math
 import sys
 sys.path.append(sys.path[0] + '/..')
-from prediction.BaseTrainableModel import BaseTrainableModel
+from prediction.BaseTrainableModel import BaseTrainableModel, ThicknessPostProcess
 from utils.ConfigManager import ConfigManager as CM
 
 class TrainableCNN(nn.Module):
@@ -82,6 +82,7 @@ class TrainableCNN(nn.Module):
         # self.linear = nn.Linear(self.conv_width * self.conv_height, tgt_width * tgt_height)
         self.thickness_head = nn.Sequential(
             nn.Linear(encoder_dim, self.out_dims['seq_len'] * self.out_dims['thickness']),
+            ThicknessPostProcess(out_dims['seq_len'])
         )
         self.material_head = nn.Sequential(
             nn.Linear(encoder_dim, self.out_dims['seq_len'] * self.out_dims['material']),
@@ -95,7 +96,7 @@ class TrainableCNN(nn.Module):
         for layer in self.convolutions:
             x = layer(x)
         x = x.reshape(-1, self.conv_width * self.conv_height)
-        thickness_output = torch.abs(self.thickness_head(x))
+        thickness_output = self.thickness_head(x)
         material_output = self.material_head(x)
         thickness_output = thickness_output.reshape(-1, self.out_dims['seq_len'], self.out_dims['thickness'])
         material_output = material_output.reshape(-1, self.out_dims['seq_len'], self.out_dims['material'])

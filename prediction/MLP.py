@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import sys
 sys.path.append(sys.path[0] + '/..')
-from prediction.BaseTrainableModel import BaseTrainableModel
+from prediction.BaseTrainableModel import BaseTrainableModel, ThicknessPostProcess
 from data.dataloaders.BaseDataloader import BaseDataloader
 from utils.ConfigManager import ConfigManager as CM
 
@@ -37,9 +37,8 @@ class TrainableMLP(nn.Module):
         self.shared_net = nn.ModuleList(shared_layers)
         self.thickness_head = nn.Sequential(
             nn.Linear(dimensions[-1], out_dims['seq_len'] * out_dims['thickness']),
-            nn.Sigmoid(),
+            ThicknessPostProcess(out_dims['seq_len'])
         )
-        self.thickness_norm = nn.LayerNorm((out_dims['seq_len'] - 2) * out_dims['thickness'])
 
         self.material_head = nn.Sequential(
             nn.Linear(dimensions[-1], out_dims['seq_len'] * out_dims['material']),
@@ -50,15 +49,9 @@ class TrainableMLP(nn.Module):
         """Propagate input through the model."""
         for layer in self.shared_net:
             x = layer(x)
-        thickness_outputs = torch.abs(self.thickness_head(x))
-        thickness_outputs = thickness_outputs.reshape(-1, self.out_dims['seq_len'], self.out_dims['thickness'])
-        substrate_thickness = thickness_outputs[:, 0]
-        air_thickness = thickness_outputs[:, -1]
-        thin_film_thickness = thickness_outputs[:, 1:-1].flatten(start_dim = 1)
-        normalised_thin_film_thickness = self.thickness_norm(thin_film_thickness)
-        thickness_outputs = torch.cat([substrate_thickness, normalised_thin_film_thickness, air_thickness], dim = -1)
+        thickness_outputs = self.thickness_head(x)
         material_outputs = self.material_head(x)
-        return torch.abs(thickness_outputs), material_outputs
+        return thickness_outputs, material_outputs
 
     def get_output_size(self):
         """Return output size of the network."""

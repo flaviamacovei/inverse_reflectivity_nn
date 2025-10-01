@@ -4,10 +4,8 @@ import torch
 import torch.nn as nn
 import sys
 sys.path.append(sys.path[0] + '/..')
-from prediction.BaseTrainableModel import BaseTrainableModel
+from prediction.BaseTrainableModel import BaseTrainableModel, ThicknessPostProcess
 from utils.ConfigManager import ConfigManager as CM
-from data.values.ReflectivityPattern import ReflectivityPattern
-from data.values.Coating import Coating
 
 class SinusoidalPositionalEncoding(nn.Module):
     def __init__(self, embed_dim: int, seq_len: int, dropout: float):
@@ -32,14 +30,13 @@ class SinusoidalPositionalEncoding(nn.Module):
         self.register_buffer('pe', pe)
 
     def forward(self, x):
-        x = x + (self.pe[:, :x.shape[1], :]).requires_grad_(False)
+        x = x + (self.pe[:, :x.shape[1], :])
         return self.dropout(x)
 
 class PositionalEncoding(nn.Module):
     def __init__(self, embed_dim: int, seq_len: int, dropout: float = 0.1):
         super().__init__()
         self.dropout = nn.Dropout(dropout)
-        # learned embeddings: (seq_len, embed_dim)
         self.pe = nn.Embedding(seq_len, embed_dim)
 
     def forward(self, x):
@@ -93,7 +90,6 @@ class MultiHeadAttentionBlock(nn.Module):
         # (batch, h, seq_len, d_k) --> (batch, h, seq_len, seq_len)
         attention_scores = (query @ key.transpose(-2, -1)) / math.sqrt(d_k)
         if mask is not None:
-            # in the tutorial it was replaced by -1e9 not inf but I think inf is cleaner
             attention_scores.masked_fill_(mask == 0, -torch.inf)
         attention_scores = attention_scores.softmax(dim = -1) # (batch, h, seq_len, seq_len)
         if dropout is not None:
@@ -101,8 +97,7 @@ class MultiHeadAttentionBlock(nn.Module):
 
         return (attention_scores @ value), attention_scores # return output for further calculation but also attention scores for visualisation
 
-
-    def forward(self, q, k, v, mask):
+    def forward(self, q, k, v, mask = None):
         query = self.W_q(q) # (batch, seq_len, d_model) --> (batch, seq_len, d_model)
         key = self.W_k(k) # (batch, seq_len, d_model) --> (batch, seq_len, d_model)
         value = self.W_v(v) # (batch, seq_len, d_model) --> (batch, seq_len, d_model)
@@ -137,9 +132,8 @@ class EncoderBlock(nn.Module):
         self.feed_forward_block = feed_forward_block
         self.residual_connections = nn.ModuleList([ResidualConnection(dropout) for _ in range(2)])
 
-    def forward(self, x, src_mask):
-        # src_mask is to mask padding tokens but I think in my case there is no input paddings so I don't need it?
-        x = self.residual_connections[0](x, lambda x: self.self_attention_block(x, x, x, src_mask))
+    def forward(self, x):
+        x = self.residual_connections[0](x, lambda x: self.self_attention_block(x, x, x))
         x = self.residual_connections[1](x, self.feed_forward_block)
         return x
 
@@ -149,9 +143,9 @@ class Encoder(nn.Module):
         self.layers = layers
         self.norm = LayerNormalisation()
 
-    def forward(self, x, mask):
+    def forward(self, x):
         for layer in self.layers:
-            x = layer(x, mask)
+            x = layer(x)
         return self.norm(x)
 
 class DecoderBlock(nn.Module):
@@ -162,11 +156,9 @@ class DecoderBlock(nn.Module):
         self.feed_forward_block = feed_forward_block
         self.residual_connections = nn.ModuleList([ResidualConnection(dropout) for _ in range(3)])
 
-    def forward(self, x, encoder_output, src_mask, tgt_mask):
-        # x or src is the input to the decoder
-        # encoder_output or tgt is output from encoder
-        x = self.residual_connections[0](x, lambda x: self.self_attention_block(x, x, x, tgt_mask))
-        x = self.residual_connections[1](x, lambda x: self.cross_attention_block(x, encoder_output, encoder_output, src_mask))
+    def forward(self, x, encoder_output, mask):
+        x = self.residual_connections[0](x, lambda x: self.self_attention_block(x, x, x, mask))
+        x = self.residual_connections[1](x, lambda x: self.cross_attention_block(x, encoder_output, encoder_output))
         x = self.residual_connections[2](x, self.feed_forward_block)
         return x
 
@@ -176,9 +168,9 @@ class Decoder(nn.Module):
         self.layers = layers
         self.norm = LayerNormalisation()
 
-    def forward(self, x, encoder_output, src_mask, tgt_mask):
+    def forward(self, x, encoder_output, mask):
         for layer in self.layers:
-            x = layer(x, encoder_output, src_mask, tgt_mask)
+            x = layer(x, encoder_output, mask)
         return self.norm(x)
 
 class ProjectionLayer(nn.Module):
@@ -200,15 +192,15 @@ class BilinearProjectionLayer(nn.Module):
         # (batch, d1_in_dim, d2_in_dim) --> (batch, d1_in_dim, d2_out_dim)
         x = self.d2_proj(x)
         # (batch, d1_in_dim, d2_out_dim) --> (batch, d2_out_dim, d1_in_dim)
-        x = x.transpose(1, 2)
+        x = x.transpose(-1, -2)
         # (batch, d2_out_dim, d1_in_dim) --> (batch, d2_out_dim, d1_out_dim)
         x = self.d1_proj(x)
         # (batch, d2_out_dim, d1_out_dim) --> (batch, d1_out_dim, d2_out_dim)
-        x = x.transpose(1, 2)
+        x = x.transpose(-1, -2)
         return x
 
 class TrainableTransformer(nn.Module):
-    def __init__(self, encoder: Encoder, decoder: Decoder, src_pos: PositionalEncoding, tgt_pos: PositionalEncoding, encoder_projection: BilinearProjectionLayer, encoder_mask_projection: ProjectionLayer, decoder_projection: ProjectionLayer, thickness_out_projection: ProjectionLayer, material_out_projection: ProjectionLayer):
+    def __init__(self, encoder: Encoder, decoder: Decoder, src_pos: PositionalEncoding, tgt_pos: PositionalEncoding, encoder_projection: BilinearProjectionLayer, encoder_mask_projection: BilinearProjectionLayer, decoder_projection: ProjectionLayer, thickness_out: nn.Module, material_out: ProjectionLayer):
         super().__init__()
         self.encoder = encoder
         self.decoder = decoder
@@ -217,37 +209,38 @@ class TrainableTransformer(nn.Module):
         self.encoder_projection = encoder_projection
         self.encoder_mask_projection = encoder_mask_projection
         self.decoder_projection = decoder_projection
-        self.thickness_out_projection = thickness_out_projection
-        self.material_out_projection = material_out_projection
+        self.thickness_out = thickness_out
+        self.material_out = material_out
 
     def project_bos(self, bos):
         return self.decoder_projection(bos)
 
-    def disjoin_mask(self, mask):
-        mask = self.encoder_mask_projection(mask).to(torch.bool) # (batch, |wl|) --> (batch, hidden_seq_len)
-        # disjunction of mask with itself
-        repeated_mask = mask[:, :, None].repeat(1, 1, mask.shape[1])
-        mask = (repeated_mask | repeated_mask.transpose(-2, -1))[:, None]
-        return mask # (batch, 1, hidden_seq_len, hidden_seq_len)
-
-    def encode(self, src, src_mask):
+    def project_encoder(self, src):
         # src has shape (batch, |wl|, 2)
         src = self.src_pos(src)
         src = self.encoder_projection(src)
-        src_mask = self.disjoin_mask(src_mask)
-        return self.encoder(src, src_mask)
+        return src
 
-    def decode(self, encoder_output, src_mask, tgt, tgt_mask):
+    def encode(self, src):
+        return self.encoder(src)
+
+    def project_decoder(self, tgt):
         # tgt has shape (batch, |coating|, material_embed_dim + 1)
         tgt = self.tgt_pos(tgt)
         tgt = self.decoder_projection(tgt)
-        src_mask = self.encoder_mask_projection(src_mask)[:, None, None] # (batch, |wl|) --> (batch, 1, 1, hidden_seq_len)
-        return self.decoder(tgt, encoder_output, src_mask, tgt_mask)
+        return tgt
 
-    def project(self, x):
-        projected_thickness = torch.abs(self.thickness_out_projection(x))
-        projected_material = torch.abs(self.material_out_projection(x))
-        return projected_thickness, projected_material
+    def project_mask_encoder(self, src_mask):
+        return self.encoder_mask_projection(src_mask)[:, None] # (batch, |wl|, |wl|) --> (batch, 1, hidden_seq_len, hidden_seq_len)
+
+    def decode(self, encoder_output, tgt, mask = None):
+        return self.decoder(tgt, encoder_output, mask)
+
+    def output_thicknesses(self, thicknesses):
+        return self.thickness_out(thicknesses)
+
+    def output_materials(self, materials):
+        return self.material_out(materials)
 
 class Transformer(BaseTrainableModel):
     def __init__(self):
@@ -264,41 +257,34 @@ class Transformer(BaseTrainableModel):
         Returns:
             Output of the model.
         """
-        if CM().get('transformer.src_mask'):
-            # mask out regions where lower bound is 0 and upper bound is 1
-            src_mask = ~((src[:, :, 0] == 0).to(torch.bool) & (src[:, :, 1] == 1).to(torch.bool))
-            src_mask = src_mask.to(torch.float)
-        else:
-            src_mask = torch.ones(src.shape[0], src.shape[1], device = CM().get('device'))
-        encoder_output = self.model.encode(src, src_mask)
-        encoder_output = torch.rand(encoder_output.shape, device = CM().get('device'))
+        src = self.model.project_encoder(src)
+        encoder_output = self.model.encode(src)
 
         if tgt is not None and len(tgt.shape) != 1:
             # in training mode, target is specified
             # in training mode explicit leg, target is dummy data (len(shape) == 1) and should be ignored -> move to inference block
-            decoder_input = tgt[:, :-1, :]
-            bos = self.model.project_bos(tgt[:, :1, :])
-            tgt_mask = self.make_tgt_mask(decoder_input) # (batch, 1, |coating|, |coating|)
-            decoder_output = self.model.decode(encoder_output, src_mask, decoder_input, tgt_mask)
+            tgt_mask = self.make_tgt_mask(tgt[:, :-1, :]) # (batch, 1, |coating| - 1, |coating| - 1)
+            decoder_input = self.model.project_decoder(tgt[:, :-1, :])
+            bos = self.model.project_decoder(tgt[:, :1, :])
+            decoder_output = self.model.decode(encoder_output, decoder_input, tgt_mask)
             connected = torch.cat([bos, decoder_output], dim = 1)
-            projected_thickness, projected_material = self.model.project(connected)
-            return torch.cat([projected_thickness, projected_material], dim = -1)
+            projected_thicknesses = self.model.output_thicknesses(connected)
+            projected_materials = self.model.output_materials(connected)
+            return torch.cat([projected_thicknesses, projected_materials], dim = -1)
         else:
             # in inference mode, target is not specified
             # beginning of any coating: thickness is 1.0, material is substrate
             thickness = torch.ones((1, 1, 1), device = CM().get('device')) # (1, |coating| = 1, 1)
-            substrate_probs = self.indices_to_probs(self.get_bos())[None, None] # (1, |coating| = 1, tgt_vocab_size)
-            tgt = torch.cat([thickness, substrate_probs], dim = -1).repeat(src.shape[0], 1, 1) # (batch, |coating| = 1, tgt_vocab_size + 1)
+            substrate = self.get_bos()[None] # (1, |coating| = 1, 1)
+            tgt = torch.cat([thickness, substrate], dim = -1).repeat(src.shape[0], 1, 1) # (batch, |coating| = 1, tgt_vocab_size + 1)
+            tgt = self.model.project_decoder(tgt)
             while tgt.shape[1] < self.tgt_seq_len:
-                tgt_mask = self.make_tgt_mask(tgt)  # (batch, 1, |coating|, |coating|), second dimension reserved for broadcasting across attn heads
-                thicknesses = tgt[:, :, :1]
-                material_logits = tgt[:, :, 1:]
-                materials = self.sample(material_logits)
-                decoder_output = self.model.decode(encoder_output, src_mask, torch.cat([thicknesses, materials], dim = -1), tgt_mask)
-                projected_thickness, projected_material = self.model.project(decoder_output[:, -1:]) # take only the last item but keep the dimension (batch, |coating|, vocab_size + 1)
-                next = torch.cat([projected_thickness, projected_material], dim = -1)
+                decoder_output = self.model.decode(encoder_output, tgt)
+                next = decoder_output[:, -1:] # take only the last item but keep dimension
                 tgt = torch.cat([tgt, next], dim = 1)
-            return tgt
+            projected_thicknesses = self.model.output_thicknesses(tgt)
+            projected_materials = self.model.output_materials(tgt)
+            return torch.cat([projected_thicknesses, projected_materials], dim = -1)
 
     def make_tgt_mask(self, tgt):
         if CM().get('transformer.tgt_struct_mask'):
@@ -317,10 +303,6 @@ class Transformer(BaseTrainableModel):
         else:
             tgt_caus_mask = torch.ones((tgt.shape[0], tgt.shape[1], tgt.shape[1]), device = CM().get('device')) # (batch, |coating|, |coating|)
         return (tgt_struct_mask.to(torch.bool) & tgt_caus_mask.to(torch.bool))[:, None]
-
-
-    def scale_gradients(self):
-        pass
 
     def causal_mask(self, size):
         return torch.triu(torch.ones(size=(1, size, size), device=CM().get('device')), diagonal=1).type(torch.int) == 0
@@ -350,7 +332,7 @@ class Transformer(BaseTrainableModel):
 
         # source input projection
         src_proj = BilinearProjectionLayer(self.src_seq_len, self.hidden_seq_len, self.src_dim, self.d_model) # (batch, |wl|, 2) --> (batch, hidden_seq_len, d_model)
-        src_mask_proj = ProjectionLayer(self.src_seq_len, self.hidden_seq_len) # (batch, |wl|) --> (batch, hiddens_seq_len)
+        src_mask_proj = BilinearProjectionLayer(self.src_seq_len, self.hidden_seq_len, self.src_seq_len, self.hidden_seq_len) # (batch, |wl|, |wl|) --> (batch, hidden_seq_len, hidden_seq_len)
 
         # encoder blocks
         encoder_blocks = []
@@ -377,11 +359,14 @@ class Transformer(BaseTrainableModel):
         decoder = Decoder(nn.ModuleList(decoder_blocks))
 
         # output projection layer
-        thickness_proj = ProjectionLayer(self.d_model, self.out_dims['thickness'])
-        material_proj = ProjectionLayer(self.d_model, self.out_dims['material'])
+        thickness_out = nn.Sequential(
+            ProjectionLayer(self.d_model, self.out_dims['thickness']),
+            ThicknessPostProcess(self.out_dims['seq_len'])
+        )
+        material_out = ProjectionLayer(self.d_model, self.out_dims['material'])
 
         # transformer
-        transformer = TrainableTransformer(encoder, decoder, src_pos, tgt_pos, src_proj, src_mask_proj, tgt_proj, thickness_proj, material_proj)
+        transformer = TrainableTransformer(encoder, decoder, src_pos, tgt_pos, src_proj, src_mask_proj, tgt_proj, thickness_out, material_out)
 
         # initialise params with xavier
         for p in transformer.parameters():
@@ -389,6 +374,9 @@ class Transformer(BaseTrainableModel):
                 nn.init.xavier_uniform_(p)
 
         return transformer.to(CM().get('device'))
+
+    def scale_gradients(self):
+        pass
 
     def get_architecture_name(self):
         """
