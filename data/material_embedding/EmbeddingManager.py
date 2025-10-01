@@ -130,7 +130,6 @@ class EmbeddingManager:
         # this needs to be differentiable
         # input of shape (batch, seq_len, 1)
         assert len(material_indices.shape) == 2
-        assert material_indices.dtype in [torch.int8, torch.int16, torch.int32, torch.int64], "Indices must be integer values"
         long_indices = material_indices.to(torch.long)
         mask = F.one_hot(long_indices, len(self.refractive_indices)).to(torch.float)
         return mask @ self.refractive_indices

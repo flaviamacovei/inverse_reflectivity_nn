@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 import sys
 sys.path.append(sys.path[0] + '/..')
 from data.values.ReflectivityPattern import ReflectivityPattern
+from utils.ConfigManager import ConfigManager as CM
 
 class BaseModel(ABC):
     """
@@ -16,7 +17,15 @@ class BaseModel(ABC):
 
     def __init__(self):
         """Initialise a BaseModel instance."""
-        pass
+        # shape variables
+        self.src_seq_len = CM().get('wavelengths').shape[0]
+        self.src_dim = 2  # lower bound and upper bound
+        self.tgt_seq_len = CM().get('num_layers') + 2  # thin films + substrate + air
+        self.tgt_vocab_size = len(CM().get('materials.thin_films')) + 2  # available thin films + substrate + air
+        self.tgt_dim = 2
+        self.in_dims = {'seq_len': self.src_seq_len, 'dim': self.src_dim}
+        self.out_dims = {'seq_len': self.tgt_seq_len, 'material': self.tgt_vocab_size, 'thickness': 1}
+
     @abstractmethod
     def predict(self, target: ReflectivityPattern):
         """

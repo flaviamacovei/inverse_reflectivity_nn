@@ -69,7 +69,7 @@ def sample(data: TensorDataset, num_points: int):
     Generated data is OVERSAMPLING_FACTOR times larger than needed.
     Divide into bins and sample evenly many points per bin.
     """
-    BINS = 10
+    BINS = min(10, num_points)
     reflectivity, coating = data.tensors
     # average reflectivity over all wavelengths
     averaged = torch.sum(reflectivity, dim = -1) / reflectivity.shape[-1]

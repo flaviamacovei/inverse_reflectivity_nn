@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 import sys
 sys.path.append(sys.path[0] + '/..')
 from data.values.BaseMaterial import BaseMaterial
@@ -37,6 +38,7 @@ class Coating():
         assert len(encoding.shape) == 3, f"Encoding must have 3 dimensions, found {len(encoding.shape)}"
         assert encoding.shape[2] == 2, f"Final dimension of encoding must be 2, found {encoding.shape[2]}"
         self.num_layers = encoding.shape[1]
+        # do I have to make them float when I create them?
         self.material_indices = encoding[:, :, 1].to(torch.int16)
         self.thicknesses = encoding[:, :, 0]
 
@@ -44,6 +46,9 @@ class Coating():
         """Return encoding of Coating object."""
         result = torch.stack([self.thicknesses, self.material_indices], dim = -1)
         return result
+
+    def get_one_hot_materials(self):
+        return F.one_hot(self.material_indices.to(torch.long)).to(torch.float)
 
     def get_thicknesses(self):
         """Return thicknesses."""

@@ -60,16 +60,6 @@ class BaseTrainableModel(BaseModel, ABC):
             model: The model to be trained. Must extend nn.Module.
         """
         super().__init__()
-
-        # shape variables
-        self.src_seq_len = CM().get('wavelengths').shape[0]
-        self.src_dim = 2 # lower bound and upper bound
-        self.tgt_seq_len = CM().get('num_layers') + 2 # thin films + substrate + air
-        self.tgt_vocab_size = len(CM().get('materials.thin_films')) + 2 # available thin films + substrate + air
-        self.tgt_dim = 2
-        self.in_dims = {'seq_len': self.src_seq_len, 'dim': self.src_dim}
-        self.out_dims = {'seq_len': self.tgt_seq_len, 'material': self.tgt_vocab_size, 'thickness': 1}
-
         self.init_dataloader()
 
         # loss function depends on guidance of current leg
