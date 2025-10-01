@@ -69,6 +69,7 @@ class BaseTrainableModel(BaseModel, ABC):
             model: The model to be trained. Must extend nn.Module.
         """
         super().__init__()
+
         self.init_dataloader()
 
         # loss function depends on guidance of current leg
@@ -161,18 +162,12 @@ class BaseTrainableModel(BaseModel, ABC):
                 output = self.get_model_output(reflectivity, coating_encoding)
 
                 loss = self.compute_loss(output, labels)
-                # print(loss.item())
                 epoch_loss += loss.item()
 
-                if CM().get('wandb.log'):
+                if CM().get('wandb.log') or CM().get('wandb.sweep'):
                     wandb.log({"loss": loss.item()})
-                    # wandb.log({"lr": self.optimiser.param_groups[0]['lr']})
 
                 loss.backward()
-
-                # for name, param in self.model.named_parameters():
-                #     if param.requires_grad:
-                #         print(name, param.data)
 
                 self.scale_gradients()
                 self.optimiser.step()
@@ -206,7 +201,6 @@ class BaseTrainableModel(BaseModel, ABC):
         long_indices = material_indices.to(torch.long).squeeze()
         return F.one_hot(long_indices, len(self.vocab)).to(torch.float)
 
-
     def soft_sample(self, logits: torch.Tensor):
         softmax_probabilities = F.softmax(logits, dim = -1)
         _, max_indices = softmax_probabilities.max(dim = -1, keepdim = True)
@@ -218,7 +212,7 @@ class BaseTrainableModel(BaseModel, ABC):
         greedy_probs_soft = torch.exp(-torch.abs(logits))
         # compute hard probabilities of nearest neighbours
         # this is a one-hot vector but disconnected from the computational graph
-        greedy_probs_hard = torch.zeros_like(greedy_probs_soft).scatter_(-1, greedy_probs_soft.argmin(dim=-1, keepdim=True), 1.0)
+        greedy_probs_hard = torch.zeros_like(greedy_probs_soft).scatter_(-1, greedy_probs_soft.argmin(dim = -1, keepdim = True), 1.0)
         # attach computational graph from soft probabilities to hard probabilities
         greedy_probabilities = greedy_probs_hard + (greedy_probs_soft - greedy_probs_soft.detach())
         return greedy_probabilities
@@ -238,19 +232,20 @@ class BaseTrainableModel(BaseModel, ABC):
         substrate_mask = torch.logical_xor(substrate_position_mask, substrate_index_mask)
 
         # get index of last material to bound air block
-        not_air = logits.argmax(dim=-1, keepdim=True).ne(air)  # (batch, |coating|, |materials_embedding|)
+        not_air = logits.argmax(dim=-1, keepdim=True).ne(air) # (batch, |coating|, |materials_embedding|)
         # logical or along dimension -1
-        not_air = not_air.int().sum(dim=-1).bool()  # (batch, |coating|)
-        not_air_rev = not_air.flip(dims=[1]).to(torch.int)  # (batch, |coating|)
-        last_mat_idx_rev = torch.argmax(not_air_rev, dim=-1)  # (batch)
+        not_air = not_air.int().sum(dim=-1).bool() # (batch, |coating|)
+        not_air_rev = not_air.flip(dims=[1]).to(torch.int) # (batch, |coating|)
+        last_mat_idx_rev = torch.argmax(not_air_rev, dim=-1) # (batch)
         last_mat_idx = not_air.shape[-1] - last_mat_idx_rev - 1  # (batch)
         # ensure at least last element is air
         last_mat_idx = torch.minimum(last_mat_idx, torch.tensor(not_air.shape[-1] - 2))
         # create air mask
-        range_coating = torch.arange(seq_len, device=CM().get('device'))  # (|coating|)
+        range_coating = torch.arange(seq_len, device=CM().get('device')) # (|coating|)
         # mask all other tokens at air block
         air_position_mask = range_coating[None] >= (last_mat_idx + 1)[:, None]  # (batch, |coating|)
-        air_position_mask = air_position_mask[:, :, None].repeat(1, 1, self.tgt_vocab_size)  # (batch, |coating|, |vocab|)
+        air_position_mask = air_position_mask[:, :, None].repeat(1, 1,
+                                                                 self.tgt_vocab_size) # (batch, |coating|, |vocab|)
         # mask air at all other positions
         air_index_mask = torch.zeros_like(logits)
         air_index_mask[:, :, air] = 1
@@ -264,6 +259,13 @@ class BaseTrainableModel(BaseModel, ABC):
         # logits.masked_fill_(mask == 1, -torch.inf)
         return logits
 
+    def print_coatings_in_parallel(self, coating_1: Coating, coating_2: Coating):
+        string_1 = str(coating_1)
+        string_2 = str(coating_2)
+        max_length = max(len(line) for line in string_1.split('\n'))
+        for line_1, line_2 in zip(string_1.split('\n'), string_2.split('\n')):
+            print(f"{line_1.ljust(max_length)} | {line_2}")
+
     def evaluate_epoch(self, epoch: int):
         # visualise first item of batch
         self.model.eval()
@@ -272,7 +274,7 @@ class BaseTrainableModel(BaseModel, ABC):
         reflectivity = reflectivity.to(CM().get('device'))
         coating_encoding = coating_encoding.to(CM().get('device'))
         reflectivity = reflectivity[None]
-        reflectivity = torch.stack([reflectivity[:, :self.src_seq_len], reflectivity[:, self.src_seq_len:]], dim=2)
+        reflectivity = torch.stack([reflectivity[:, :self.src_seq_len], reflectivity[:, self.src_seq_len:]], dim = 2)
         coating_encoding = coating_encoding[None]
         refs = ReflectivityPattern(reflectivity[:, :, 0], reflectivity[:, :, 1])
         with torch.no_grad():
@@ -289,12 +291,12 @@ class BaseTrainableModel(BaseModel, ABC):
         unmasked_coating = Coating(unmasked_output)
         masked_coating = Coating(masked_output)
         preds = coating_to_reflectivity(masked_coating)
-        print(unmasked_coating.get_batch(0))
-        if CM().get('wandb.log'):
+        self.print_coatings_in_parallel(unmasked_coating.get_batch(0), Coating(coating_encoding).get_batch(0))
+        if CM().get('wandb.log') or CM().get('wandb.sweep'):
             validation_error = sum(evaluate_model(self).values())
 
             wandb.log({"validation error": validation_error})
-            structure_error = self.regularise(unmasked_coating)
+            structure_error = self.compute_structure_error(unmasked_coating)
             wandb.log({"structure error": structure_error})
         visualise(preds, refs, f"{self.get_architecture_name()}/from_training_epoch_{epoch}")
 
@@ -342,14 +344,14 @@ class BaseTrainableModel(BaseModel, ABC):
                 yaml.dump(content, f, sort_keys=False, default_flow_style=False, indent=2)
         print(f"Saving model to {model_filename}")
         torch.save(self.model, model_filename)
-        if CM().get('wandb.log'):
+        if CM().get('wandb.log') or CM().get('wandb.sweep'):
             wandb.log({"saved under": model_filename})
 
     def initialise_weights(self, model: nn.Module):
         """Initialise model linear weights using Kaiming normal initialisation."""
         # TODO: add itialisation for other layer types
         if isinstance(model, nn.Linear):
-            init.kaiming_normal_(model.weight, nonlinearity = 'relu')
+            init.kaiming_normal_(model.weight, nonlinearity='relu')
             if model.bias is not None:
                 init.zeros_(model.bias)
 
@@ -359,8 +361,7 @@ class BaseTrainableModel(BaseModel, ABC):
         try:
             self.dataloader.load_leg(0)
         except FileNotFoundError:
-            print("Dataset in current configuration not found. Please run generate_dataset.py first.")
-            return
+            raise FileNotFoundError("Dataset in current configuration not found. Please run generate_dataset.py first.")
 
     def predict(self, target: ReflectivityPattern):
         """
@@ -371,7 +372,7 @@ class BaseTrainableModel(BaseModel, ABC):
         """
         self.model.eval()
         # convert input to shape expected by model
-        model_input = torch.stack((target.get_lower_bound(), target.get_upper_bound()), dim = 2)
+        model_input = torch.stack((target.get_lower_bound(), target.get_upper_bound()), dim=2)
         # predict encoding of coating
         output = self.get_model_output(model_input)
         thicknesses = output[:, :, :1]
@@ -381,6 +382,11 @@ class BaseTrainableModel(BaseModel, ABC):
         preds = torch.cat([thicknesses, materials], dim=-1)
         return Coating(preds)
 
+    def predict_raw(self, target):
+        self.model.eval()
+        model_input = torch.stack((target.get_lower_bound(), target.get_upper_bound()), dim=2)
+        output = self.get_model_output(model_input)
+        return F.softmax(output, dim=-1)
 
     def compute_loss_guided(self, input: torch.Tensor, labels: torch.Tensor):
         """
@@ -398,10 +404,9 @@ class BaseTrainableModel(BaseModel, ABC):
         label_thicknesses = labels[:, :, 0]
         label_materials = labels[:, :, 1]
 
-        softmax_probabilities = F.softmax(input_logits, dim = -1)
-        material_loss = F.cross_entropy(softmax_probabilities.transpose(1, 2), label_materials.to(torch.long)) / batch_size
+        material_loss = F.cross_entropy(input_logits.transpose(1, 2), label_materials.to(torch.long)) / batch_size
         thickness_loss = F.mse_loss(input_thicknesses, label_thicknesses) / batch_size
-        return material_loss + thickness_loss
+        return material_loss + 10 * thickness_loss
 
     def compute_loss_free(self, input: torch.Tensor, labels: torch.Tensor):
         """
@@ -417,14 +422,20 @@ class BaseTrainableModel(BaseModel, ABC):
         input_thicknesses = input[:, :, :1]
         input_logits = input[:, :, 1:]
         input_materials = self.sample(input_logits)
-        coating_encoding = torch.cat([input_thicknesses, input_materials], dim = -1)
+        coating_encoding = torch.cat([input_thicknesses, input_materials], dim=-1)
         coating = Coating(coating_encoding)
         # convert predicted coating to reflectivity value
         preds = coating_to_reflectivity(coating)
         loss = match(preds, pattern)
-        return loss
+        # constraint_loss = self.compute_constraint_loss(coating)
+        return loss  # + constraint_loss
 
-    def regularise(self, coating: Coating):
+    def compute_constraint_loss(self, coating: Coating):
+        thicknesses = coating.get_thicknesses()
+        batch_size, seq_len = thicknesses.shape
+        return torch.sum(F.relu(thicknesses - 1) ** 2) / (batch_size * seq_len)
+
+    def compute_structure_error(self, coating: Coating):
         materials = coating.get_encoding()[:, :, 1:]
         thicknesses = coating.get_encoding()[:, :, :1]
         batch_size, seq_len, _ = materials.shape
@@ -434,7 +445,8 @@ class BaseTrainableModel(BaseModel, ABC):
         air = self.get_eos().to(torch.float)
 
         # make mask for substrate
-        substrate_mask = torch.zeros_like(materials).to(CM().get('device')).to(torch.int) # (batch, |coating|, |materials_embedding|)
+        substrate_mask = torch.zeros_like(materials).to(CM().get('device')).to(
+            torch.int) # (batch, |coating|, |materials_embedding|)
         substrate_mask[:, 0] = 1
         substrate_mask = substrate_mask.bool()
         # test that substrate is at first position
@@ -445,16 +457,16 @@ class BaseTrainableModel(BaseModel, ABC):
         # get index of last material before air
         not_air = materials.ne(air) # (batch, |coating|, |materials_embedding|)
         # logical or along dimension -1
-        not_air = not_air.int().sum(dim = -1).bool() # (batch, |coating|)
-        not_air_rev = not_air.flip(dims = [1]).to(torch.int) # (batch, |coating|)
-        last_mat_idx_rev = torch.argmax(not_air_rev, dim = -1) # (batch)
-        last_mat_idx = not_air.shape[-1] - last_mat_idx_rev - 1 # (batch)
+        not_air = not_air.int().sum(dim=-1).bool() # (batch, |coating|)
+        not_air_rev = not_air.flip(dims=[1]).to(torch.int) # (batch, |coating|)
+        last_mat_idx_rev = torch.argmax(not_air_rev, dim=-1) # (batch)
+        last_mat_idx = not_air.shape[-1] - last_mat_idx_rev - 1  # (batch)
         # ensure at least last element is air
         last_mat_idx = torch.minimum(last_mat_idx, torch.tensor(not_air.shape[-1] - 2))
         # make mask for air block
         range_coating = torch.arange(seq_len, device=CM().get('device')) # (|coating|)
         air_mask = range_coating[None] >= (last_mat_idx + 1)[:, None]  # (batch, |coating|)
-        air_mask = air_mask[:, :, None] # (batch, |coating|, 1)
+        air_mask = air_mask[:, :, None]  # (batch, |coating|, 1)
         # test that air block is at the end
         air_pos = torch.zeros_like(materials).to(CM().get('device')) # (batch, |coating|, |materials_embedding|)
         air_pos[air_mask] = air.squeeze().repeat(air_pos[air_mask].shape[0])
@@ -476,7 +488,7 @@ class BaseTrainableModel(BaseModel, ABC):
         return materials_err + thicknesses_err
 
     @abstractmethod
-    def get_model_output(self, src, tgt = None):
+    def get_model_output(self, src, tgt=None):
         """
         Get output of the model for given input. Must be implemented by subclasses.
 
@@ -497,7 +509,7 @@ class BaseTrainableModel(BaseModel, ABC):
             attributes = {'architecture': architecture}
         else:
             attributes = {**{'architecture': architecture}, **attributes}
-        model_filename = get_saved_model_path(attributes = attributes)
+        model_filename = get_saved_model_path(attributes=attributes)
         if model_filename is None:
             print(f"Saved {architecture} model not found. Performing training...")
             # update config attributes
@@ -511,9 +523,8 @@ class BaseTrainableModel(BaseModel, ABC):
             # restore config to original state
             CM().reset()
         else:
-            self.model = torch.load(model_filename, weights_only = False)
+            self.model = torch.load(model_filename, weights_only=False)
             self.model = self.model.to(CM().get('device'))
-
 
     @abstractmethod
     def scale_gradients(self):
