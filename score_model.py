@@ -10,7 +10,7 @@ from evaluation.model_eval import evaluate_model, test_model
 
 def score_model(model):
     """Evaluate model on validation and test data."""
-    log = CM().get('wandb.log')
+    log = CM().get('wandb.log') or CM().get('wandb.sweep')
     print("Evaluating model...")
     errors = evaluate_model(model)
     for density in errors.keys():

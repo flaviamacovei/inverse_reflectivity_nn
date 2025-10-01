@@ -146,8 +146,9 @@ class BaseTrainableModel(BaseModel, ABC):
 
                 guided_loss = self.compute_loss_guided(output, coating_encoding)
                 free_loss = self.compute_loss_free(output, reflectivity)
+                guided_factor = CM().get('training.guided_factor')
 
-                loss = guided_loss + free_loss
+                loss = guided_factor * guided_loss + (1 - guided_factor) * free_loss
                 epoch_loss += loss.item()
 
                 if CM().get('wandb.log') or CM().get('wandb.sweep'):
@@ -392,7 +393,8 @@ class BaseTrainableModel(BaseModel, ABC):
 
         material_loss = F.cross_entropy(input_logits.transpose(1, 2), label_materials.to(torch.long)) / batch_size
         thickness_loss = F.mse_loss(input_thicknesses, label_thicknesses) / batch_size
-        return material_loss + 10 * thickness_loss
+        thicknesses_factor = CM().get('training.thicknesses_factor')
+        return (1 - thicknesses_factor) * material_loss + thicknesses_factor * thickness_loss
 
     def compute_loss_free(self, input: torch.Tensor, labels: torch.Tensor):
         """
@@ -412,9 +414,10 @@ class BaseTrainableModel(BaseModel, ABC):
         coating = Coating(coating_encoding)
         # convert predicted coating to reflectivity value
         preds = coating_to_reflectivity(coating)
-        loss = match(preds, pattern)
-        # constraint_loss = self.compute_constraint_loss(coating)
-        return loss # + constraint_loss
+        free_loss = match(preds, pattern)
+        constraint_loss = self.compute_constraint_loss(coating)
+        constraint_factor = CM().get('training.constraint_factor')
+        return (1 - constraint_factor) * free_loss + constraint_factor * constraint_loss
 
     def compute_constraint_loss(self, coating: Coating):
         thicknesses = coating.get_thicknesses()

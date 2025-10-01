@@ -104,6 +104,9 @@ transformer:
   tgt_caus_mask: true
 training:
   learning_rate: 1.0e-03
+  thicknesses_factor: 0.9
+  constraint_factor: 0.5
+  guided_factor: 0.5
   reg_weight: 0.0
   num_epochs: 4
   batch_size: 256
