@@ -25,6 +25,15 @@ from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
 from utils.data_utils import get_saved_model_path
 from evaluation.model_eval import evaluate_model
 
+class ThicknessPostProcess(nn.Module):
+    def __init__(self, dims: int):
+        super().__init__()
+        # self.norm = nn.BatchNorm1d(dims)
+        self.net = nn.BatchNorm1d(dims)
+
+    def forward(self, x):
+        return torch.exp(self.net(x))
+
 class BaseTrainableModel(BaseModel, ABC):
     """
     Abstract base class for trainable prediction models.
