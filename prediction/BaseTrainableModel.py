@@ -86,7 +86,7 @@ class BaseTrainableModel(BaseModel, ABC):
         self.model = self.build_model()
         learning_rate = CM().get('training.learning_rate')
         self.optimiser = torch.optim.Adam(self.model.parameters(), learning_rate)
-        # self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimiser, mode = 'min', patience = 5, cooldown = 5)
+        self.scheduler = torch.optim.lr_scheduler.LinearLR(self.optimiser, start_factor = 1.0, end_factor = 0.1, total_iters = CM().get('training.num_epochs'))
 
     @abstractmethod
     def build_model(self):
@@ -159,13 +159,12 @@ class BaseTrainableModel(BaseModel, ABC):
                 self.scale_gradients()
                 self.optimiser.step()
             epoch_loss /= len(self.dataloader)
-            # self.scheduler.step(epoch_loss)
+            self.scheduler.step()
             if epoch % max(1, CM().get('training.num_epochs') / 20) == 0:
                 if CM().get('training.save_model'):
                     # logging at every 5% of training
                     self.update_checkpoint(epoch)
                 print(f"Loss in epoch {epoch + 1}: {epoch_loss.item()}")
-                # divide by dataset size instead of loss in epoch 0?
                 self.evaluate_epoch(epoch)
         print("Training complete.")
         # save final trained model
@@ -285,7 +284,7 @@ class BaseTrainableModel(BaseModel, ABC):
             wandb.log({"validation error": validation_error})
             structure_error = self.compute_structure_error(unmasked_coating)
             wandb.log({"structure error": structure_error})
-        visualise(preds, refs, f"{self.get_architecture_name()}/from_training_epoch_{epoch}")
+        visualise(preds, refs, f"{self.get_architecture_name()}/from_training_lr_epoch_{epoch}")
 
     def update_checkpoint(self, epoch: int):
         new_checkpoint = get_unique_filename(f"out/models/checkpoint_{short_hash(self.model) + short_hash(epoch)}.pt")
