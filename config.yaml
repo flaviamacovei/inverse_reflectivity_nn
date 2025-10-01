@@ -1,10 +1,10 @@
 device: auto
-seed: 4
+seed: null
 num_stacks: 1
 layers:
   min: 1
-  max: 20
-num_layers: 20
+  max: 5
+num_layers: 5
 wavelengths:
   start: 0.3
   end: 1.499
@@ -60,66 +60,81 @@ theta:
   end: 0.0
   steps: 1
 air_pad: false
-stratified_sampling: false
+stratified_sampling: true
 sampling: soft
 material_embedding:
   data_file: data/material_embedding/materials.yaml
 tolerance: 0.001
-autoencoder:
-  latent_dim: 128
-  num_layers: 4
-architecture: mlp
+architecture: rnn
 mlp:
   hidden_dims:
+  - 32
   - 128
-  - 512
   - 64
+  - 256
+  - 64
+  - 128
+  - 32
 cnn:
   channel_dims:
   - 32
   - 64
-  - 3
+  - 128
+  - 64
+  - 32
   kernel_size: 3
 rnn:
-  encoder_dim: 64
-  decoder_dim: 32
+  d_model: 128
+  encoder_dims:
+  - 64
+  - 32
+  - 64
+  decoder_dims:
+  - 128
+  - 256
 transformer:
-  hidden_seq_len: 400
-  d_model: 512
-  num_layers: 7
+  hidden_seq_len: 500
+  d_model: 128
+  num_layers: 4
   num_heads: 8
   dropout: 0.1
-  d_ff: 1024
-  src_mask: true
+  d_ff: 512
+  src_mask: false
   tgt_struct_mask: false
-  tgt_caus_mask: true
+  tgt_caus_mask: false
 training:
-  guided_learning_rate: 0.0001
-  free_learning_rate: 1.0e-06
+  guided_learning_rate: 1.0e-03
+  free_learning_rate: 1.0e-03
   reg_weight: 0.0
-  num_epochs: 100
-  batch_size: 128
-  dataset_size: 5000
+  num_epochs: 4
+  batch_size: 256
+  dataset_size: 5
   save_model: true
   evaluate: true
   guidance_schedule:
   - guidance: guided
     density: complete
     percent: 0.2
-  - guidance: free
-    density: complete
-    percent: 0.2
+#  - guidance: free
+#    density: complete
+#    percent: 0.2
   - guidance: guided
     density: masked
     percent: 0.2
-  - guidance: free
-    density: masked
-    percent: 0.2
-  - guidance: free
-    density: explicit
-    percent: 0.2
+#  - guidance: guided
+#    density: complete
+#    percent: 0.2
+#  - guidance: free
+#    density: explicit
+#    percent: 0.2
+#  - guidance: guided
+#    density: complete
+#    percent: 0.2
+#  - guidance: guided
+#    density: masked
+#    percent: 0.2
 wandb:
-  log: true
+  log: false
   sweep: false
   project: inverse-mirrors-nn
   config:

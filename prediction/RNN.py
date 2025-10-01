@@ -36,53 +36,73 @@ class RNNBlock(nn.Module):
         return torch.zeros(1, self.hidden_dim).to(CM().get('device'))
 
 class Encoder(nn.Module):
-    def __init__(self, in_dim: int, hidden_dim: int, out_dim: int):
+    def __init__(self, d_model: int, hidden_dims: list[int]):
         super().__init__()
-        self.rnn = RNNBlock(in_dim, hidden_dim, out_dim)
+        blocks = []
+        for i in range(len(hidden_dims)):
+            blocks.append(RNNBlock(d_model, hidden_dims[i], d_model))
+        self.rnn = nn.ModuleList(blocks)
 
     def forward(self, x):
-        seq_len = x.shape[1]
+        batch_size, seq_len, _ = x.shape
         hidden = None
-        out = None
-        for i in range(seq_len):
-            out, hidden = self.rnn(x[:, i], hidden)
+        for layer in self.rnn:
+            out = torch.zeros(batch_size, seq_len, layer.out_dim, device = CM().get('device'))
+            for i in range(seq_len):
+                i_out, hidden = layer(x[:, i], hidden)
+                out[:, i, :] = i_out
+            x = out
+            hidden = None
+            # out, hidden = self.rnn(x[:, i], hidden)
         return out
 
 class Decoder(nn.Module):
-    def __init__(self, in_dim: int, hidden_dim: int, out_dim: int):
+    def __init__(self, d_model: int, hidden_dims: list[int]):
         super().__init__()
-        
-        self.rnn = RNNBlock(in_dim, hidden_dim, out_dim)
+        blocks = []
+        for i in range(len(hidden_dims)):
+            blocks.append(RNNBlock(d_model, hidden_dims[i], d_model))
+        self.rnn = nn.ModuleList(blocks)
     
     def forward(self, x, encoder_output):
-        seq_len = x.shape[1]
+        batch_size, seq_len, _ = x.shape
         hidden = encoder_output
-        sequence = None
-        for i in range(seq_len):
-            out, hidden = self.rnn(x[:, i], hidden)
-            sequence = out[:, None] if sequence is None else torch.cat([sequence, out[:, None]], dim = 1)
-        return torch.abs(sequence)
+        for layer in self.rnn:
+            out = torch.zeros(batch_size, seq_len, layer.out_dim, device = CM().get('device'))
+            for i in range(seq_len):
+                i_out, hidden = layer(x[:, i], hidden)
+                out[:, i, :] = i_out
+            x = out
+            hidden = None
+        return out
 
 class TrainableRNN(nn.Module):
-    def __init__(self, enc_in_dim: int, enc_hidden_dim: int, enc_out_dim: int, dec_thickness_in_dim: int, dec_material_in_dim: int, dec_hidden_dim: int, dec_thickness_out_dim: int, dec_material_out_dim: int, flattened_material_dim: int, out_dim: int):
+    def __init__(self, d_model: int, encoder_dims: dict, decoder_dims: dict):
         super().__init__()
-        self.encoder = Encoder(enc_in_dim, enc_hidden_dim, enc_out_dim)
-        self.decoder_thickness_head = Decoder(dec_thickness_in_dim, dec_hidden_dim, dec_thickness_out_dim)
-        self.decoder_material_head = Decoder(dec_material_in_dim, dec_hidden_dim, dec_material_out_dim)
-        self.projection = nn.Linear(flattened_material_dim, out_dim)
+        self.encoder_projection = nn.Linear(encoder_dims['in'], d_model)
+        self.encoder = Encoder(d_model, encoder_dims['hidden'])
+        self.decoder_projection = nn.Linear(decoder_dims['in'], d_model)
+        self.decoder = Decoder(d_model, decoder_dims['hidden'])
+        self.material_out_projection = nn.Linear(d_model, decoder_dims['material_out'])
+        self.thickness_out_projection = nn.Linear(d_model, decoder_dims['thickness_out'])
+
+    def project_encoder(self, src):
+        return self.encoder_projection(src)
 
     def encode(self, src):
-        return self.encoder(src)
+        return self.encoder(src)[:, -1, :]
+
+    def project_decoder(self, tgt):
+        return self.decoder_projection(tgt)
 
     def decode(self, encoder_output, tgt):
-        thicknesses = tgt[:, :, :1]
-        materials = tgt[:, :, 1:]
-        decoded_thicknesses = self.decoder_thickness_head(thicknesses, encoder_output)
-        decoded_materials = self.decoder_material_head(materials, encoder_output)
-        return decoded_thicknesses, decoded_materials
+        return self.decoder(tgt, encoder_output)
 
-    def project(self, x):
-        return self.projection(x)
+    def project_thicknesses(self, thicknesses):
+        return self.thickness_out_projection(thicknesses)
+
+    def project_materials(self, materials):
+        return self.material_out_projection(materials)
 
 class RNN(BaseTrainableModel):
     """
@@ -96,17 +116,18 @@ class RNN(BaseTrainableModel):
         super().__init__()
 
     def build_model(self):
-        enc_in_dim = self.src_dim
-        enc_hidden_dim = CM().get('rnn.encoder_dim')
-        enc_out_dim = CM().get('rnn.decoder_dim')
-        dec_thickness_in_dim = 1
-        dec_material_in_dim = 1
-        dec_hidden_dim = CM().get('rnn.decoder_dim')
-        dec_thickness_out_dim = self.out_dims['thickness']
-        dec_material_out_dim = 1
-        flattened_material_dim = self.out_dims['seq_len']
-        out_dim = self.out_dims['seq_len'] * self.out_dims['material']
-        return TrainableRNN(enc_in_dim, enc_hidden_dim, enc_out_dim, dec_thickness_in_dim, dec_material_in_dim, dec_hidden_dim, dec_thickness_out_dim, dec_material_out_dim, flattened_material_dim, out_dim).to(CM().get('device'))
+        d_model = CM().get('rnn.d_model')
+        encoder_dims = {
+            'in': self.src_dim,
+            'hidden': CM().get('rnn.encoder_dims'),
+        }
+        decoder_dims = {
+            'in': self.tgt_dim,
+            'hidden': CM().get('rnn.decoder_dims'),
+            'thickness_out': self.out_dims['thickness'],
+            'material_out': self.out_dims['material']
+        }
+        return TrainableRNN(d_model, encoder_dims, decoder_dims).to(CM().get('device'))
 
     def get_model_output(self, src, tgt = None):
         """
@@ -119,27 +140,29 @@ class RNN(BaseTrainableModel):
         Returns:
             Output of the model.
         """
-        encoder_output = self.model.encode(src) # (batch_size, encoder_hidden_dim)
+        projected_input = self.model.project_encoder(src) # (batch_size, src_seq_len, d_model)
+        encoder_output = self.model.encode(projected_input) # (batch_size, d_model)
         if tgt is not None and len(tgt.shape) != 1:
             # in training mode, target is specified
             # in training mode explicit leg, target is dummy data (len(shape) == 1) and should be ignored -> move to inference block
-            decoded_thicknesses, decoded_materials = self.model.decode(encoder_output, tgt)
-            projected_materials = self.model.project(decoded_materials.flatten(start_dim = 1)).reshape(-1, self.tgt_seq_len, self.tgt_vocab_size)
-            return torch.cat([decoded_thicknesses, projected_materials], dim = -1)
+            projected_tgt = self.model.project_decoder(tgt) # (batch_size, tgt_seq_len, d_model)
+            decoder_output = self.model.decode(encoder_output, projected_tgt) # (batch_size, tgt_seq_len, d_model)
+            projected_thicknesses = self.model.project_thicknesses(decoder_output) # (batch_size, tgt_seq_len, 1)
+            projected_materials = self.model.project_materials(decoder_output) # (batch_size, tgt_seq_len, vocab_size)
+            return torch.cat([projected_thicknesses, projected_materials], dim = -1)
         else:
             # in inference mode, target is not specified
             thickness = torch.ones((1, 1, 1)).to(CM().get('device'))
             bos = self.get_bos()
-            tgt = torch.cat([thickness, bos[None]], dim = -1).repeat(encoder_output.shape[0], 1, 1)
+            tgt = torch.cat([thickness, bos[None]], dim = -1).repeat(encoder_output.shape[0], 1, 1) # (batch_size, 1, 2)
+            tgt = self.model.project_decoder(tgt) # (batch_size, 1, d_model)
             while tgt.shape[1] < self.tgt_seq_len:
-                decoded_thicknesses, decoded_materials = self.model.decode(encoder_output, tgt)
-                next = torch.cat([decoded_thicknesses, decoded_materials], dim = -1)
-                next = next[:, -1:] # take only last item but keep dimension
-                tgt = torch.cat([tgt, next], dim = 1)
-            final_thicknesses = tgt[:, :, :1]
-            final_materials = tgt[:, :, 1:]
-            projected_materials = self.model.project(final_materials.flatten(start_dim = 1)).reshape(-1, self.tgt_seq_len, self.tgt_vocab_size)
-            return torch.cat([final_thicknesses, projected_materials], dim = -1)
+                decoder_output = self.model.decode(encoder_output, tgt) # (batch_size, running_seq_len, d_model)
+                next = decoder_output[:, -1:] # take only last item but keep dimension
+                tgt = torch.cat([tgt, next], dim = 1) # (batch_size, running_seq_len, d_model)
+            projected_thicknesses = self.model.project_thicknesses(tgt) # (batch_size, tgt_seq_len, 1)
+            projected_materials = self.model.project_materials(tgt) # (batch_size, tgt_seq_len, vocab_size)
+            return torch.cat([projected_thicknesses, projected_materials], dim = -1)
 
     def scale_gradients(self):
         if self.guidance == "free":
