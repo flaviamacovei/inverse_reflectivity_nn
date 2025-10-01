@@ -65,7 +65,7 @@ sampling: soft
 material_embedding:
   data_file: data/material_embedding/materials.yaml
 tolerance: 0.001
-architecture: rnn
+architecture: transformer
 mlp:
   hidden_dims:
   - 32
@@ -99,40 +99,22 @@ transformer:
   num_heads: 8
   dropout: 0.1
   d_ff: 512
-  src_mask: false
-  tgt_struct_mask: false
-  tgt_caus_mask: false
+  src_mask: true
+  tgt_struct_mask: true
+  tgt_caus_mask: true
 training:
-  guided_learning_rate: 1.0e-03
-  free_learning_rate: 1.0e-03
+  learning_rate: 1.0e-03
   reg_weight: 0.0
   num_epochs: 4
   batch_size: 256
   dataset_size: 5
   save_model: true
   evaluate: true
-  guidance_schedule:
-  - guidance: guided
-    density: complete
+  curriculum:
+  - density: complete
     percent: 0.2
-#  - guidance: free
-#    density: complete
-#    percent: 0.2
-  - guidance: guided
-    density: masked
+  - density: masked
     percent: 0.2
-#  - guidance: guided
-#    density: complete
-#    percent: 0.2
-#  - guidance: free
-#    density: explicit
-#    percent: 0.2
-#  - guidance: guided
-#    density: complete
-#    percent: 0.2
-#  - guidance: guided
-#    density: masked
-#    percent: 0.2
 wandb:
   log: false
   sweep: false

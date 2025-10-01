@@ -33,32 +33,34 @@ class ConfigManager:
         with open(dir + '/config.yaml', 'r') as f:
             self.config = yaml.safe_load(f)
         try:
-            # set device
-            if self.config['device'] == 'auto':
-                self.config['device'] = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-
-            # set random seed
-            seed = self.config['seed']
-            if seed:
-                random.seed(seed)
-                torch.manual_seed(seed)
-
-            # normalise guidance schedule durations
-            total_duration = sum([leg['percent'] for leg in self.config['training']['guidance_schedule']])
-            for leg in self.config['training']['guidance_schedule']:
-                leg['percent'] /= total_duration
-
-            # make linspaces
-            self.config['wavelengths'] = torch.linspace(self.config['wavelengths']['start'], self.config['wavelengths']['end'], self.config['wavelengths']['steps'], device = self.config['device'])
-            self.config['theta'] = torch.tensor(np.linspace(self.config['theta']['start'], self.config['theta']['end'], self.config['theta']['steps']) * (np.pi / 180), dtype = torch.float32).to(self.config['device'])
-
-            # set materials location
-            self.config['material_embedding']['data_file'] = os.path.join(dir, self.config['material_embedding']['data_file'])
-
-            self.config['training']['num_legs'] = len(self.config['training']['guidance_schedule'])
-
+            self.load_values()
         except BaseException as e:
             raise ValueError(f"Error loading config: {e}")
+
+    def load_values(self):
+        # set device
+        if self.config['device'] == 'auto':
+            self.config['device'] = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+
+        # set random seed
+        seed = self.config['seed']
+        if seed:
+            random.seed(seed)
+            torch.manual_seed(seed)
+
+        # normalise curriculum durations
+        total_duration = sum([leg['percent'] for leg in self.config['training']['curriculum']])
+        for leg in self.config['training']['curriculum']:
+            leg['percent'] /= total_duration
+
+        # make linspaces
+        if not isinstance(self.config['wavelengths'], torch.Tensor):
+            self.config['wavelengths'] = torch.linspace(self.config['wavelengths']['start'], self.config['wavelengths']['end'], self.config['wavelengths']['steps'], device = self.config['device'])
+        if not isinstance(self.config['theta'], torch.Tensor):
+            self.config['theta'] = torch.tensor(np.linspace(self.config['theta']['start'], self.config['theta']['end'], self.config['theta']['steps']) * (np.pi / 180), dtype = torch.float32).to(self.config['device'])
+
+        self.config['training']['num_legs'] = len(self.config['training']['curriculum'])
+
         return self.config
 
     def get(self, key):
@@ -80,7 +82,7 @@ class ConfigManager:
                 raise KeyError(f"Key {k} not found at '{'.'.join(keys[:keys.index(k)])}'")
         return value
 
-    def set(self, attributes: dict()):
+    def set(self, attributes: dict):
         # set specified attributes in config
         for key, value in attributes.items():
             if key in self.config.keys() and isinstance(value, dict) and isinstance(self.config[key], dict):
@@ -91,6 +93,7 @@ class ConfigManager:
                 # key not existing in props_dict / value not of type dictionary
                 #               add              /          overwrite
                 self.config[key] = value
+        self.load_values()
 
     def reset(self):
         self._load(dir)

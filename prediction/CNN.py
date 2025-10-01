@@ -129,7 +129,7 @@ class CNN(BaseTrainableModel):
         """
         Get output of the model for given input.
 
-        For the CNN architecture, only src is needed. tgt and guidance are leftovers from superclass signature and not used.
+        For the CNN architecture, only src is needed. tgt is leftover from superclass signature and not used.
 
         Args:
             src: Input data.

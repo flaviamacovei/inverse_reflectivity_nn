@@ -46,11 +46,11 @@ class BaseTrainableModel(BaseModel, ABC):
         dataloader: Dataloader to be used for training.
         optimiser: Optimiser to be used for training.
         compute_loss: Loss function to be used for training. This implements either the free or the guided loss
-        current_leg: Current leg of the guidance schedule.
+        current_leg: Current leg of the curriculum.
 
     Methods:
-        get_current_leg: Return current leg of the guidance schedule.
-        update_leg: Update leg to next leg of the guidance schedule.
+        get_current_leg: Return current leg of the curriculum.
+        update_leg: Update leg to next leg of the curriculum.
         train: Train the model.
         initialise_weights: Initialise weights of the trainable model.
         init_dataloader: Initialise dataloader.
@@ -72,14 +72,7 @@ class BaseTrainableModel(BaseModel, ABC):
 
         self.init_dataloader()
 
-        # loss function depends on guidance of current leg
-        self.loss_functions = {
-            "free": self.compute_loss_free,
-            "guided": self.compute_loss_guided
-        }
-        self.compute_loss = None
         self.current_leg = -1
-        self.guidance = None
         self.checkpoint = None
 
         sampling_functions = {
@@ -91,7 +84,8 @@ class BaseTrainableModel(BaseModel, ABC):
         self.vocab = EM().get_refractive_indices_table()
 
         self.model = self.build_model()
-        self.optimiser = torch.optim.Adam(self.model.parameters())
+        learning_rate = CM().get('training.learning_rate')
+        self.optimiser = torch.optim.Adam(self.model.parameters(), learning_rate)
         # self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimiser, mode = 'min', patience = 5, cooldown = 5)
 
     @abstractmethod
@@ -102,19 +96,19 @@ class BaseTrainableModel(BaseModel, ABC):
         pass
 
     def get_current_leg(self, epoch):
-        """Return current leg of the guidance schedule."""
+        """Return current leg of the curriculum."""
         # calculate what percent of training is done
         percent_done = epoch / CM().get('training.num_epochs')
         for leg in range(CM().get('training.num_legs')):
             # find corresponding leg by iteratively subtracting percentages of past legs
-            if percent_done < CM().get(f'training.guidance_schedule.{leg}.percent'):
+            if percent_done < CM().get(f'training.curriculum.{leg}.percent'):
                 return leg
             else:
-                percent_done -= CM().get(f'training.guidance_schedule.{leg}.percent')
+                percent_done -= CM().get(f'training.curriculum.{leg}.percent')
 
     def update_leg(self, epoch):
         """
-        Update leg to next leg of the guidance schedule.
+        Update leg to next leg of the curriculum.
 
         Args:
             epoch: Current epoch.
@@ -123,18 +117,10 @@ class BaseTrainableModel(BaseModel, ABC):
         if epoch_leg != self.current_leg:
             # only update attributes if leg has changed
             self.current_leg = epoch_leg
-            guidance = CM().get(f'training.guidance_schedule.{self.current_leg}.guidance')
-            density = CM().get(f'training.guidance_schedule.{self.current_leg}.density')
+            density = CM().get(f'training.curriculum.{self.current_leg}.density')
             print(
-                f"{'-' * 50}\nOn leg {guidance}-{density}")
-            # update attributes: loss function, learning rate, dataloader,
-            # first run data through model, then compute loss
-            # shapes might be off (+ 1 due to changes in SegmentedDataset)
-            self.compute_loss = self.loss_functions[guidance]
-            for g in self.optimiser.param_groups:
-                g['lr'] = CM().get(f'training.{guidance}_learning_rate')
+                f"{'-' * 50}\nCurrent leg: {density}")
             self.dataloader.load_leg(self.current_leg)
-            self.guidance = guidance
 
     def train(self):
         """Train the model."""
@@ -328,7 +314,7 @@ class BaseTrainableModel(BaseModel, ABC):
             "tolerance": CM().get('tolerance'),
             "num_points": CM().get('training.dataset_size'),
             "epochs": CM().get('training.num_epochs'),
-            "guidance_schedule": CM().get('training.guidance_schedule'),
+            "curriculum": CM().get('training.curriculum'),
         }
         model_filename = get_unique_filename(f"out/models/model_{short_hash(props_dict)}.pt")
 
@@ -356,7 +342,7 @@ class BaseTrainableModel(BaseModel, ABC):
                 init.zeros_(model.bias)
 
     def init_dataloader(self):
-        """Initialise dataloader for first leg of guidance schedule."""
+        """Initialise dataloader for first leg of curriculum."""
         self.dataloader = DynamicDataloader(batch_size=CM().get('training.batch_size'), shuffle=True)
         try:
             self.dataloader.load_leg(0)

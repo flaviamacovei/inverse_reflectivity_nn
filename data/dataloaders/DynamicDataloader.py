@@ -105,7 +105,7 @@ class DynamicDataloader(BaseDataloader):
         Args:
             leg: Index of the leg from which to load configuration.
         """
-        density = CM().get(f'training.guidance_schedule.{leg}.density')
+        density = CM().get(f'training.curriculum.{leg}.density')
         filepath = get_dataset_name("training", density)
         self.load_data(filepath, weights_only = False)
         # TODO: turn this into an actual dataloader class maybe?
