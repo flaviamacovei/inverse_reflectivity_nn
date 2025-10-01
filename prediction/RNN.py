@@ -168,10 +168,6 @@ class RNN(BaseTrainableModel):
             projected_materials = self.model.project_materials(tgt) # (batch_size, tgt_seq_len, vocab_size)
             return torch.cat([projected_thicknesses, projected_materials], dim = -1)
 
-    def scale_gradients(self):
-        if self.guidance == "free":
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-
     def get_architecture_name(self):
         """
         Return name of model architecture.

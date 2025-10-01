@@ -91,10 +91,6 @@ class MLP(BaseTrainableModel):
         out_materials = out_materials.reshape(-1, self.tgt_seq_len, self.tgt_vocab_size)
         return torch.cat([out_thicknesses, out_materials], dim = -1)
 
-    def scale_gradients(self):
-        if self.guidance == "free":
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
-
     def get_architecture_name(self):
         """
         Return name of model architecture.

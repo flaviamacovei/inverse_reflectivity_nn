@@ -526,10 +526,11 @@ class BaseTrainableModel(BaseModel, ABC):
             self.model = torch.load(model_filename, weights_only=False)
             self.model = self.model.to(CM().get('device'))
 
-    @abstractmethod
     def scale_gradients(self):
-        """Scale gradients of trainable model. Must be implemented by subclasses."""
-        ...
+        for name, param in self.model.named_parameters():
+            if param.grad is not None:
+                norm = param.grad.data.norm(2)
+                param.grad.data = param.grad.data / (norm + 1.0e-10)
 
     def get_num_params(self):
         return sum(p.numel() for p in self.model.parameters())

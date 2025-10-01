@@ -141,9 +141,6 @@ class CNN(BaseTrainableModel):
         thicknesses, materials = self.model(src)
         return torch.cat([thicknesses, materials], dim = -1)
 
-    def scale_gradients(self):
-        pass
-
     def get_architecture_name(self):
         """
         Return name of model architecture.

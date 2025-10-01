@@ -375,9 +375,6 @@ class Transformer(BaseTrainableModel):
 
         return transformer.to(CM().get('device'))
 
-    def scale_gradients(self):
-        pass
-
     def get_architecture_name(self):
         """
         Return name of model architecture.
