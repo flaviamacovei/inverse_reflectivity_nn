@@ -45,8 +45,8 @@ class Hybrid(BaseTrainableModel):
         self.trainable.scale_gradients()
 
     def predict(self, target: ReflectivityPattern):
-        trainable_prediction = self.trainable.predict(target)
-        self.gradient.initialise(trainable_prediction.get_encoding().detach().cpu().numpy().flatten())
+        trainable_prediction = self.trainable.predict_raw(target)
+        self.gradient.initialise(trainable_prediction.detach().cpu().numpy().flatten())
         gradient_prediction = self.gradient.predict(target)
         return gradient_prediction
 

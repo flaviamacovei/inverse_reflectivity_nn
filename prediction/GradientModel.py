@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 import numpy as np
 from scipy.optimize import minimize, Bounds
 import sys
@@ -9,14 +10,13 @@ from utils.ConfigManager import ConfigManager as CM
 from data.values.Coating import Coating
 from forward.forward_tmm import coating_to_reflectivity
 from evaluation.loss import match
+from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
 
 class GradientModel(BaseModel):
     def __init__(self):
         super().__init__()
-        # number of thin films plus substrate and air
-        self.coating_length = CM().get('num_layers') + 2
         # thicknesses plus embedding dimension
-        self.encoding_length = CM().get('material_embedding.dim') + 1
+        self.encoding_length = 2
 
 
     def predict(self, target: ReflectivityPattern):
@@ -46,28 +46,36 @@ class GradientModel(BaseModel):
 
         optimised_params = result.x
 
-        optimised_params = torch.from_numpy(optimised_params).reshape(batch_size, self.coating_length, self.encoding_length).float()
+        optimised_params = torch.from_numpy(optimised_params).reshape(batch_size, self.out_dims['seq_len'], self.out_dims['thickness'] + self.out_dims['material']).float()
         optimised_params = optimised_params.to(CM().get('device'))
 
-        return Coating(optimised_params)
+        return self.params_to_coating(optimised_params)
+
+    def params_to_coating(self, params: torch.Tensor):
+        thicknesses = params[:, :, :1]
+        materials = params[:, :, 1:]
+        softmax_probs = F.softmax(materials, dim = -1)
+        _, material_indices = torch.max(softmax_probs, dim = -1, keepdim = True)
+        coating = Coating(torch.cat([thicknesses, material_indices], dim = -1))
+        return coating
 
     def initialise(self, init_params = None, batch_size: int = None):
         assert init_params is not None or batch_size is not None
         if init_params is None:
-            init_params = np.random.randn(batch_size, self.coating_length, self.encoding_length).flatten()
+            init_params = np.random.randn(batch_size, self.out_dims['seq_len'], self.out_dims['thickness'] + self.out_dims['material']).flatten()
         self.init_params = init_params
 
 
     def loss_function(self, params: torch.Tensor, target: ReflectivityPattern):
         flat_params = params.detach().clone().requires_grad_(True)
         original = flat_params
-        if flat_params.shape[0] == self.coating_length * self.encoding_length:
-            params = flat_params.reshape(self.coating_length, self.encoding_length)[None]
-        elif flat_params.shape[0] == len(target) * self.coating_length * self.encoding_length:
-            params = flat_params.reshape(len(target), self.coating_length, self.encoding_length)
+        if flat_params.shape[0] == self.out_dims['seq_len'] * (self.out_dims['thickness'] + self.out_dims['material']):
+            params = flat_params.reshape(self.out_dims['seq_len'], self.out_dims['thickness'] + self.out_dims['material'])[None]
+        elif flat_params.shape[0] == len(target) * self.out_dims['seq_len'] * (self.out_dims['thickness'] + self.out_dims['material']):
+            params = flat_params.reshape(len(target), self.out_dims['seq_len'], self.out_dims['thickness'] + self.out_dims['material'])
         params = params.to(CM().get('device'))
 
-        coating = Coating(params)
+        coating = self.params_to_coating(params)
         preds = coating_to_reflectivity(coating)
         loss = match(preds, target)
         loss.backward()
