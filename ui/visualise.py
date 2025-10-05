@@ -121,7 +121,23 @@ def visualise_matrix(matrix: torch.Tensor, title: str = "visualisation"):
     matrix_np = matrix.detach().cpu().numpy()
     fig, ax = plt.subplots()
     ax.set_title(title)
-    ax.imshow(matrix_np, cmap='viridis')
+    ax.imshow(matrix_np, cmap='viridis', extent = (0, 10, 0, 10), interpolation = 'none')
+
+    # set axes
+    y_shape, x_shape = matrix_np.shape
+    x_space = ax.get_xticks()
+    y_space = ax.get_yticks()
+    if len(x_space) > x_shape:
+        x_space = np.linspace(x_space[0], x_space[-1], x_shape)
+    if len(y_space) > y_shape:
+        y_space = np.linspace(y_space[0], y_space[-1], y_shape)
+    ax.set_xticks(x_space)
+    ax.set_yticks(y_space)
+    x_ticklabels = np.linspace(0, x_shape, len(x_space))
+    y_ticklabels = np.linspace(0, y_shape, len(y_space))
+    ax.set_xticklabels(x_ticklabels)
+    ax.set_yticklabels(y_ticklabels)
+
     filename = get_unique_filename(f"out/{title}.png")
     plt.savefig(filename)
     plt.close()
