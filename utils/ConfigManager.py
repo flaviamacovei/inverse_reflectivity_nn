@@ -44,9 +44,12 @@ class ConfigManager:
 
         # set random seed
         seed = self.config['seed']
-        if seed:
-            random.seed(seed)
-            torch.manual_seed(seed)
+        if not seed:
+            seed = torch.seed()
+        random.seed(seed)
+        torch.manual_seed(seed)
+        print(f"seed: {seed}")
+        self.config['wandb']['config']['seed'] = seed
 
         # normalise curriculum durations
         total_duration = sum([leg['percent'] for leg in self.config['training']['curriculum']])
