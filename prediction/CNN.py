@@ -138,8 +138,7 @@ class CNN(BaseTrainableModel):
         Returns:
             Output of the model.
         """
-        thicknesses, materials = self.model(src)
-        return torch.cat([thicknesses, materials], dim = -1)
+        return self.model(src)
 
     def get_architecture_name(self):
         """

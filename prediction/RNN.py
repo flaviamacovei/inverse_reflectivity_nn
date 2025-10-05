@@ -166,7 +166,7 @@ class RNN(BaseTrainableModel):
                 tgt = torch.cat([tgt, next], dim = 1) # (batch_size, running_seq_len, d_model)
             projected_thicknesses = self.model.project_thicknesses(tgt) # (batch_size, tgt_seq_len, 1)
             projected_materials = self.model.project_materials(tgt) # (batch_size, tgt_seq_len, vocab_size)
-            return torch.cat([projected_thicknesses, projected_materials], dim = -1)
+            return projected_thicknesses, projected_materials
 
     def get_architecture_name(self):
         """

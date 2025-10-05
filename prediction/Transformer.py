@@ -270,7 +270,7 @@ class Transformer(BaseTrainableModel):
             connected = torch.cat([bos, decoder_output], dim = 1)
             projected_thicknesses = self.model.output_thicknesses(connected)
             projected_materials = self.model.output_materials(connected)
-            return torch.cat([projected_thicknesses, projected_materials], dim = -1)
+            return projected_thicknesses, projected_materials
         else:
             # in inference mode, target is not specified
             # beginning of any coating: thickness is 1.0, material is substrate
@@ -284,7 +284,7 @@ class Transformer(BaseTrainableModel):
                 tgt = torch.cat([tgt, next], dim = 1)
             projected_thicknesses = self.model.output_thicknesses(tgt)
             projected_materials = self.model.output_materials(tgt)
-            return torch.cat([projected_thicknesses, projected_materials], dim = -1)
+            return projected_thicknesses, projected_materials
 
     def make_tgt_mask(self, tgt):
         if CM().get('transformer.tgt_struct_mask'):

@@ -89,7 +89,7 @@ class MLP(BaseTrainableModel):
         out_thicknesses, out_materials = self.model(src)
         out_thicknesses = out_thicknesses.reshape(-1, self.tgt_seq_len, 1)
         out_materials = out_materials.reshape(-1, self.tgt_seq_len, self.tgt_vocab_size)
-        return torch.cat([out_thicknesses, out_materials], dim = -1)
+        return out_thicknesses, out_materials
 
     def get_architecture_name(self):
         """
