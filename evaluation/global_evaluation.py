@@ -31,8 +31,7 @@ def load_pattern(type_data: str):
         for density in ['complete', 'masked', 'explicit']:
             dataloader = DynamicDataloader(100, shuffle=False)
             own_path = os.path.realpath(__file__)
-            filepath = os.path.join(os.path.dirname(os.path.dirname(own_path)), get_dataset_name("validation", density))
-            dataloader.load_data(filepath, weights_only=False)
+            dataloader.load_val(density)
             dataset = dataloader.dataset
             local_lower_bound, local_upper_bound = torch.chunk(dataset[:][0], 2, dim=-1)
             local_lower_bound = local_lower_bound.to(CM().get('device'))

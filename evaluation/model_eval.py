@@ -2,6 +2,9 @@ from torch.utils.data import DataLoader
 import torch
 import wandb
 import sys
+
+from data.dataloaders.DynamicDataloader import DynamicDataloader
+
 sys.path.append(sys.path[0] + '/..')
 from prediction.BaseModel import BaseModel
 from data.values.ReflectivityPattern import ReflectivityPattern
@@ -38,13 +41,11 @@ def init_dataloader(density: str):
     """
     batch_size = 10
     filename = get_dataset_name("validation", density)
-    try:
-        dataset = torch.load(filename, weights_only = False)
-    except FileNotFoundError:
+    if filename is None:
         raise FileNotFoundError("Dataset in current configuration not found. Please run generate_dataset.py first.")
-    except AttributeError:
-        raise FileNotFoundError("Dataset in current configuration not found. Please run generate_dataset.py first.")
-    return DataLoader(dataset, batch_size = batch_size, shuffle = False)
+    dataloader = DynamicDataloader(batch_size, shuffle = False)
+    dataloader.load_val(density)
+    return dataloader
 
 def evaluate_per_density(model: BaseModel, dataloader: DataLoader, save_visualisation = False):
     """
@@ -76,7 +77,8 @@ def test_model(model: BaseModel):
         model: Prediction model to evaluate.
     """
     batch_size = 1
-    dataset = torch.load(f"data/datasets/test_data/test_data.pt", weights_only = False)
-    dataloader = DataLoader(dataset, batch_size = batch_size, shuffle = False)
+    test_data_path = f"data/datasets/test_data/test_data.pt"
+    dataloader = DynamicDataloader(batch_size, False)
+    dataloader.load_test(test_data_path)
     test_error = evaluate_per_density(model, dataloader, save_visualisation = True)
     return test_error
