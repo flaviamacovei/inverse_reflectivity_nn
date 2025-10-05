@@ -10,9 +10,7 @@ wavelengths:
   end: 1.499
   steps: 1200
 polarisation: s
-thicknesses_bounds:
-  min: 1.0e-09
-  max: 1.0e-06
+thicknesses_max: 0.5
 materials:
   substrate: M_Glass_Substrate
   air: M_Air
@@ -99,11 +97,12 @@ transformer:
   num_heads: 8
   dropout: 0.1
   d_ff: 512
-  src_mask: true
   tgt_struct_mask: true
   tgt_caus_mask: true
+  downsize: max # allowed values: sample, window, mean, max, conv
 training:
-  learning_rate: 1.0e-03
+  learning_rate: 1.0e-04
+  learning_rate_end_factor: 0.3
   thicknesses_factor: 0.9
   constraint_factor: 0.5
   guided_factor: 0.5
@@ -124,7 +123,6 @@ wandb:
   project: inverse-mirrors-nn
   config:
     architecture: transformer
-    guided_learning_rate: 0.0001
-    free_learning_rate: 0.01
+    learning_rate: 1.0e-04
     epochs: 200
     batch_size: 128

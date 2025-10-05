@@ -32,7 +32,8 @@ class ThicknessPostProcess(nn.Module):
         self.net = nn.BatchNorm1d(dims)
 
     def forward(self, x):
-        return torch.exp(self.net(x))
+        # return torch.exp(self.net(x))
+        return self.net(x)
 
 class BaseTrainableModel(BaseModel, ABC):
     """
@@ -86,7 +87,64 @@ class BaseTrainableModel(BaseModel, ABC):
         self.model = self.build_model()
         learning_rate = CM().get('training.learning_rate')
         self.optimiser = torch.optim.Adam(self.model.parameters(), learning_rate)
-        self.scheduler = torch.optim.lr_scheduler.LinearLR(self.optimiser, start_factor = 1.0, end_factor = 0.1, total_iters = CM().get('training.num_epochs'))
+        self.scheduler = torch.optim.lr_scheduler.LinearLR(self.optimiser, start_factor = 1.0, end_factor = CM().get('training.learning_rate_end_factor'), total_iters = CM().get('training.num_epochs'))
+
+        # normalisation values
+        self.reflectivity_mean = self.reflectivity_std = self.thicknesses_mean = self.thicknesses_std = self.materials_mean = self.materials_std = None
+        DynamicDataloader.register(self)
+
+    def handle_new_data(self, dataset):
+        # TODO: these are all 0 if epochs == 0
+        # also maybe call it every time the dataloader is renewed? even during evaluation / testing?
+        # plus we need a whole different approach for explicit
+        data = dataset[0: len(dataset)]
+        if len(data) == 2:
+            reflectivity, coating = data
+        else:
+            reflectivity = data[0]
+            # in test mode: dummy data
+            coating = torch.zeros((len(reflectivity), 2))
+        reflectivity = reflectivity.to(CM().get('device'))
+        coating = coating.to(CM().get('device'))
+        thicknesses, material_indices = coating.chunk(2, -1)
+        self.reflectivity_mean = reflectivity.mean() if reflectivity.mean() != 0 else 0.5
+        self.reflectivity_std = reflectivity.std() if reflectivity.std() != 0 else 0.25
+        self.thicknesses_mean = thicknesses.mean() if thicknesses.mean() != 0 else CM().get('thicknesses_max') / 2
+        self.thicknesses_std = thicknesses.std() if thicknesses.std() != 0 else CM().get('thicknesses_max') / 4
+        self.materials_mean = material_indices.mean() if material_indices.mean() != 0 else self.tgt_vocab_size / 2
+        self.materials_std = material_indices.std() if material_indices.std() != 0 else self.tgt_vocab_size / 4
+
+
+    def normalise_reflectivity(self, reflectivity):
+        # print("IM BEING CALLED HELP NR")
+        # return reflectivity
+        return (reflectivity - self.reflectivity_mean) / self.reflectivity_std
+
+    def normalise_thicknesses(self, thicknesses):
+        # print("IM BEING CALLED HELP NT")
+        # return thicknesses
+        return (thicknesses - self.thicknesses_mean) / self.thicknesses_std
+
+    def normalise_materials(self, materials):
+        # print("IM BEING CALLED HELP NM")
+        # return materials
+        return (materials - self.materials_mean) / self.materials_std
+
+    def denormalise_reflectivity(self, reflectivity):
+        # print("IM BEING CALLED HELP DR")
+        # return reflectivity
+        return reflectivity * self.reflectivity_std + self.reflectivity_mean
+
+    def denormalise_thicknesses(self, thicknesses):
+        # print("IM BEING CALLED HELP DT")
+        # return thicknesses
+        return thicknesses * self.thicknesses_std + self.thicknesses_mean
+
+    def denormalise_materials(self, materials):
+        # print("IM BEING CALLED HELP DM")
+        # return materials
+        return materials * self.materials_std + self.materials_mean
+
 
     @abstractmethod
     def build_model(self):
@@ -142,7 +200,7 @@ class BaseTrainableModel(BaseModel, ABC):
                 coating_encoding = coating_encoding.to(CM().get('device'))
                 # a batch consists of reflectivity and coating encodings
 
-                output = self.get_model_output(reflectivity, coating_encoding)
+                output = self.model_call(reflectivity, coating_encoding)
 
                 guided_loss = self.compute_loss_guided(output, coating_encoding)
                 free_loss = self.compute_loss_free(output, reflectivity)
@@ -152,7 +210,10 @@ class BaseTrainableModel(BaseModel, ABC):
                 epoch_loss += loss.item()
 
                 if CM().get('wandb.log') or CM().get('wandb.sweep'):
-                    wandb.log({"loss": loss.item()})
+                    wandb.log({
+                        "loss": loss.item(),
+                        "lr": self.scheduler.get_last_lr()[0]
+                    })
 
                 loss.backward()
 
@@ -184,7 +245,7 @@ class BaseTrainableModel(BaseModel, ABC):
         return eos
 
     def indices_to_probs(self, material_indices: torch.Tensor):
-        long_indices = material_indices.to(torch.long).squeeze()
+        long_indices = material_indices[:, :, 0].to(torch.long)
         return F.one_hot(long_indices, len(self.vocab)).to(torch.float)
 
     def soft_sample(self, logits: torch.Tensor):
@@ -264,10 +325,8 @@ class BaseTrainableModel(BaseModel, ABC):
         coating_encoding = coating_encoding[None]
         refs = ReflectivityPattern(reflectivity[:, :, 0], reflectivity[:, :, 1])
         with torch.no_grad():
-            output = self.get_model_output(reflectivity, coating_encoding)
+            thicknesses, unmasked_logits = self.model_call(reflectivity, coating_encoding)
 
-            thicknesses = output[:, :, :1]
-            unmasked_logits = output[:, :, 1:]
             masked_logits = self.mask_logits(unmasked_logits)
             unmasked_materials = self.sample(unmasked_logits)
             unmasked_output = torch.cat([thicknesses, unmasked_materials], dim = -1)
@@ -360,9 +419,7 @@ class BaseTrainableModel(BaseModel, ABC):
         # convert input to shape expected by model
         model_input = torch.stack((target.get_lower_bound(), target.get_upper_bound()), dim = 2)
         # predict encoding of coating
-        output = self.get_model_output(model_input)
-        thicknesses = output[:, :, :1]
-        logits = output[:, :, 1:]
+        thicknesses, logits = self.model_call(model_input)
         logits = self.mask_logits(logits)
         materials = self.sample(logits)
         preds = torch.cat([thicknesses, materials], dim = -1)
@@ -371,8 +428,8 @@ class BaseTrainableModel(BaseModel, ABC):
     def predict_raw(self, target):
         self.model.eval()
         model_input = torch.stack((target.get_lower_bound(), target.get_upper_bound()), dim = 2)
-        output = self.get_model_output(model_input)
-        return F.softmax(output, dim = -1)
+        thicknesses, logits = self.model_call(model_input)
+        return thicknesses, F.softmax(logits, dim = -1)
 
     def compute_loss_guided(self, input: torch.Tensor, labels: torch.Tensor):
         """
@@ -384,10 +441,10 @@ class BaseTrainableModel(BaseModel, ABC):
             input: Model output.
             labels: Ground truth coating encoding.
         """
-        batch_size, seq_len, _ = input.shape
-        input_thicknesses = input[:, :, 0]
-        input_logits = input[:, :, 1:]
-        label_thicknesses = labels[:, :, 0]
+        input_thicknesses, input_logits = input
+        batch_size, seq_len, _ = input_thicknesses.shape
+        # TODO: make the shapes pretty here
+        label_thicknesses = labels[:, :, :1]
         label_materials = labels[:, :, 1]
 
         material_loss = F.cross_entropy(input_logits.transpose(1, 2), label_materials.to(torch.long)) / batch_size
@@ -406,8 +463,7 @@ class BaseTrainableModel(BaseModel, ABC):
         """
         # create reflectivity pattern for match operation
         pattern = ReflectivityPattern(labels[:, :, 0], labels[:, :, 1])
-        input_thicknesses = input[:, :, :1]
-        input_logits = input[:, :, 1:]
+        input_thicknesses, input_logits = input
         input_materials = self.sample(input_logits)
         coating_encoding = torch.cat([input_thicknesses, input_materials], dim = -1)
         coating = Coating(coating_encoding)
@@ -471,9 +527,23 @@ class BaseTrainableModel(BaseModel, ABC):
         materials_err = (substrate_pos_err + substrate_neg_err + air_pos_err + air_neg_err) / scale_factor
 
         thicknesses_err = (thicknesses.numel() - thicknesses.count_nonzero()) / (batch_size * seq_len)
-        # thicknesses_err = 0
 
         return materials_err + thicknesses_err
+
+    def model_call(self, src, tgt = None):
+        src = self.normalise_reflectivity(src)
+        if tgt is not None:
+            input_thicknesses, input_materials = tgt.chunk(2, -1)
+            input_thicknesses = self.normalise_thicknesses(input_thicknesses)
+            input_materials = self.normalise_materials(input_materials)
+            tgt = torch.cat([input_thicknesses, input_materials], dim = -1)
+
+        output = self.get_model_output(src, tgt)
+        output_thicknesses = output[:, :, :1]
+        output_logits = output[:, :, 1:]
+
+        output_thicknesses = self.denormalise_thicknesses(output_thicknesses)
+        return output_thicknesses, output_logits
 
     @abstractmethod
     def get_model_output(self, src, tgt = None):

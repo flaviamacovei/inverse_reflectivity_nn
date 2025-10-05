@@ -85,8 +85,13 @@ class DynamicDataloader(BaseDataloader):
         load_data: Load data from the specified dataset file.
         load_leg: Load configuration for a specific leg.
     """
+    observers = []
 
-    def __init__(self, batch_size: int, shuffle: bool = True):
+    @staticmethod
+    def register(observer):
+        DynamicDataloader.observers.append(observer)
+
+    def __init__(self, batch_size: int, shuffle: bool = False):
         """
         Initialise a DynamicDataloader instance.
 
@@ -112,7 +117,16 @@ class DynamicDataloader(BaseDataloader):
         drop_last = len(self.dataset) > self.batch_size
         self.dataloader = DataLoader(self.dataset, batch_size = self.batch_size, shuffle = self.shuffle, drop_last = drop_last)
 
-    def load_data(self, filepath: str = None, weights_only: bool = True):
+    def load_val(self, density: str):
+        filepath = get_dataset_name("validation", density)
+        self.load_data(filepath, weights_only = False)
+        self.dataloader = DataLoader(self.dataset, batch_size = self.batch_size, shuffle = self.shuffle, drop_last = False)
+
+    def load_test(self, test_data_path:str):
+        self.load_data(test_data_path, weights_only = False)
+        self.dataloader = DataLoader(self.dataset, batch_size = self.batch_size, shuffle = self.shuffle, drop_last = False)
+
+    def load_data(self, filepath: str = None, weights_only: bool = False):
         """
         Load data from the specified dataset file.
 
@@ -139,6 +153,8 @@ class DynamicDataloader(BaseDataloader):
                     segment_files.append(filepath[:-3] + f"_seg_{i}.pt")
                     i += 1
                 self.dataset = SegmentedDataset(segment_files)
+            for observer in DynamicDataloader.observers:
+                observer.handle_new_data(self.dataset)
         except AttributeError:
             raise FileNotFoundError("Dataset in current configuration not found. Please run generate_dataset.py first.")
         except FileNotFoundError:
