@@ -58,34 +58,69 @@ class BaseSequentialModel(BaseTrainableModel, ABC):
         src = self.project_encoder(src)
         encoder_output = self.encode(src)
 
+        batch_size = src.shape[0]
+        bos_thickness = torch.ones((batch_size, 1, 1), device = CM().get('device')) * CM().get('thicknesses_max') / 2
+        bos = self.get_bos()[None].repeat(batch_size, 1, 1)
+        bos_probability = self.indices_to_probs(bos)
         if tgt is not None and len(tgt.shape) != 1:
             # in training mode, target is specified
             # in training mode explicit leg, target is dummy data (len(shape) == 1) and should be ignored -> move to inference block
             mask = self.make_tgt_mask(tgt[:, :-1, :])
-            batch_size = tgt.shape[0]
             tgt = self.project_decoder(tgt[:, :-1, :])
-            bos = self.get_bos()[None].repeat(batch_size, 1, 1)
-            bos_probability = self.indices_to_probs(bos)
-            bos_thickness = torch.ones((batch_size, 1, 1), device = CM().get('device')) * CM().get('thicknesses_max') / 2
             decoder_output = self.decode(encoder_output, tgt, mask)
             out_thicknesses = self.output_thicknesses(decoder_output)
             out_materials = self.output_materials(decoder_output)
-            connected_thicknesses = torch.cat([bos_thickness, out_thicknesses], dim = 1)
-            connected_materials = torch.cat([bos_probability, out_materials], dim = 1)
-            return connected_thicknesses, connected_materials
+            out_thicknesses = torch.cat([bos_thickness, out_thicknesses], dim=1)
+            out_materials = torch.cat([bos_probability, out_materials], dim=1)
         else:
-            batch_size = src.shape[0]
-            bos_thickness = torch.ones((batch_size, 1, 1), device = CM().get('device')) * CM().get('thicknesses_max') / 2
-            bos = self.get_bos()[None].repeat(batch_size, 1, 1)
-            bos_probability = self.indices_to_probs(bos)
+            # inference mode
             tgt = torch.cat([bos_thickness, bos], dim = -1) # (batch, |coating| = 1, 2)
-            tgt = self.project_decoder(tgt)
-            while tgt.shape[1] < self.tgt_seq_len:
-                decoder_output = self.decode(encoder_output, tgt)
-                next = decoder_output[:, -1:] # take only the last item but keep dimension
-                tgt = torch.cat([tgt, next], dim = 1)
-            out_thicknesses = self.output_thicknesses(tgt[:, 1:, :])
-            out_materials = self.output_materials(tgt[:, 1:, :])
-            connected_thicknesses = torch.cat([bos_thickness, out_thicknesses], dim = 1)
-            connected_materials = torch.cat([bos_probability, out_materials], dim = 1)
-            return connected_thicknesses, connected_materials
+            # list of dictionaries each with keys: sequence, score, pending
+            candidates = [{
+                'sequence': tgt,
+                'score': 1,
+                'pending': True
+            }]
+            beam_size = CM().get('sequential.beam_size')
+            max_seq_len = self.tgt_seq_len - 1
+            out_sequences = []
+            while len(candidates) > 0:
+                expansions = []
+                for candidate in candidates:
+                    candidate['pending'] = False
+                    # candidate_expansions = []
+                    sequence = candidate['sequence']
+                    score = candidate['score']
+                    if sequence.shape[1] > max_seq_len or sequence[:, -1, 1].eq(self.get_eos()[None].repeat(batch_size, 1, 1)).all():
+                        out_sequences.append(candidate)
+                        continue
+                    mask = self.make_tgt_mask(sequence)
+                    tgt = self.project_decoder(sequence)
+                    decoder_output = self.decode(encoder_output, tgt, mask)[:, -1:, :]
+                    out_thicknesses = self.output_thicknesses(decoder_output.repeat(1, self.tgt_seq_len - 1, 1))[:, :1, :]
+                    out_materials = self.output_materials(decoder_output)
+                    topk_prob, topk_idx = torch.topk(out_materials, beam_size, dim = -1) # this needs to be batch-specific
+                    for i in range(beam_size):
+                        # for each of the top k candidates, get the material and its probability
+                        material = topk_idx[:, :1, i:i + 1]
+                        material_prob = topk_prob[:, :1, i: i + 1]
+                        new_item = torch.cat([out_thicknesses, material], dim = -1)
+                        new_sequence = torch.cat([sequence, new_item], dim = 1)
+                        expansions.append({
+                            'sequence': new_sequence,
+                            # sum probabilities because they are in log space
+                            'score': score + material_prob.sum(),
+                            'pending': True
+                        })
+                    # expansions.extend(candidate_expansions)
+                candidates = list(filter(lambda x: x['pending'], candidates))
+                candidates.extend(expansions)
+                candidates = sorted(candidates, key = lambda x: x['score'], reverse = True)
+                candidates = candidates[:beam_size]
+            out_sequences = sorted(out_sequences, key = lambda x: x['score'], reverse = True)
+            best = out_sequences[0]
+            out_thicknesses = best['sequence'][:, :, :1]
+            out_materials = self.indices_to_probs(best['sequence'][:, :, 1:])
+            # bring probabilities to log space
+            out_materials[out_materials == 0] = -torch.inf
+        return out_thicknesses, out_materials
