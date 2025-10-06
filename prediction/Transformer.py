@@ -1,13 +1,13 @@
 import math
-
 import torch
 import torch.nn as nn
 import sys
 sys.path.append(sys.path[0] + '/..')
-from prediction.BaseTrainableModel import BaseTrainableModel, ThicknessPostProcess
+from prediction.BaseTrainableModel import ThicknessPostProcess
+from prediction.BaseSequentialModel import BaseSequentialModel
 from utils.ConfigManager import ConfigManager as CM
 
-class SinusoidalPositionalEncoding(nn.Module):
+class PositionalEncoding(nn.Module):
     def __init__(self, embed_dim: int, seq_len: int, dropout: float):
         super().__init__()
         self.embed_dim = embed_dim
@@ -33,7 +33,7 @@ class SinusoidalPositionalEncoding(nn.Module):
         x = x + (self.pe[:, :x.shape[1], :])
         return self.dropout(x)
 
-class PositionalEncoding(nn.Module):
+class LearnedPositionalEncoding(nn.Module):
     def __init__(self, embed_dim: int, seq_len: int, dropout: float = 0.1):
         super().__init__()
         self.dropout = nn.Dropout(dropout)
@@ -215,97 +215,10 @@ class TrainableTransformer(nn.Module):
     def project_bos(self, bos):
         return self.decoder_projection(bos)
 
-    def project_encoder(self, src):
-        # src has shape (batch, |wl|, 2)
-        src = self.src_pos(src)
-        src = self.encoder_projection(src)
-        return src
 
-    def encode(self, src):
-        return self.encoder(src)
-
-    def project_decoder(self, tgt):
-        # tgt has shape (batch, |coating|, material_embed_dim + 1)
-        tgt = self.tgt_pos(tgt)
-        tgt = self.decoder_projection(tgt)
-        return tgt
-
-    def project_mask_encoder(self, src_mask):
-        return self.encoder_mask_projection(src_mask)[:, None] # (batch, |wl|, |wl|) --> (batch, 1, hidden_seq_len, hidden_seq_len)
-
-    def decode(self, encoder_output, tgt, mask = None):
-        return self.decoder(tgt, encoder_output, mask)
-
-    def output_thicknesses(self, thicknesses):
-        return self.thickness_out(thicknesses)
-
-    def output_materials(self, materials):
-        return self.material_out(materials)
-
-class Transformer(BaseTrainableModel):
+class Transformer(BaseSequentialModel):
     def __init__(self):
         super().__init__()
-
-    def get_model_output(self, src, tgt = None):
-        """
-        Get output of the model for given input.
-
-        Args:
-            src: Input data.
-            tgt: Target data.
-
-        Returns:
-            Output of the model.
-        """
-        src = self.model.project_encoder(src)
-        encoder_output = self.model.encode(src)
-
-        if tgt is not None and len(tgt.shape) != 1:
-            # in training mode, target is specified
-            # in training mode explicit leg, target is dummy data (len(shape) == 1) and should be ignored -> move to inference block
-            tgt_mask = self.make_tgt_mask(tgt[:, :-1, :]) # (batch, 1, |coating| - 1, |coating| - 1)
-            decoder_input = self.model.project_decoder(tgt[:, :-1, :])
-            bos = self.model.project_decoder(tgt[:, :1, :])
-            decoder_output = self.model.decode(encoder_output, decoder_input, tgt_mask)
-            connected = torch.cat([bos, decoder_output], dim = 1)
-            projected_thicknesses = self.model.output_thicknesses(connected)
-            projected_materials = self.model.output_materials(connected)
-            return projected_thicknesses, projected_materials
-        else:
-            # in inference mode, target is not specified
-            # beginning of any coating: thickness is 1.0, material is substrate
-            thickness = torch.ones((1, 1, 1), device = CM().get('device')) # (1, |coating| = 1, 1)
-            substrate = self.get_bos()[None] # (1, |coating| = 1, 1)
-            tgt = torch.cat([thickness, substrate], dim = -1).repeat(src.shape[0], 1, 1) # (batch, |coating| = 1, tgt_vocab_size + 1)
-            tgt = self.model.project_decoder(tgt)
-            while tgt.shape[1] < self.tgt_seq_len:
-                decoder_output = self.model.decode(encoder_output, tgt)
-                next = decoder_output[:, -1:] # take only the last item but keep dimension
-                tgt = torch.cat([tgt, next], dim = 1)
-            projected_thicknesses = self.model.output_thicknesses(tgt)
-            projected_materials = self.model.output_materials(tgt)
-            return projected_thicknesses, projected_materials
-
-    def make_tgt_mask(self, tgt):
-        if CM().get('transformer.tgt_struct_mask'):
-            substrate = self.get_bos()
-            air = self.get_eos()
-            masked_materials_encoding = torch.cat([substrate, air], dim = -1) # (1, 1, 2)
-            struct_mask = tgt[:, :, 1][:, :, None].repeat(1, 1, 2) == masked_materials_encoding
-            struct_mask = torch.logical_or(struct_mask[:, :, 0], struct_mask[:, :, 1])[:, :, None] # (batch, |coating|, 1)
-            struct_mask_repeated = struct_mask.repeat(1, 1, tgt.shape[1])
-            tgt_struct_mask = ~struct_mask_repeated & ~struct_mask_repeated.transpose(-2, -1) # (batch, |coating|, |coating|)
-            tgt_struct_mask.diagonal(dim1 = 1, dim2 = 2).copy_(1) # each position is unmasked wrt itself
-        else:
-            tgt_struct_mask = torch.ones((tgt.shape[0], tgt.shape[1], tgt.shape[1]), device = CM().get('device')) # (batch, |coating|, |coating|)
-        if CM().get('transformer.tgt_caus_mask'):
-            tgt_caus_mask = self.causal_mask(tgt.shape[1]) # (1, |coating|, |coating|)
-        else:
-            tgt_caus_mask = torch.ones((tgt.shape[0], tgt.shape[1], tgt.shape[1]), device = CM().get('device')) # (batch, |coating|, |coating|)
-        return (tgt_struct_mask.to(torch.bool) & tgt_caus_mask.to(torch.bool))[:, None]
-
-    def causal_mask(self, size):
-        return torch.triu(torch.ones(size=(1, size, size), device=CM().get('device')), diagonal=1).type(torch.int) == 0
 
     def build_model(self):
         # some values:
@@ -361,7 +274,7 @@ class Transformer(BaseTrainableModel):
         # output projection layer
         thickness_out = nn.Sequential(
             ProjectionLayer(self.d_model, self.out_dims['thickness']),
-            ThicknessPostProcess(self.out_dims['seq_len'])
+            ThicknessPostProcess(self.out_dims['seq_len'] - 1)
         )
         material_out = ProjectionLayer(self.d_model, self.out_dims['material'])
 
@@ -374,6 +287,50 @@ class Transformer(BaseTrainableModel):
                 nn.init.xavier_uniform_(p)
 
         return transformer.to(CM().get('device'))
+
+    def project_encoder(self, src):
+        src = self.model.src_pos(src) # (batch, |wl|, 2)
+        src = self.model.encoder_projection(src) # (batch, hidden_seq_len, d_model)
+        return src
+
+    def project_decoder(self, tgt):
+        # tgt has shape (batch, |coating|, material_embed_dim + 1)
+        tgt = self.model.tgt_pos(tgt)
+        tgt = self.model.decoder_projection(tgt)
+        return tgt
+
+    def encode(self, src):
+        return self.model.encoder(src)
+
+    def decode(self, encoder_output, tgt, mask = None):
+        return self.model.decoder(tgt, encoder_output, mask)
+
+    def output_thicknesses(self, decoder_output):
+        return self.model.thickness_out(decoder_output)
+
+    def output_materials(self, decoder_output):
+        return self.model.material_out(decoder_output)
+
+    def make_tgt_mask(self, tgt):
+        if CM().get('transformer.tgt_struct_mask'):
+            substrate = self.get_bos()
+            air = self.get_eos()
+            masked_materials_encoding = torch.cat([substrate, air], dim = -1) # (1, 1, 2)
+            struct_mask = tgt[:, :, 1][:, :, None].repeat(1, 1, 2) == masked_materials_encoding
+            struct_mask = torch.logical_or(struct_mask[:, :, 0], struct_mask[:, :, 1])[:, :, None] # (batch, |coating|, 1)
+            struct_mask_repeated = struct_mask.repeat(1, 1, tgt.shape[1])
+            tgt_struct_mask = ~struct_mask_repeated & ~struct_mask_repeated.transpose(-2, -1) # (batch, |coating|, |coating|)
+            tgt_struct_mask.diagonal(dim1 = 1, dim2 = 2).copy_(1) # each position is unmasked wrt itself
+        else:
+            tgt_struct_mask = torch.ones((tgt.shape[0], tgt.shape[1], tgt.shape[1]), device = CM().get('device')) # (batch, |coating|, |coating|)
+        if CM().get('transformer.tgt_caus_mask'):
+            tgt_caus_mask = self.causal_mask(tgt.shape[1]) # (1, |coating|, |coating|)
+        else:
+            tgt_caus_mask = torch.ones((tgt.shape[0], tgt.shape[1], tgt.shape[1]), device = CM().get('device')) # (batch, |coating|, |coating|)
+        return (tgt_struct_mask.to(torch.bool) & tgt_caus_mask.to(torch.bool))[:, None]
+
+    def causal_mask(self, size):
+        return torch.triu(torch.ones(size=(1, size, size), device=CM().get('device')), diagonal=1).type(torch.int) == 0
 
     def get_architecture_name(self):
         """

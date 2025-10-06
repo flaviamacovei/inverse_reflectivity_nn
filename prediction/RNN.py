@@ -3,7 +3,8 @@ import torch.nn as nn
 import sys
 sys.path.append(sys.path[0] + '/..')
 from utils.ConfigManager import ConfigManager as CM
-from prediction.BaseTrainableModel import BaseTrainableModel, ThicknessPostProcess
+from prediction.BaseTrainableModel import ThicknessPostProcess
+from prediction.BaseSequentialModel import BaseSequentialModel
 from ui.visualise import visualise_matrix
 
 class RNNBlock(nn.Module):
@@ -86,28 +87,10 @@ class TrainableRNN(nn.Module):
         self.material_out = nn.Linear(d_model, decoder_dims['material_out'])
         self.thickness_out = nn.Sequential(
             nn.Linear(d_model, decoder_dims['thickness_out']),
-            ThicknessPostProcess(decoder_dims['seq_len'])
+            ThicknessPostProcess(decoder_dims['seq_len'] - 1)
         )
 
-    def project_encoder(self, src):
-        return self.encoder_projection(src)
-
-    def encode(self, src):
-        return self.encoder(src)[:, -1, :]
-
-    def project_decoder(self, tgt):
-        return self.decoder_projection(tgt)
-
-    def decode(self, encoder_output, tgt):
-        return self.decoder(tgt, encoder_output)
-
-    def project_thicknesses(self, thicknesses):
-        return self.thickness_out(thicknesses)
-
-    def project_materials(self, materials):
-        return self.material_out(materials)
-
-class RNN(BaseTrainableModel):
+class RNN(BaseSequentialModel):
     """
     Trainable prediction model using an RNN as base.
 
@@ -133,40 +116,26 @@ class RNN(BaseTrainableModel):
         }
         return TrainableRNN(d_model, encoder_dims, decoder_dims).to(CM().get('device'))
 
-    def get_model_output(self, src, tgt = None):
-        """
-        Get output of the model for given input.
+    def project_encoder(self, src):
+        return self.model.encoder_projection(src)
 
-        Args:
-            src: Input data.
-            tgt: Target data.
+    def project_decoder(self, tgt):
+        return self.model.decoder_projection(tgt)
 
-        Returns:
-            Output of the model.
-        """
-        projected_input = self.model.project_encoder(src) # (batch_size, src_seq_len, d_model)
-        encoder_output = self.model.encode(projected_input) # (batch_size, d_model)
-        if tgt is not None and len(tgt.shape) != 1:
-            # in training mode, target is specified
-            # in training mode explicit leg, target is dummy data (len(shape) == 1) and should be ignored -> move to inference block
-            projected_tgt = self.model.project_decoder(tgt) # (batch_size, tgt_seq_len, d_model)
-            decoder_output = self.model.decode(encoder_output, projected_tgt) # (batch_size, tgt_seq_len, d_model)
-            projected_thicknesses = self.model.project_thicknesses(decoder_output) # (batch_size, tgt_seq_len, 1)
-            projected_materials = self.model.project_materials(decoder_output) # (batch_size, tgt_seq_len, vocab_size)
-            return torch.cat([projected_thicknesses, projected_materials], dim = -1)
-        else:
-            # in inference mode, target is not specified
-            thickness = torch.ones((1, 1, 1)).to(CM().get('device'))
-            bos = self.get_bos()
-            tgt = torch.cat([thickness, bos[None]], dim = -1).repeat(encoder_output.shape[0], 1, 1) # (batch_size, 1, 2)
-            tgt = self.model.project_decoder(tgt) # (batch_size, 1, d_model)
-            while tgt.shape[1] < self.tgt_seq_len:
-                decoder_output = self.model.decode(encoder_output, tgt) # (batch_size, running_seq_len, d_model)
-                next = decoder_output[:, -1:] # take only last item but keep dimension
-                tgt = torch.cat([tgt, next], dim = 1) # (batch_size, running_seq_len, d_model)
-            projected_thicknesses = self.model.project_thicknesses(tgt) # (batch_size, tgt_seq_len, 1)
-            projected_materials = self.model.project_materials(tgt) # (batch_size, tgt_seq_len, vocab_size)
-            return projected_thicknesses, projected_materials
+    def encode(self, src):
+        return self.model.encoder(src)[:, -1, :]
+
+    def decode(self, encoder_output, tgt, mask = None):
+        return self.model.decoder(tgt, encoder_output)
+
+    def output_thicknesses(self, decoder_output):
+        return self.model.thickness_out(decoder_output)
+
+    def output_materials(self, decoder_output):
+        return self.model.material_out(decoder_output)
+
+    def make_tgt_mask(self, tgt):
+        return None
 
     def get_architecture_name(self):
         """
