@@ -76,11 +76,6 @@ class BaseTrainableModel(BaseModel, ABC):
         self.current_leg = -1
         self.checkpoint = None
 
-        sampling_functions = {
-            "soft": self.soft_sample,
-            "greedy": self.greedy_sample
-        }
-        self.sample = sampling_functions[CM().get('sampling')]
 
         self.vocab = EM().get_refractive_indices_table()
 
@@ -248,21 +243,10 @@ class BaseTrainableModel(BaseModel, ABC):
         long_indices = material_indices[:, :, 0].to(torch.long)
         return F.one_hot(long_indices, len(self.vocab)).to(torch.float)
 
-    def soft_sample(self, logits: torch.Tensor):
+    def logits_to_indices(self, logits: torch.Tensor):
         softmax_probabilities = F.softmax(logits, dim = -1)
         _, max_indices = softmax_probabilities.max(dim = -1, keepdim = True)
         return max_indices
-
-    def greedy_sample(self, logits: torch.Tensor):
-        # compute soft probabilities of nearest neighbours
-        # this vector remains connected to the computational graph to maintain differentiability
-        greedy_probs_soft = torch.exp(-torch.abs(logits))
-        # compute hard probabilities of nearest neighbours
-        # this is a one-hot vector but disconnected from the computational graph
-        greedy_probs_hard = torch.zeros_like(greedy_probs_soft).scatter_(-1, greedy_probs_soft.argmin(dim = -1, keepdim = True), 1.0)
-        # attach computational graph from soft probabilities to hard probabilities
-        greedy_probabilities = greedy_probs_hard + (greedy_probs_soft - greedy_probs_soft.detach())
-        return greedy_probabilities
 
     def mask_logits(self, logits: torch.Tensor):
         seq_len = logits.shape[1]
@@ -328,9 +312,9 @@ class BaseTrainableModel(BaseModel, ABC):
             thicknesses, unmasked_logits = self.model_call(reflectivity, coating_encoding)
 
             masked_logits = self.mask_logits(unmasked_logits)
-            unmasked_materials = self.sample(unmasked_logits)
+            unmasked_materials = self.logits_to_indices(unmasked_logits)
             unmasked_output = torch.cat([thicknesses, unmasked_materials], dim = -1)
-            masked_materials = self.sample(masked_logits)
+            masked_materials = self.logits_to_indices(masked_logits)
             masked_output = torch.cat([thicknesses, masked_materials], dim = -1)
 
         unmasked_coating = Coating(unmasked_output)
@@ -343,7 +327,7 @@ class BaseTrainableModel(BaseModel, ABC):
             wandb.log({"validation error": validation_error})
             structure_error = self.compute_structure_error(unmasked_coating)
             wandb.log({"structure error": structure_error})
-        visualise(preds, refs, f"{self.get_architecture_name()}/from_training_lr_epoch_{epoch}")
+        visualise(preds, refs, f"{self.get_architecture_name()}/from_training_epoch_{epoch}")
 
     def update_checkpoint(self, epoch: int):
         new_checkpoint = get_unique_filename(f"out/models/checkpoint_{short_hash(self.model) + short_hash(epoch)}.pt")
@@ -421,7 +405,7 @@ class BaseTrainableModel(BaseModel, ABC):
         # predict encoding of coating
         thicknesses, logits = self.model_call(model_input)
         logits = self.mask_logits(logits)
-        materials = self.sample(logits)
+        materials = self.logits_to_indices(logits)
         preds = torch.cat([thicknesses, materials], dim = -1)
         return Coating(preds)
 
@@ -464,7 +448,7 @@ class BaseTrainableModel(BaseModel, ABC):
         # create reflectivity pattern for match operation
         pattern = ReflectivityPattern(labels[:, :, 0], labels[:, :, 1])
         input_thicknesses, input_logits = input
-        input_materials = self.sample(input_logits)
+        input_materials = self.logits_to_indices(input_logits)
         coating_encoding = torch.cat([input_thicknesses, input_materials], dim = -1)
         coating = Coating(coating_encoding)
         # convert predicted coating to reflectivity value
@@ -538,12 +522,10 @@ class BaseTrainableModel(BaseModel, ABC):
             input_materials = self.normalise_materials(input_materials)
             tgt = torch.cat([input_thicknesses, input_materials], dim = -1)
 
-        output = self.get_model_output(src, tgt)
-        output_thicknesses = output[:, :, :1]
-        output_logits = output[:, :, 1:]
+        output_thicknesses, output_material_logits = self.get_model_output(src, tgt)
 
         output_thicknesses = self.denormalise_thicknesses(output_thicknesses)
-        return output_thicknesses, output_logits
+        return output_thicknesses, output_material_logits
 
     @abstractmethod
     def get_model_output(self, src, tgt = None):

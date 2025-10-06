@@ -59,7 +59,6 @@ theta:
   steps: 1
 air_pad: false
 stratified_sampling: true
-sampling: soft
 material_embedding:
   data_file: data/material_embedding/materials.yaml
 tolerance: 0.001
