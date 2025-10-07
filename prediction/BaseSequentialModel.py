@@ -44,6 +44,13 @@ class BaseSequentialModel(BaseTrainableModel, ABC):
         """Create target mask"""
         pass
 
+    def remove(self, x: torch.Tensor, idx: torch.Tensor):
+        subtrahend = torch.zeros(x.shape, device=CM().get('device'))
+        arange = torch.arange(x.shape[-1])[None, None].repeat(x.shape[0], x.shape[1], 1)
+        mask = arange.eq(idx)
+        subtrahend[mask] = torch.inf
+        return x - subtrahend
+
     def get_model_output(self, src, tgt = None):
         """
         Get output of the model for given input.
@@ -88,7 +95,6 @@ class BaseSequentialModel(BaseTrainableModel, ABC):
                 expansions = []
                 for candidate in candidates:
                     candidate['pending'] = False
-                    # candidate_expansions = []
                     sequence = candidate['sequence']
                     score = candidate['score']
                     if sequence.shape[1] > max_seq_len or sequence[:, -1, 1].eq(self.get_eos()[None].repeat(batch_size, 1, 1)).all():
@@ -99,12 +105,10 @@ class BaseSequentialModel(BaseTrainableModel, ABC):
                     decoder_output = self.decode(encoder_output, tgt, mask)[:, -1:, :]
                     out_thicknesses = self.output_thicknesses(decoder_output.repeat(1, self.tgt_seq_len - 1, 1))[:, :1, :]
                     out_materials = self.output_materials(decoder_output)
-                    topk_prob, topk_idx = torch.topk(out_materials, beam_size, dim = -1) # this needs to be batch-specific
                     for i in range(beam_size):
                         # for each of the top k candidates, get the material and its probability
-                        material = topk_idx[:, :1, i:i + 1]
-                        material_prob = topk_prob[:, :1, i: i + 1]
-                        new_item = torch.cat([out_thicknesses, material], dim = -1)
+                        material_prob, material_idx = torch.max(out_materials, dim = -1, keepdim = True)
+                        new_item = torch.cat([out_thicknesses, material_idx], dim = -1)
                         new_sequence = torch.cat([sequence, new_item], dim = 1)
                         expansions.append({
                             'sequence': new_sequence,
@@ -112,7 +116,7 @@ class BaseSequentialModel(BaseTrainableModel, ABC):
                             'score': score + material_prob.sum(),
                             'pending': True
                         })
-                    # expansions.extend(candidate_expansions)
+                        out_materials = self.remove(out_materials, material_idx)
                 candidates = list(filter(lambda x: x['pending'], candidates))
                 candidates.extend(expansions)
                 candidates = sorted(candidates, key = lambda x: x['score'], reverse = True)
