@@ -45,8 +45,13 @@ class BaseSequentialModel(BaseTrainableModel, ABC):
         pass
 
     def remove(self, x: torch.Tensor, idx: torch.Tensor):
+        dim = torch.tensor(x.shape).ne(torch.tensor(idx.shape)).int().argmax() # dimension along which to remove is dimensions which differs between x and idx
         subtrahend = torch.zeros(x.shape, device=CM().get('device'))
-        arange = torch.arange(x.shape[-1])[None, None].repeat(x.shape[0], x.shape[1], 1)
+        arange_shape = [1] * x.dim()
+        arange_shape[dim] = x.shape[dim]
+        arange = torch.arange(x.shape[dim]).reshape(arange_shape)
+        arange = arange.expand(x.shape)
+        # arange = torch.arange(x.shape[dim])[None, None].repeat(x.shape[0], x.shape[1], 1)
         mask = arange.eq(idx)
         subtrahend[mask] = torch.inf
         return x - subtrahend
@@ -97,7 +102,7 @@ class BaseSequentialModel(BaseTrainableModel, ABC):
                     candidate['pending'] = False
                     sequence = candidate['sequence']
                     score = candidate['score']
-                    if sequence.shape[1] > max_seq_len or sequence[:, -1, 1].eq(self.get_eos()[None].repeat(batch_size, 1, 1)).all():
+                    if sequence.shape[1] > max_seq_len: # or sequence[:, -1, 1].eq(self.get_eos()[None].repeat(batch_size, 1, 1)).all():
                         out_sequences.append(candidate)
                         continue
                     mask = self.make_tgt_mask(sequence)
@@ -113,14 +118,28 @@ class BaseSequentialModel(BaseTrainableModel, ABC):
                         expansions.append({
                             'sequence': new_sequence,
                             # sum probabilities because they are in log space
-                            'score': score + material_prob.sum(),
-                            'pending': True
+                            'score': score + material_prob,
+                            'pending': True,
                         })
                         out_materials = self.remove(out_materials, material_idx)
                 candidates = list(filter(lambda x: x['pending'], candidates))
-                candidates.extend(expansions)
-                candidates = sorted(candidates, key = lambda x: x['score'], reverse = True)
-                candidates = candidates[:beam_size]
+                if len(expansions) == 0:
+                    break
+                candidate_sequences = torch.cat([x['sequence'][:, None] for x in expansions], dim = 1)
+                candidate_scores = torch.cat([x['score'][:, None] for x in expansions], dim = 1)
+                for i in range(beam_size):
+                    candidate_score, candidate_idx = torch.max(candidate_scores, dim = 1, keepdim = True)
+                    arange = torch.arange(candidate_sequences.shape[1])[None].repeat(batch_size, 1)
+                    mask = arange.eq(candidate_idx[:, :, 0, 0])
+                    new_candidate_sequence = candidate_sequences[mask]
+                    new_candidate_score = candidate_score.sum()
+                    candidates.append({
+                        'sequence': new_candidate_sequence,
+                        'score': new_candidate_score,
+                        'pending': True,
+                    })
+                    candidate_scores = self.remove(candidate_scores, candidate_idx)
+                    candidate_sequences = self.remove(candidate_sequences, candidate_idx)
             out_sequences = sorted(out_sequences, key = lambda x: x['score'], reverse = True)
             best = out_sequences[0]
             out_thicknesses = best['sequence'][:, :, :1]
