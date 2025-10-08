@@ -47,14 +47,83 @@ class BaseSequentialModel(BaseTrainableModel, ABC):
     def remove(self, x: torch.Tensor, idx: torch.Tensor):
         dim = torch.tensor(x.shape).ne(torch.tensor(idx.shape)).int().argmax() # dimension along which to remove is dimensions which differs between x and idx
         subtrahend = torch.zeros(x.shape, device=CM().get('device'))
-        arange_shape = [1] * x.dim()
-        arange_shape[dim] = x.shape[dim]
-        arange = torch.arange(x.shape[dim]).reshape(arange_shape)
-        arange = arange.expand(x.shape)
-        # arange = torch.arange(x.shape[dim])[None, None].repeat(x.shape[0], x.shape[1], 1)
+        arange = self.make_arange(x.shape, dim)
         mask = arange.eq(idx)
         subtrahend[mask] = torch.inf
         return x - subtrahend
+
+    def make_arange(self, shape: torch.Size, dim: int = 1):
+        arange_shape = [1] * len(shape)
+        arange_shape[dim] = shape[dim]
+        arange = torch.arange(shape[dim]).reshape(arange_shape)
+        arange = arange.expand(shape)
+        return arange
+
+    def expand_sequences(self, candidate, out_thicknesses, out_materials, beam_size: int = 1):
+        sequence = candidate['sequence']
+        score = candidate['score']
+        expansions = []
+        for i in range(beam_size):
+            # for each of the top k candidates, get the material and its probability
+            material_prob, material_idx = torch.max(out_materials, dim = -1, keepdim = True)
+            new_item = torch.cat([out_thicknesses, material_idx], dim = -1)
+            new_sequence = torch.cat([sequence, new_item], dim = 1)
+            expansions.append({
+                'sequence': new_sequence,
+                # sum probabilities because they are in log space
+                'score': score + material_prob[:, 0, 0],
+            })
+            out_materials = self.remove(out_materials, material_idx)
+        return expansions
+
+    def truncate_candidate_list(self, expansions, max_size: int = 1):
+        candidates = []
+        candidate_sequences = torch.cat([x['sequence'][:, None] for x in expansions], dim = 1)
+        candidate_scores = torch.cat([x['score'][:, None] for x in expansions], dim = 1)
+        for i in range(max_size):
+            candidate_score, candidate_idx = torch.max(candidate_scores, dim = 1, keepdim = True)
+            arange = self.make_arange(candidate_sequences[:, :, 0, 0].shape, 1)
+            mask = arange.eq(candidate_idx)
+            new_candidate_sequence = candidate_sequences[mask]
+            candidates.append({
+                'sequence': new_candidate_sequence,
+                'score': candidate_score[:, 0],
+            })
+            candidate_scores = self.remove(candidate_scores, candidate_idx)
+        return candidates
+
+    def beam_search(self, encoder_output, tgt, beam_size: int = 1):
+        # list of dictionaries each with keys: sequence, score
+        candidates = [{
+            'sequence': tgt,
+            'score': torch.ones(tgt.shape[0], device = CM().get('device')),
+        }]
+        max_seq_len = self.tgt_seq_len - 1
+        out_sequences = []
+        while len(candidates) > 0:
+            expansions = []
+            for candidate in candidates:
+                sequence = candidate['sequence']
+                if sequence.shape[
+                    1] > max_seq_len:  # or sequence[:, -1, 1].eq(self.get_eos()[None].repeat(batch_size, 1, 1)).all():
+                    out_sequences.append(candidate)
+                    continue
+                mask = self.make_tgt_mask(sequence)
+                tgt = self.project_decoder(sequence)
+                decoder_output = self.decode(encoder_output, tgt, mask)[:, -1:, :]
+                out_thicknesses = self.output_thicknesses(decoder_output.repeat(1, self.tgt_seq_len - 1, 1))[:, :1, :]
+                out_materials = self.output_materials(decoder_output)
+                sequence_expansions = self.expand_sequences(candidate, out_thicknesses, out_materials, beam_size)
+                expansions.extend(sequence_expansions)
+            if len(expansions) == 0:
+                break
+            candidates = self.truncate_candidate_list(expansions, beam_size)
+        best = self.truncate_candidate_list(out_sequences, 1)[0]
+        out_thicknesses = best['sequence'][:, :, :1]
+        out_materials = self.indices_to_probs(best['sequence'][:, :, 1:])
+        # bring probabilities to log space
+        out_materials[out_materials == 0] = -torch.inf
+        return out_thicknesses, out_materials
 
     def get_model_output(self, src, tgt = None):
         """
@@ -86,64 +155,7 @@ class BaseSequentialModel(BaseTrainableModel, ABC):
             out_materials = torch.cat([bos_probability, out_materials], dim=1)
         else:
             # inference mode
-            tgt = torch.cat([bos_thickness, bos], dim = -1) # (batch, |coating| = 1, 2)
-            # list of dictionaries each with keys: sequence, score, pending
-            candidates = [{
-                'sequence': tgt,
-                'score': 1,
-                'pending': True
-            }]
+            tgt = torch.cat([bos_thickness, bos], dim=-1)  # (batch, |coating| = 1, 2)
             beam_size = CM().get('sequential.beam_size')
-            max_seq_len = self.tgt_seq_len - 1
-            out_sequences = []
-            while len(candidates) > 0:
-                expansions = []
-                for candidate in candidates:
-                    candidate['pending'] = False
-                    sequence = candidate['sequence']
-                    score = candidate['score']
-                    if sequence.shape[1] > max_seq_len: # or sequence[:, -1, 1].eq(self.get_eos()[None].repeat(batch_size, 1, 1)).all():
-                        out_sequences.append(candidate)
-                        continue
-                    mask = self.make_tgt_mask(sequence)
-                    tgt = self.project_decoder(sequence)
-                    decoder_output = self.decode(encoder_output, tgt, mask)[:, -1:, :]
-                    out_thicknesses = self.output_thicknesses(decoder_output.repeat(1, self.tgt_seq_len - 1, 1))[:, :1, :]
-                    out_materials = self.output_materials(decoder_output)
-                    for i in range(beam_size):
-                        # for each of the top k candidates, get the material and its probability
-                        material_prob, material_idx = torch.max(out_materials, dim = -1, keepdim = True)
-                        new_item = torch.cat([out_thicknesses, material_idx], dim = -1)
-                        new_sequence = torch.cat([sequence, new_item], dim = 1)
-                        expansions.append({
-                            'sequence': new_sequence,
-                            # sum probabilities because they are in log space
-                            'score': score + material_prob,
-                            'pending': True,
-                        })
-                        out_materials = self.remove(out_materials, material_idx)
-                candidates = list(filter(lambda x: x['pending'], candidates))
-                if len(expansions) == 0:
-                    break
-                candidate_sequences = torch.cat([x['sequence'][:, None] for x in expansions], dim = 1)
-                candidate_scores = torch.cat([x['score'][:, None] for x in expansions], dim = 1)
-                for i in range(beam_size):
-                    candidate_score, candidate_idx = torch.max(candidate_scores, dim = 1, keepdim = True)
-                    arange = torch.arange(candidate_sequences.shape[1])[None].repeat(batch_size, 1)
-                    mask = arange.eq(candidate_idx[:, :, 0, 0])
-                    new_candidate_sequence = candidate_sequences[mask]
-                    new_candidate_score = candidate_score.sum()
-                    candidates.append({
-                        'sequence': new_candidate_sequence,
-                        'score': new_candidate_score,
-                        'pending': True,
-                    })
-                    candidate_scores = self.remove(candidate_scores, candidate_idx)
-                    candidate_sequences = self.remove(candidate_sequences, candidate_idx)
-            out_sequences = sorted(out_sequences, key = lambda x: x['score'], reverse = True)
-            best = out_sequences[0]
-            out_thicknesses = best['sequence'][:, :, :1]
-            out_materials = self.indices_to_probs(best['sequence'][:, :, 1:])
-            # bring probabilities to log space
-            out_materials[out_materials == 0] = -torch.inf
+            out_thicknesses, out_materials = self.beam_search(encoder_output, tgt, beam_size)
         return out_thicknesses, out_materials
