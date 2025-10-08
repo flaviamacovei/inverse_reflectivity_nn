@@ -144,7 +144,7 @@ class DynamicDataloader(BaseDataloader):
 
             if os.path.exists(filepath):
                 # filepath is a single file, dataset not segmented
-                self.dataset = torch.load(filepath, weights_only = weights_only)
+                self.dataset = torch.load(filepath, weights_only = weights_only, map_location = CM().get('device'))
             else:
                 # filepath is a prefix, dataset is segmented
                 segment_files = []

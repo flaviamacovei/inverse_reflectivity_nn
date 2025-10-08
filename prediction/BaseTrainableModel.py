@@ -170,9 +170,9 @@ class BaseTrainableModel(BaseModel, ABC):
         if epoch_leg != self.current_leg:
             # only update attributes if leg has changed
             self.current_leg = epoch_leg
-            density = CM().get(f'training.curriculum.{self.current_leg}.density')
+            self.density = CM().get(f'training.curriculum.{self.current_leg}.density')
             print(
-                f"{'-' * 50}\nCurrent leg: {density}")
+                f"{'-' * 50}\nCurrent leg: {self.density}")
             self.dataloader.load_leg(self.current_leg)
 
     def train(self):
@@ -197,7 +197,11 @@ class BaseTrainableModel(BaseModel, ABC):
 
                 output = self.model_call(reflectivity, coating_encoding)
 
-                guided_loss = self.compute_loss_guided(output, coating_encoding)
+                if self.density == 'explicit':
+                    # no guided loss possible in explicit
+                    guided_loss = 0
+                else:
+                    guided_loss = self.compute_loss_guided(output, coating_encoding)
                 free_loss = self.compute_loss_free(output, reflectivity)
                 guided_factor = CM().get('training.guided_factor')
 
@@ -302,11 +306,12 @@ class BaseTrainableModel(BaseModel, ABC):
         self.model.eval()
         first_batch = self.dataloader[0]
         reflectivity, coating_encoding = first_batch
-        reflectivity = reflectivity.to(CM().get('device'))
-        coating_encoding = coating_encoding.to(CM().get('device'))
-        reflectivity = reflectivity[None]
+        reflectivity = reflectivity[None].to(CM().get('device'))
+        if self.density == 'explicit':
+            coating_encoding = None
+        else:
+            coating_encoding = coating_encoding[None].to(CM().get('device'))
         reflectivity = torch.stack([reflectivity[:, :self.src_seq_len], reflectivity[:, self.src_seq_len:]], dim = 2)
-        coating_encoding = coating_encoding[None]
         refs = ReflectivityPattern(reflectivity[:, :, 0], reflectivity[:, :, 1])
         with torch.no_grad():
             thicknesses, unmasked_logits = self.model_call(reflectivity, coating_encoding)
@@ -320,7 +325,10 @@ class BaseTrainableModel(BaseModel, ABC):
         unmasked_coating = Coating(unmasked_output)
         masked_coating = Coating(masked_output)
         preds = coating_to_reflectivity(masked_coating)
-        self.print_coatings_in_parallel(unmasked_coating.get_batch(0), Coating(coating_encoding).get_batch(0))
+        if coating_encoding is not None:
+            self.print_coatings_in_parallel(unmasked_coating.get_batch(0), Coating(coating_encoding).get_batch(0))
+        else:
+            print(unmasked_coating.get_batch(0))
         if CM().get('wandb.log') or CM().get('wandb.sweep'):
             validation_error = sum(evaluate_model(self).values())
 
@@ -563,8 +571,7 @@ class BaseTrainableModel(BaseModel, ABC):
             # restore config to original state
             CM().reset()
         else:
-            self.model = torch.load(model_filename, weights_only=False)
-            self.model = self.model.to(CM().get('device'))
+            self.model = torch.load(model_filename, weights_only=False, map_location = CM().get('device'))
 
     def scale_gradients(self):
         for name, param in self.model.named_parameters():
