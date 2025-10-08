@@ -55,7 +55,7 @@ class BaseSequentialModel(BaseTrainableModel, ABC):
     def make_arange(self, shape: torch.Size, dim: int = 1):
         arange_shape = [1] * len(shape)
         arange_shape[dim] = shape[dim]
-        arange = torch.arange(shape[dim]).reshape(arange_shape)
+        arange = torch.arange(shape[dim], device = CM().get('device')).reshape(arange_shape)
         arange = arange.expand(shape)
         return arange
 

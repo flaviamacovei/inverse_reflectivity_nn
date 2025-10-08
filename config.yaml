@@ -62,6 +62,8 @@ stratified_sampling: true
 material_embedding:
   data_file: data/material_embedding/materials.yaml
 tolerance: 0.001
+sequential:
+  beam_size: 3
 architecture: transformer
 mlp:
   hidden_dims:
