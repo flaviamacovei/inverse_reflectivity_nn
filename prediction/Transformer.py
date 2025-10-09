@@ -6,6 +6,93 @@ sys.path.append(sys.path[0] + '/..')
 from prediction.BaseTrainableModel import ThicknessPostProcess
 from prediction.BaseSequentialModel import BaseSequentialModel
 from utils.ConfigManager import ConfigManager as CM
+from utils.math_utils import largest_prime_factor
+
+
+class DownSize(nn.Module):
+    def __init__(self, start_length: int, target_length: int, downsize_dim: int = 1):
+        super().__init__()
+        self.start_length = start_length
+        self.target_length = target_length
+        self.downsize_dim = downsize_dim
+
+class DownSizeSample(DownSize):
+    """
+    Sample items from sequence at equal distance
+    """
+    def __init__(self, start_length: int, target_length: int, downsize_dim: int = 1):
+        super().__init__(start_length, target_length, downsize_dim)
+
+    def forward(self, x):
+        difference = self.start_length % self.target_length
+        max_sample = self.start_length - difference
+        step_size = math.ceil(max_sample / self.target_length)
+        indices = torch.arange(0, max_sample, step_size, dtype = torch.long, device = CM().get('device')) + difference // 2
+        return x.index_select(index = indices, dim = self.downsize_dim)
+
+class DownSizeWindow(DownSize):
+    """
+    Learned weights for windows over sequence
+    """
+    def __init__(self, start_length: int, target_length: int, downsize_dim: int = 1):
+        super().__init__(start_length, target_length, downsize_dim)
+        self.num_windows = largest_prime_factor(self.start_length)
+        self.encoding = nn.Sequential(
+            nn.Linear(self.start_length // self.num_windows, self.target_length),
+            nn.ReLU()
+        )
+
+    def forward(self, x):
+        windows = x.chunk(self.num_windows, self.downsize_dim)
+        encoded_windows = None
+        for window in windows:
+            encoded_window = self.encoding(window.transpose(self.downsize_dim, -1)).transpose(self.downsize_dim, -1)
+            encoded_windows = encoded_window[:, None] if encoded_windows is None else torch.cat([encoded_windows, encoded_window[:, None]], dim = 1)
+        return encoded_windows.mean(dim = 1)
+
+class DownSizeMean(DownSize):
+    """
+    Mean pooling
+    """
+    def __init__(self, start_length: int, target_length: int, downsize_dim: int = 1):
+        super().__init__(start_length, target_length, downsize_dim)
+        kernel_size = self.start_length - self.target_length + 1
+        stride = 1
+        padding = 0
+        self.mean_pool = nn.AvgPool1d(kernel_size = kernel_size, stride = stride, padding = padding)
+
+    def forward(self, x):
+        return self.mean_pool(x.transpose(self.downsize_dim, -1)).transpose(self.downsize_dim, -1)
+
+class DownSizeMax(DownSize):
+    """
+    Max pooling
+    """
+
+    def __init__(self, start_length: int, target_length: int, downsize_dim: int = 1):
+        super().__init__(start_length, target_length, downsize_dim)
+        kernel_size = self.start_length - self.target_length + 1
+        stride = 1
+        padding = 0
+        self.mean_pool = nn.MaxPool1d(kernel_size=kernel_size, stride=stride, padding=padding)
+
+    def forward(self, x):
+        return self.mean_pool(x.transpose(self.downsize_dim, -1)).transpose(self.downsize_dim, -1)
+
+class DownSizeConv(DownSize):
+    """
+    Learned 1D convolution
+    """
+
+    def __init__(self, start_length: int, target_length: int, downsize_dim: int = 1):
+        super().__init__(start_length, target_length, downsize_dim)
+        kernel_size = self.start_length - self.target_length + 1
+        stride = 1
+        padding = 0
+        self.mean_pool = nn.Conv1d(kernel_size=kernel_size, stride=stride, padding=padding)
+
+    def forward(self, x):
+        return self.mean_pool(x.transpose(self.downsize_dim, -1)).transpose(self.downsize_dim, -1)
 
 class PositionalEncoding(nn.Module):
     def __init__(self, embed_dim: int, seq_len: int, dropout: float):
@@ -182,32 +269,15 @@ class ProjectionLayer(nn.Module):
         # (batch, seq_len, in_dim) --> (batch, seq_len, out_dim)
         return self.proj(x)
 
-class BilinearProjectionLayer(nn.Module):
-    def __init__(self, d1_in_dim: int, d1_out_dim: int, d2_in_dim: int, d2_out_dim: int):
-        super().__init__()
-        self.d1_proj = nn.Linear(d1_in_dim, d1_out_dim)
-        self.d2_proj = nn.Linear(d2_in_dim, d2_out_dim)
-
-    def forward(self, x):
-        # (batch, d1_in_dim, d2_in_dim) --> (batch, d1_in_dim, d2_out_dim)
-        x = self.d2_proj(x)
-        # (batch, d1_in_dim, d2_out_dim) --> (batch, d2_out_dim, d1_in_dim)
-        x = x.transpose(-1, -2)
-        # (batch, d2_out_dim, d1_in_dim) --> (batch, d2_out_dim, d1_out_dim)
-        x = self.d1_proj(x)
-        # (batch, d2_out_dim, d1_out_dim) --> (batch, d1_out_dim, d2_out_dim)
-        x = x.transpose(-1, -2)
-        return x
-
 class TrainableTransformer(nn.Module):
-    def __init__(self, encoder: Encoder, decoder: Decoder, src_pos: PositionalEncoding, tgt_pos: PositionalEncoding, encoder_projection: BilinearProjectionLayer, encoder_mask_projection: BilinearProjectionLayer, decoder_projection: ProjectionLayer, thickness_out: nn.Module, material_out: ProjectionLayer):
+    def __init__(self, encoder: Encoder, decoder: Decoder, src_pos: PositionalEncoding, tgt_pos: PositionalEncoding, encoder_downsize: DownSize, encoder_projection: ProjectionLayer, decoder_projection: ProjectionLayer, thickness_out: nn.Module, material_out: ProjectionLayer):
         super().__init__()
         self.encoder = encoder
         self.decoder = decoder
         self.src_pos = src_pos
         self.tgt_pos = tgt_pos
+        self.encoder_downsize = encoder_downsize
         self.encoder_projection = encoder_projection
-        self.encoder_mask_projection = encoder_mask_projection
         self.decoder_projection = decoder_projection
         self.thickness_out = thickness_out
         self.material_out = material_out
@@ -239,13 +309,22 @@ class Transformer(BaseSequentialModel):
         # feed-forward dimension (hyperparameter)
         self.d_ff = CM().get('transformer.d_ff')
 
+        downsize_classes = {
+            'sample': DownSizeSample,
+            'window': DownSizeWindow,
+            'mean': DownSizeMean,
+            'max': DownSizeMax,
+            'conv': DownSizeConv
+        }
+
         # positional encoding layers
         src_pos = PositionalEncoding(self.src_dim, self.src_seq_len, self.dropout)
         tgt_pos = PositionalEncoding(self.tgt_dim, self.tgt_seq_len - 1, self.dropout)
 
         # source input projection
-        src_proj = BilinearProjectionLayer(self.src_seq_len, self.hidden_seq_len, self.src_dim, self.d_model) # (batch, |wl|, 2) --> (batch, hidden_seq_len, d_model)
-        src_mask_proj = BilinearProjectionLayer(self.src_seq_len, self.hidden_seq_len, self.src_seq_len, self.hidden_seq_len) # (batch, |wl|, |wl|) --> (batch, hidden_seq_len, hidden_seq_len)
+        SrcDownsizeClass = downsize_classes[CM().get('transformer.downsize')]
+        src_downsize = SrcDownsizeClass(self.src_seq_len, self.hidden_seq_len, 1)
+        src_proj = ProjectionLayer(self.src_dim, self.d_model) # (batch, hidden_seq_len, 2) --> (batch, hidden_seq_len, d_model)
 
         # encoder blocks
         encoder_blocks = []
@@ -279,7 +358,7 @@ class Transformer(BaseSequentialModel):
         material_out = ProjectionLayer(self.d_model, self.out_dims['material'])
 
         # transformer
-        transformer = TrainableTransformer(encoder, decoder, src_pos, tgt_pos, src_proj, src_mask_proj, tgt_proj, thickness_out, material_out)
+        transformer = TrainableTransformer(encoder, decoder, src_pos, tgt_pos, src_downsize, src_proj, tgt_proj, thickness_out, material_out)
 
         # initialise params with xavier
         for p in transformer.parameters():
@@ -290,6 +369,7 @@ class Transformer(BaseSequentialModel):
 
     def project_encoder(self, src):
         src = self.model.src_pos(src) # (batch, |wl|, 2)
+        src = self.model.encoder_downsize(src) # (batch, hidden_seq_len, 2)
         src = self.model.encoder_projection(src) # (batch, hidden_seq_len, d_model)
         return src
 

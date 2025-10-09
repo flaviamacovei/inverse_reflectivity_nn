@@ -104,19 +104,21 @@ transformer:
 training:
   learning_rate: 1.0e-04
   learning_rate_end_factor: 0.3
-  thicknesses_factor: 0.9
+  thicknesses_factor: 0.5
   constraint_factor: 0.5
-  guided_factor: 0.5
+  guided_factor: 10.5
   reg_weight: 0.0
-  num_epochs: 4
+  num_epochs: 100
   batch_size: 256
-  dataset_size: 5
+  dataset_size: 5000
   save_model: true
   evaluate: true
   curriculum:
   - density: complete
     percent: 0.2
   - density: masked
+    percent: 0.2
+  - density: explicit
     percent: 0.2
 wandb:
   log: false
