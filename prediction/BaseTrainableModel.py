@@ -8,6 +8,7 @@ import os
 from datetime import datetime
 import sys
 import yaml
+import math
 
 sys.path.append(sys.path[0] + '/..')
 from prediction.BaseModel import BaseModel
@@ -236,12 +237,32 @@ class BaseTrainableModel(BaseModel, ABC):
                     self.update_checkpoint(epoch)
                 print(f"Loss in epoch {epoch + 1}: {epoch_loss.item()}")
                 self.evaluate_epoch(epoch)
+            if self.early_stopping(CM().get('training.early_stopping_threshold')):
+                print(f"Early stopping at epoch {self.epoch}")
+                break
         print("Training complete.")
         # save final trained model
         if CM().get('training.save_model'):
             self.save_model()
         if self.checkpoint:
             os.remove(self.checkpoint)
+
+    def early_stopping(self, threshold = 0.6):
+        self.model.eval()
+        reflectivity, coating_encoding = self.dataloader[:min(CM().get('training.dataset_size'), 100)]
+        reflectivity = reflectivity.to(CM().get('device'))
+        if self.density == 'explicit':
+            coating_encoding = None
+        else:
+            coating_encoding = coating_encoding.to(CM().get('device'))
+        reflectivity = torch.stack([reflectivity[:, :self.src_seq_len], reflectivity[:, self.src_seq_len:]], dim=2)
+        with torch.no_grad():
+            thicknesses, logits = self.model_call(reflectivity, coating_encoding)
+        materials = self.logits_to_indices(logits)[:, :, 0]
+        max_count = math.ceil(materials.shape[-1] * threshold)
+        mode, indices = torch.mode(materials, dim = -1, keepdim = True)
+        count = materials.eq(mode).sum(dim = -1)
+        return count.gt(max_count).all()
 
     def get_bos(self):
         substrate = EM().get_material_by_title(CM().get('materials.substrate'))
@@ -314,13 +335,12 @@ class BaseTrainableModel(BaseModel, ABC):
     def evaluate_epoch(self, epoch: int):
         # visualise first item of batch
         self.model.eval()
-        first_batch = self.dataloader[0]
-        reflectivity, coating_encoding = first_batch
-        reflectivity = reflectivity[None].to(CM().get('device'))
+        reflectivity, coating_encoding = self.dataloader[:1]
+        reflectivity = reflectivity.to(CM().get('device'))
         if self.density == 'explicit':
             coating_encoding = None
         else:
-            coating_encoding = coating_encoding[None].to(CM().get('device'))
+            coating_encoding = coating_encoding.to(CM().get('device'))
         reflectivity = torch.stack([reflectivity[:, :self.src_seq_len], reflectivity[:, self.src_seq_len:]], dim = 2)
         refs = ReflectivityPattern(reflectivity[:, :, 0], reflectivity[:, :, 1])
         with torch.no_grad():
