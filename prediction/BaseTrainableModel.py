@@ -76,13 +76,18 @@ class BaseTrainableModel(BaseModel, ABC):
         self.current_leg = -1
         self.checkpoint = None
 
-
         self.vocab = EM().get_refractive_indices_table()
+        self.num_epochs = CM().get('training.num_epochs')
+        self.epoch = 0
 
         self.model = self.build_model()
-        learning_rate = CM().get('training.learning_rate')
+        learning_rate = CM().get('training.learning_rate.start')
         self.optimiser = torch.optim.Adam(self.model.parameters(), learning_rate)
-        self.scheduler = torch.optim.lr_scheduler.LinearLR(self.optimiser, start_factor = 1.0, end_factor = CM().get('training.learning_rate_end_factor'), total_iters = CM().get('training.num_epochs'))
+        lr_end_factor = CM().get('training.learning_rate.end') / learning_rate
+        self.scheduler = torch.optim.lr_scheduler.LinearLR(self.optimiser, start_factor = 1.0, end_factor = lr_end_factor, total_iters = self.num_epochs)
+        self.thicknesses_factor = CM().get('training.thicknesses_factor.start')
+        self.constraint_factor = CM().get('training.constraint_factor.start')
+        self.guided_factor = CM().get('training.guided_factor.start')
 
         # normalisation values
         self.reflectivity_mean = self.reflectivity_std = self.thicknesses_mean = self.thicknesses_std = self.materials_mean = self.materials_std = None
@@ -151,7 +156,7 @@ class BaseTrainableModel(BaseModel, ABC):
     def get_current_leg(self, epoch):
         """Return current leg of the curriculum."""
         # calculate what percent of training is done
-        percent_done = epoch / CM().get('training.num_epochs')
+        percent_done = epoch / self.num_epochs
         for leg in range(CM().get('training.num_legs')):
             # find corresponding leg by iteratively subtracting percentages of past legs
             if percent_done < CM().get(f'training.curriculum.{leg}.percent'):
@@ -166,6 +171,12 @@ class BaseTrainableModel(BaseModel, ABC):
         Args:
             epoch: Current epoch.
         """
+        # update loss weights
+        self.epoch = epoch
+        self.thicknesses_factor -= (self.thicknesses_factor - CM().get('training.thicknesses_factor.end')) / self.num_epochs
+        self.constraint_factor -= (self.constraint_factor - CM().get('training.constraint_factor.end')) / self.num_epochs
+        self.guided_factor -= (self.guided_factor - CM().get('training.guided_factor.end')) / self.num_epochs
+        # update leg
         epoch_leg = self.get_current_leg(epoch)
         if epoch_leg != self.current_leg:
             # only update attributes if leg has changed
@@ -180,7 +191,7 @@ class BaseTrainableModel(BaseModel, ABC):
         assert self.dataloader is not None, "No dataloader provided, model can only be used in evaluation mode."
         print("Training model...")
         self.model.apply(self.initialise_weights)
-        for epoch in range(CM().get('training.num_epochs')):
+        for epoch in range(self.num_epochs):
             self.model.train()
             self.update_leg(epoch)
 
@@ -203,9 +214,8 @@ class BaseTrainableModel(BaseModel, ABC):
                 else:
                     guided_loss = self.compute_loss_guided(output, coating_encoding)
                 free_loss = self.compute_loss_free(output, reflectivity)
-                guided_factor = CM().get('training.guided_factor')
 
-                loss = guided_factor * guided_loss + (1 - guided_factor) * free_loss
+                loss = self.guided_factor * guided_loss + (1 - self.guided_factor) * free_loss
                 epoch_loss += loss.item()
 
                 if CM().get('wandb.log') or CM().get('wandb.sweep'):
@@ -220,7 +230,7 @@ class BaseTrainableModel(BaseModel, ABC):
                 self.optimiser.step()
             epoch_loss /= len(self.dataloader)
             self.scheduler.step()
-            if epoch % max(1, CM().get('training.num_epochs') / 20) == 0:
+            if epoch % max(1, self.num_epochs / 20) == 0:
                 if CM().get('training.save_model'):
                     # logging at every 5% of training
                     self.update_checkpoint(epoch)
@@ -364,7 +374,7 @@ class BaseTrainableModel(BaseModel, ABC):
             "stratified_sampling": CM().get('stratified_sampling'),
             "tolerance": CM().get('tolerance'),
             "num_points": CM().get('training.dataset_size'),
-            "epochs": CM().get('training.num_epochs'),
+            "epochs": self.num_epochs,
             "curriculum": CM().get('training.curriculum'),
         }
         model_filename = get_unique_filename(f"out/models/model_{short_hash(props_dict)}.pt")
@@ -441,8 +451,7 @@ class BaseTrainableModel(BaseModel, ABC):
 
         material_loss = F.cross_entropy(input_logits.transpose(1, 2), label_materials.to(torch.long)) / batch_size
         thickness_loss = F.mse_loss(input_thicknesses, label_thicknesses) / batch_size
-        thicknesses_factor = CM().get('training.thicknesses_factor')
-        return (1 - thicknesses_factor) * material_loss + thicknesses_factor * thickness_loss
+        return (1 - self.thicknesses_factor) * material_loss + self.thicknesses_factor * thickness_loss
 
     def compute_loss_free(self, input: torch.Tensor, labels: torch.Tensor):
         """
@@ -463,8 +472,7 @@ class BaseTrainableModel(BaseModel, ABC):
         preds = coating_to_reflectivity(coating)
         free_loss = match(preds, pattern)
         constraint_loss = self.compute_constraint_loss(coating)
-        constraint_factor = CM().get('training.constraint_factor')
-        return (1 - constraint_factor) * free_loss + constraint_factor * constraint_loss
+        return (1 - self.constraint_factor) * free_loss + self.constraint_factor * constraint_loss
 
     def compute_constraint_loss(self, coating: Coating):
         thicknesses = coating.get_thicknesses()
