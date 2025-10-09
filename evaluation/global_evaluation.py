@@ -30,7 +30,6 @@ def load_pattern(type_data: str):
         upper_bound = None
         for density in ['complete', 'masked', 'explicit']:
             dataloader = DynamicDataloader(100, shuffle=False)
-            own_path = os.path.realpath(__file__)
             dataloader.load_val(density)
             dataset = dataloader.dataset
             local_lower_bound, local_upper_bound = torch.chunk(dataset[:][0], 2, dim=-1)
@@ -43,9 +42,9 @@ def load_pattern(type_data: str):
         return ReflectivityPattern(lower_bound, upper_bound)
     elif type_data == "test":
         ownpath = os.path.realpath(__file__)
-        dataset = torch.load(os.path.join(os.path.dirname(os.path.dirname(ownpath)), "data/datasets/test_data/test_data.pt"), weights_only = False)
+        dataset = torch.load(os.path.join(os.path.dirname(os.path.dirname(ownpath)), "data/datasets/test_data/test_data.pt"), weights_only = False, map_locatoin = CM().get('device'))
         batch = dataset.tensors
-        reflectivity = batch[0].to(CM().get('device'))
+        reflectivity = batch[0]
         lower_bound, upper_bound = torch.chunk(reflectivity, 2, -1)
         return ReflectivityPattern(lower_bound, upper_bound)
     else:

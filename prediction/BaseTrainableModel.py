@@ -32,8 +32,8 @@ class ThicknessPostProcess(nn.Module):
         self.net = nn.BatchNorm1d(dims)
 
     def forward(self, x):
-        # return torch.exp(self.net(x))
-        return self.net(x)
+        return torch.exp(self.net(x))
+        # return self.net(x)
 
 class BaseTrainableModel(BaseModel, ABC):
     """

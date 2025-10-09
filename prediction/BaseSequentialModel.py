@@ -141,6 +141,7 @@ class BaseSequentialModel(BaseTrainableModel, ABC):
 
         batch_size = src.shape[0]
         bos_thickness = torch.ones((batch_size, 1, 1), device = CM().get('device')) * CM().get('thicknesses_max') / 2
+        bos_thickness = self.normalise_thicknesses(bos_thickness)
         bos = self.get_bos()[None].repeat(batch_size, 1, 1)
         bos_probability = self.indices_to_probs(bos)
         if tgt is not None and len(tgt.shape) != 1:

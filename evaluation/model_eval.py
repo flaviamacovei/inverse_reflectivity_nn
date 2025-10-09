@@ -21,6 +21,7 @@ def evaluate_model(model: BaseModel):
     Args:
         model: Prediction model to evaluate.
     """
+    # densities = ["masked", "explicit"]
     densities = ["complete", "masked", "explicit"]
     density_errors = dict()
     for density in densities:
@@ -59,7 +60,7 @@ def evaluate_per_density(model: BaseModel, dataloader: DataLoader, save_visualis
     error = 0
     for i, batch in enumerate(dataloader):
         features = batch[0].float().to(CM().get('device'))
-        lower_bound, upper_bound = features.chunk(2, dim=1)
+        lower_bound, upper_bound = features.chunk(2, dim = 1)
         pattern = ReflectivityPattern(lower_bound, upper_bound)
         coating = model.predict(pattern)
         preds = coating_to_reflectivity(coating)
