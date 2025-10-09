@@ -104,16 +104,17 @@ transformer:
 training:
   learning_rate:
     start: 1.0e-04
-    end: 0.3e-04
+    stop: 0.3e-04
   thicknesses_factor:
     start: 0.1
-    end: 0.9
+    stop: 0.9
   constraint_factor:
     start: 0.7
-    end: 0.2
+    stop: 0.2
   guided_factor:
     start: 1.0
-    end: 0.0
+    stop: 0.0
+  early_stopping_threshold: 0.6
   num_epochs: 100
   batch_size: 256
   dataset_size: 5000

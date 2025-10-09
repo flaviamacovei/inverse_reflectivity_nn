@@ -84,7 +84,7 @@ class BaseTrainableModel(BaseModel, ABC):
         self.model = self.build_model()
         learning_rate = CM().get('training.learning_rate.start')
         self.optimiser = torch.optim.Adam(self.model.parameters(), learning_rate)
-        lr_end_factor = CM().get('training.learning_rate.end') / learning_rate
+        lr_end_factor = CM().get('training.learning_rate.stop') / learning_rate
         self.scheduler = torch.optim.lr_scheduler.LinearLR(self.optimiser, start_factor = 1.0, end_factor = lr_end_factor, total_iters = self.num_epochs)
         self.thicknesses_factor = CM().get('training.thicknesses_factor.start')
         self.constraint_factor = CM().get('training.constraint_factor.start')
@@ -174,9 +174,9 @@ class BaseTrainableModel(BaseModel, ABC):
         """
         # update loss weights
         self.epoch = epoch
-        self.thicknesses_factor = CM().get('training.thicknesses_factor.start') - (self.thicknesses_factor - CM().get('training.thicknesses_factor.end')) / self.num_epochs * epoch
-        self.constraint_factor = CM().get('training.constraint_factor.start') - (self.constraint_factor - CM().get('training.constraint_factor.end')) / self.num_epochs * epoch
-        self.guided_factor = CM().get('training.guided_factor.start') - (self.guided_factor - CM().get('training.guided_factor.end')) / self.num_epochs * epoch
+        self.thicknesses_factor = CM().get('training.thicknesses_factor.start') - (self.thicknesses_factor - CM().get('training.thicknesses_factor.stop')) / self.num_epochs * epoch
+        self.constraint_factor = CM().get('training.constraint_factor.start') - (self.constraint_factor - CM().get('training.constraint_factor.stop')) / self.num_epochs * epoch
+        self.guided_factor = CM().get('training.guided_factor.start') - (self.guided_factor - CM().get('training.guided_factor.stop')) / self.num_epochs * epoch
         # update leg
         epoch_leg = self.get_current_leg(epoch)
         if epoch_leg != self.current_leg:
@@ -247,7 +247,16 @@ class BaseTrainableModel(BaseModel, ABC):
         if self.checkpoint:
             os.remove(self.checkpoint)
 
-    def early_stopping(self, threshold = 0.6):
+    def get_count(self, material_logits):
+        materials = self.logits_to_indices(material_logits)[:, :, 0]
+        mode, _ = torch.mode(materials, dim = -1, keepdim = True)
+        return materials.eq(mode).sum(dim = -1)
+
+    def early_stopping(self, t = 0.6):
+        """
+        Return true if prediction contains t% more occurrences of the same material per data point than references.
+        """
+        assert t >= 0 and t <= 1, f"Cutoff t must lie between 0 and 1 found {t}."
         self.model.eval()
         reflectivity, coating_encoding = self.dataloader[:min(CM().get('training.dataset_size'), 100)]
         reflectivity = reflectivity.to(CM().get('device'))
@@ -258,11 +267,9 @@ class BaseTrainableModel(BaseModel, ABC):
         reflectivity = torch.stack([reflectivity[:, :self.src_seq_len], reflectivity[:, self.src_seq_len:]], dim=2)
         with torch.no_grad():
             thicknesses, logits = self.model_call(reflectivity, coating_encoding)
-        materials = self.logits_to_indices(logits)[:, :, 0]
-        max_count = math.ceil(materials.shape[-1] * threshold)
-        mode, indices = torch.mode(materials, dim = -1, keepdim = True)
-        count = materials.eq(mode).sum(dim = -1)
-        return count.gt(max_count).all()
+        preds_count = self.get_count(logits)
+        refs_count = self.get_count(self.indices_to_probs(coating_encoding[:, :, 1:]))
+        return preds_count.ge(refs_count * (1 + t)).all()
 
     def get_bos(self):
         substrate = EM().get_material_by_title(CM().get('materials.substrate'))
@@ -551,7 +558,7 @@ class BaseTrainableModel(BaseModel, ABC):
         return materials_err + thicknesses_err
 
     def model_call(self, src, tgt = None):
-        src = self.normalise_reflectivity(src)
+        # src = self.normalise_reflectivity(src)
         if tgt is not None:
             input_thicknesses, input_materials = tgt.chunk(2, -1)
             input_thicknesses = self.normalise_thicknesses(input_thicknesses)
