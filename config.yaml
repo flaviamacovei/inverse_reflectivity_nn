@@ -102,12 +102,18 @@ transformer:
   tgt_caus_mask: true
   downsize: max # allowed values: sample, window, mean, max, conv
 training:
-  learning_rate: 1.0e-04
-  learning_rate_end_factor: 0.3
-  thicknesses_factor: 0.5
-  constraint_factor: 0.5
-  guided_factor: 10.5
-  reg_weight: 0.0
+  learning_rate:
+    start: 1.0e-04
+    end: 0.3e-04
+  thicknesses_factor:
+    start: 0.1
+    end: 0.9
+  constraint_factor:
+    start: 0.7
+    end: 0.2
+  guided_factor:
+    start: 1.0
+    end: 0.0
   num_epochs: 100
   batch_size: 256
   dataset_size: 5000

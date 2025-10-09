@@ -173,9 +173,9 @@ class BaseTrainableModel(BaseModel, ABC):
         """
         # update loss weights
         self.epoch = epoch
-        self.thicknesses_factor -= (self.thicknesses_factor - CM().get('training.thicknesses_factor.end')) / self.num_epochs
-        self.constraint_factor -= (self.constraint_factor - CM().get('training.constraint_factor.end')) / self.num_epochs
-        self.guided_factor -= (self.guided_factor - CM().get('training.guided_factor.end')) / self.num_epochs
+        self.thicknesses_factor = CM().get('training.thicknesses_factor.start') - (self.thicknesses_factor - CM().get('training.thicknesses_factor.end')) / self.num_epochs * epoch
+        self.constraint_factor = CM().get('training.constraint_factor.start') - (self.constraint_factor - CM().get('training.constraint_factor.end')) / self.num_epochs * epoch
+        self.guided_factor = CM().get('training.guided_factor.start') - (self.guided_factor - CM().get('training.guided_factor.end')) / self.num_epochs * epoch
         # update leg
         epoch_leg = self.get_current_leg(epoch)
         if epoch_leg != self.current_leg:
