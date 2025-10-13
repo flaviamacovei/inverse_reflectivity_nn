@@ -46,6 +46,11 @@ class ReflectivityPattern(BaseReflectivity):
         """Return batch size."""
         return self.lower_bound.shape[0]
 
+    def get_batch(self, i):
+        lower_bound = self.lower_bound[i:i + 1]
+        upper_bound = self.upper_bound[i:i + 1]
+        return ReflectivityPattern(lower_bound, upper_bound)
+
     def to(self, device: str):
         """Move property tensors to device."""
         return ReflectivityPattern(self.lower_bound.to(device), self.upper_bound.to(device))

@@ -49,11 +49,13 @@ class BaseGenerator(ABC):
     def make_thicknesses(self, materials_choice: torch.Tensor):
         assert len(materials_choice.shape) == 2, "Materials choice must be of shape num_points x num_layers"
         num_points, num_thin_films = materials_choice.shape
-        thicknesses = torch.rand((num_points, num_thin_films), device = CM().get('device')) * CM().get('thicknesses_max')
+        thicknesses = torch.zeros((num_points, num_thin_films), device = CM().get('device'))
+        max = CM().get('thicknesses_max')
+        mean = max / (1.4 * math.exp(0.1 * num_thin_films))
+        std = max / (0.9 * math.exp(0.15 * num_thin_films))
+        thicknesses = torch.nn.init.trunc_normal_(thicknesses, a = 0, b = max, mean = mean, std = std)
         substrate_mask = materials_choice == 0
         air_mask = materials_choice == 1
-
-        mean = CM().get('thicknesses_max') / 2
 
         # set substrate to thickness mean
         thicknesses[substrate_mask] = mean

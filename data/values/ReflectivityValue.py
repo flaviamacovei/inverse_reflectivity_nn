@@ -40,6 +40,9 @@ class ReflectivityValue(BaseReflectivity):
         """Return device of ReflectivityValue object."""
         return self.value.device
 
+    def get_batch(self, i):
+        return ReflectivityValue(self.value[i:i + 1])
+
     def __eq__(self, other):
         """
         Compare this ReflectivityValue object with other object.
@@ -53,6 +56,7 @@ class ReflectivityValue(BaseReflectivity):
         if isinstance(other, ReflectivityValue):
             return torch.equal(self.value, other.get_value())
         return False
+
 
     def __str__(self):
         """Return string representation of ReflectivityValue object."""
