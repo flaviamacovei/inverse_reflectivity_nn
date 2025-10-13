@@ -473,7 +473,7 @@ class BaseTrainableModel(BaseModel, ABC):
         label_thicknesses = labels[:, :, :1]
         label_materials = labels[:, :, 1]
 
-        material_loss = F.cross_entropy(input_logits.transpose(1, 2), label_materials.to(torch.long)) / batch_size
+        material_loss = F.cross_entropy(input_logits.transpose(1, 2), label_materials.to(torch.long), label_smoothing = 0.1) / batch_size
         thickness_loss = F.mse_loss(input_thicknesses, label_thicknesses) / batch_size
         if CM().get('wandb.log'):
             wandb.log({
