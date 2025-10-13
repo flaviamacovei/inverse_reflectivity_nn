@@ -200,6 +200,7 @@ class BaseTrainableModel(BaseModel, ABC):
                 if self.density == 'explicit':
                     # no guided loss possible in explicit
                     guided_loss = torch.zeros(1, device = CM().get('device'))
+                    self.guided_factor = 0
                 else:
                     guided_loss = self.compute_loss_guided(output, coating_encoding)
                 free_loss = self.compute_loss_free(output, reflectivity)
@@ -363,9 +364,9 @@ class BaseTrainableModel(BaseModel, ABC):
             self.print_coatings_in_parallel(unmasked_coating.get_batch(0), Coating(coating_encoding).get_batch(0))
         else:
             print(unmasked_coating.get_batch(0))
-        validation_error = sum(evaluate_model(self).values())
-        self.reset_normalisation_values()
         if CM().get('wandb.log') or CM().get('wandb.sweep'):
+            validation_error = sum(evaluate_model(self).values())
+            self.reset_normalisation_values()
             wandb.log({"validation error": validation_error})
             structure_error = self.compute_structure_error(unmasked_coating)
             wandb.log({"structure error": structure_error})
