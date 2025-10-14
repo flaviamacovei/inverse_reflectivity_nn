@@ -141,6 +141,8 @@ class BaseSequentialModel(BaseTrainableModel, ABC):
         bos_thickness = self.thicknesses_mean.reshape(1, 1, 1).repeat(batch_size, 1, 1)
         bos = self.get_bos()[None].repeat(batch_size, 1, 1)
         bos_probability = self.indices_to_probs(bos)
+        # bring to log space
+        bos_probability[bos_probability == 0] = -torch.inf
         if tgt is not None and len(tgt.shape) != 1:
             # in training mode, target is specified
             # in training mode explicit leg, target is dummy data (len(shape) == 1) and should be ignored -> move to inference block

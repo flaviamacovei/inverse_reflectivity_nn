@@ -299,6 +299,8 @@ class BaseTrainableModel(BaseModel, ABC):
         batch_size, seq_len, vocab_size = logits.shape
         softmax_probabilities = F.softmax(logits, dim = -1)
         return torch.multinomial(softmax_probabilities.reshape(-1, vocab_size), num_samples = 1).reshape(batch_size, seq_len, 1)
+        # _, max_indices = softmax_probabilities.max(dim = -1, keepdim = True)
+        # return max_indices
 
     def mask_logits(self, logits: torch.Tensor):
         seq_len = logits.shape[1]
@@ -489,7 +491,8 @@ class BaseTrainableModel(BaseModel, ABC):
         label_thicknesses = labels[:, :, :1]
         label_materials = labels[:, :, 1]
 
-        material_loss = F.cross_entropy(input_logits.transpose(1, 2), label_materials.to(torch.long), label_smoothing = 0.1, reduction = 'none') / batch_size
+        # ignoring substrate index is actually very important here because the sequential models prepend their logits with [1, -inf, -inf, ...] which leads to inf cross-entropy for that position when label_smoothing is used
+        material_loss = F.cross_entropy(input_logits.transpose(1, 2), label_materials.to(torch.long), label_smoothing = 0.1, reduction = 'none', ignore_index = EM().get_substrate_index()) / batch_size
         material_loss = material_loss.mean() / (material_loss.norm(2) + 1.e-9)
         thickness_loss = F.mse_loss(input_thicknesses, label_thicknesses, reduction = 'none') / batch_size
         thickness_loss = thickness_loss.mean() / (thickness_loss.norm(2) + 1.e-9)
