@@ -40,7 +40,7 @@ def init_dataloader(density: str):
     Args:
         density: Density for which to load dataset.
     """
-    batch_size = 10
+    batch_size = 100
     filename = get_dataset_name("validation", density)
     if filename is None:
         raise FileNotFoundError("Dataset in current configuration not found. Please run generate_dataset.py first.")

@@ -90,6 +90,8 @@ class BaseTrainableModel(BaseModel, ABC):
         self.constraint_factor = CM().get('training.constraint_factor.start')
         self.guided_factor = CM().get('training.guided_factor.start')
 
+        self.early_stopping_counter = 0
+
         # normalisation values
         self.reflectivity_mean = self.reflectivity_std = self.thicknesses_mean = self.thicknesses_std = self.materials_mean = self.materials_std = None
         DynamicDataloader.register(self)
@@ -228,7 +230,7 @@ class BaseTrainableModel(BaseModel, ABC):
                     self.update_checkpoint(epoch)
                 print(f"Loss in epoch {epoch + 1}: {epoch_loss.item()}")
                 self.evaluate_epoch(epoch)
-                if self.early_stopping(CM().get('training.early_stopping_threshold')):
+                if self.early_stopping(CM().get('training.early_stopping.threshold'), CM().get('early_stopping.patience')):
                     print(f"Early stopping at epoch {self.epoch}")
                     break
         print("Training complete.")
@@ -243,7 +245,7 @@ class BaseTrainableModel(BaseModel, ABC):
         mode, _ = torch.mode(materials, dim = -1, keepdim = True)
         return materials.eq(mode).sum(dim = -1)
 
-    def early_stopping(self, t = 0.6):
+    def early_stopping(self, t = 0.6, patience = 3):
         """
         Return true if prediction contains t% more occurrences of the same material per data point than references.
         """
@@ -260,11 +262,22 @@ class BaseTrainableModel(BaseModel, ABC):
             thicknesses, logits = self.model_call(reflectivity, coating_encoding)
         preds_count = self.get_count(logits)
         if coating_encoding is None:
+            # no reference proviced: own entropy
             max_count = logits.shape[1]
-            return (preds_count / max_count).ge(t).all()
+            stop = (preds_count / max_count).ge(t).all()
         else:
+            # reference provided: compare entropy with reference
             refs_count = self.get_count(self.indices_to_probs(coating_encoding[:, :, 1:]))
-            return preds_count.ge(refs_count * (1 + t)).all()
+            stop = preds_count.ge(refs_count * (1 + t)).all()
+        if stop:
+            # increment patience counter
+            self.early_stopping_counter += 1
+            if self.early_stopping_counter >= patience:
+                return True
+        else:
+            # reset patience counter
+            self.early_stopping_counter = 0
+        return False
 
     def get_bos(self):
         substrate = EM().get_material_by_title(CM().get('materials.substrate'))
