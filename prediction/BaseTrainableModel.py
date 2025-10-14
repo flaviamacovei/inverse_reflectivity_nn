@@ -489,8 +489,10 @@ class BaseTrainableModel(BaseModel, ABC):
         label_thicknesses = labels[:, :, :1]
         label_materials = labels[:, :, 1]
 
-        material_loss = F.cross_entropy(input_logits.transpose(1, 2), label_materials.to(torch.long), label_smoothing = 0.1) / batch_size
-        thickness_loss = F.mse_loss(input_thicknesses, label_thicknesses) / batch_size
+        material_loss = F.cross_entropy(input_logits.transpose(1, 2), label_materials.to(torch.long), label_smoothing = 0.1, reduction = 'none') / batch_size
+        material_loss = material_loss.mean() / (material_loss.norm(2) + 1.e-9)
+        thickness_loss = F.mse_loss(input_thicknesses, label_thicknesses, reduction = 'none') / batch_size
+        thickness_loss = thickness_loss.mean() / (thickness_loss.norm(2) + 1.e-9)
         if CM().get('wandb.log'):
             wandb.log({
                 'material_loss': material_loss.item(),
@@ -515,8 +517,10 @@ class BaseTrainableModel(BaseModel, ABC):
         coating = Coating(coating_encoding)
         # convert predicted coating to reflectivity value
         preds = coating_to_reflectivity(coating)
-        free_loss = match(preds, pattern)
-        constraint_loss = self.compute_constraint_loss(coating)
+        free_loss = match(preds, pattern, reduction = 'none')
+        free_loss = free_loss.mean() / (free_loss.norm(2) + 1.e-9)
+        constraint_loss = self.compute_constraint_loss(coating, reduction = 'none')
+        constraint_loss = constraint_loss.mean() / (constraint_loss.norm(2) + 1.e-9)
         if CM().get('wandb.log'):
             wandb.log({
                 'free_only_loss': free_loss.item(),
