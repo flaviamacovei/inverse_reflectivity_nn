@@ -524,10 +524,16 @@ class BaseTrainableModel(BaseModel, ABC):
             })
         return (1 - self.constraint_factor) * free_loss + self.constraint_factor * constraint_loss
 
-    def compute_constraint_loss(self, coating: Coating):
+    def compute_constraint_loss(self, coating: Coating, reduction: str = 'mean'):
         thicknesses = coating.get_thicknesses()
         batch_size, seq_len = thicknesses.shape
-        return torch.sum(F.relu(thicknesses - 1) ** 2) / (batch_size * seq_len)
+        loss = (F.relu(thicknesses - 1) ** 2) / (batch_size * seq_len)
+        if reduction == 'none':
+            return loss
+        elif reduction == 'sum':
+            return loss.sum()
+        else:
+            return loss.mean()
 
     def compute_structure_error(self, coating: Coating):
         materials = coating.get_encoding()[:, :, 1:]
