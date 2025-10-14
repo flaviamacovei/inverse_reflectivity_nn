@@ -280,12 +280,14 @@ class BaseTrainableModel(BaseModel, ABC):
         return False
 
     def get_bos(self):
-        substrate = EM().get_material_by_title(CM().get('materials.substrate'))
+        return EM().get_substrate_index()[None]
+        substrate = EM().get_substrate()
         bos = EM().materials_to_indices([[substrate]]) # (batch, |coating| = 1, 1)
         return bos
 
     def get_eos(self):
-        air = EM().get_material_by_title(CM().get('materials.air'))
+        return EM().get_air_index()[None]
+        air = EM().get_air()
         eos = EM().materials_to_indices([[air]]) # (batch, |coating| = 1, 1)
         return eos
 

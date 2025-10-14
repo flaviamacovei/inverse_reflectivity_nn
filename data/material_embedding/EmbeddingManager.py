@@ -39,9 +39,10 @@ class EmbeddingManager:
         """Create singleton instance of EmbeddingManager class."""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
+            cls._instance._load()
         return cls._instance
 
-    def __init__(self):
+    def _load(self):
         """Initialise EmbeddingManager instance."""
         self.materials = []
         self.materials_indices = dict()
@@ -53,7 +54,6 @@ class EmbeddingManager:
         return torch.tensor([self.materials_indices[m] for m in materials])
 
     def load_materials(self):
-        # TODO: map benutzen und filter wenn nötig (wie in CM)
         """
         Load materials from data file.
 
@@ -119,6 +119,10 @@ class EmbeddingManager:
 
         self.materials = materials
         self.materials_indices = {materials[i].get_title(): i for i in range(len(materials))}
+        self.substrate = substrate
+        self.air = air
+        self.substrate_index = torch.tensor(self.materials_indices[substrate.get_title()], device = CM().get('device'))
+        self.air_index = torch.tensor(self.materials_indices[air.get_title()], device = CM().get('device'))
 
     def hash_materials(self):
         """Hash materials to use as filename for saving / loading embeddings."""
@@ -153,6 +157,18 @@ class EmbeddingManager:
     def get_materials(self):
         """Return list of materials."""
         return self.materials
+
+    def get_substrate(self):
+        return self.substrate
+
+    def get_substrate_index(self):
+        return self.substrate_index
+
+    def get_air_index(self):
+        return self.air_index
+
+    def get_air(self):
+        return self.air
 
     def get_material_by_title(self, title: str):
         """Return material with given title."""
