@@ -120,7 +120,7 @@ class BaseSequentialModel(BaseTrainableModel, ABC):
         out_thicknesses = best_sequences[:, :, :1]
         out_logits = self.indices_to_probs(best_sequences[:, :, 1:])
         # bring probabilities to log space
-        out_logits[out_logits == 0] = -torch.inf
+        out_logits = torch.exp(out_logits)
         return out_thicknesses, out_logits
 
     def get_model_output(self, src, tgt = None):
@@ -142,7 +142,7 @@ class BaseSequentialModel(BaseTrainableModel, ABC):
         bos = self.get_bos()[None].repeat(batch_size, 1, 1)
         bos_probability = self.indices_to_probs(bos)
         # bring to log space
-        bos_probability[bos_probability == 0] = -torch.inf
+        bos_probability = torch.exp(bos_probability)
         if tgt is not None and len(tgt.shape) != 1:
             # in training mode, target is specified
             # in training mode explicit leg, target is dummy data (len(shape) == 1) and should be ignored -> move to inference block
