@@ -270,10 +270,11 @@ class ProjectionLayer(nn.Module):
         return self.proj(x)
 
 class TrainableTransformer(nn.Module):
-    def __init__(self, encoder: Encoder, decoder: Decoder, src_pos: PositionalEncoding, tgt_pos: PositionalEncoding, encoder_downsize: DownSize, encoder_projection: ProjectionLayer, decoder_projection: ProjectionLayer, thickness_out: nn.Module, material_out: ProjectionLayer):
+    def __init__(self, encoder: Encoder, thicknesses_decoder: Decoder, materials_decoder: Decoder, src_pos: PositionalEncoding, tgt_pos: PositionalEncoding, encoder_downsize: DownSize, encoder_projection: ProjectionLayer, decoder_projection: ProjectionLayer, thickness_out: nn.Module, material_out: ProjectionLayer):
         super().__init__()
         self.encoder = encoder
-        self.decoder = decoder
+        self.thicknesses_decoder = thicknesses_decoder
+        self.materials_decoder = materials_decoder
         self.src_pos = src_pos
         self.tgt_pos = tgt_pos
         self.encoder_downsize = encoder_downsize
@@ -281,9 +282,6 @@ class TrainableTransformer(nn.Module):
         self.decoder_projection = decoder_projection
         self.thickness_out = thickness_out
         self.material_out = material_out
-
-    def project_bos(self, bos):
-        return self.decoder_projection(bos)
 
 
 class Transformer(BaseSequentialModel):
@@ -338,17 +336,26 @@ class Transformer(BaseSequentialModel):
         tgt_proj = ProjectionLayer(self.tgt_dim, self.d_model)
 
         # decoder blocks
-        decoder_blocks = []
+        thicknesses_decoder_blocks = []
         for _ in range(self.N):
             decoder_self_attention_block = MultiHeadAttentionBlock(self.d_model, self.h, self.dropout)
             decoder_cross_attention_block = MultiHeadAttentionBlock(self.d_model, self.h, self.dropout)
             feed_forward_block = FeedForwardBlock(self.d_model, self.d_ff, self.dropout)
             decoder_block = DecoderBlock(decoder_self_attention_block, decoder_cross_attention_block, feed_forward_block, self.dropout)
-            decoder_blocks.append(decoder_block)
+            thicknesses_decoder_blocks.append(decoder_block)
+
+        materials_decoder_blocks = []
+        for _ in range(self.N):
+            decoder_self_attention_block = MultiHeadAttentionBlock(self.d_model, self.h, self.dropout)
+            decoder_cross_attention_block = MultiHeadAttentionBlock(self.d_model, self.h, self.dropout)
+            feed_forward_block = FeedForwardBlock(self.d_model, self.d_ff, self.dropout)
+            decoder_block = DecoderBlock(decoder_self_attention_block, decoder_cross_attention_block, feed_forward_block, self.dropout)
+            materials_decoder_blocks.append(decoder_block)
 
         # encoder and decoder
         encoder = Encoder(nn.ModuleList(encoder_blocks))
-        decoder = Decoder(nn.ModuleList(decoder_blocks))
+        thicknesses_decoder = Decoder(nn.ModuleList(thicknesses_decoder_blocks))
+        materials_decoder = Decoder(nn.ModuleList(materials_decoder_blocks))
 
         # output projection layer
         thickness_out = nn.Sequential(
@@ -358,12 +365,13 @@ class Transformer(BaseSequentialModel):
         material_out = ProjectionLayer(self.d_model, self.out_dims['material'])
 
         # transformer
-        transformer = TrainableTransformer(encoder, decoder, src_pos, tgt_pos, src_downsize, src_proj, tgt_proj, thickness_out, material_out)
+        transformer = TrainableTransformer(encoder, thicknesses_decoder, materials_decoder, src_pos, tgt_pos, src_downsize, src_proj, tgt_proj, thickness_out, material_out)
 
         # initialise params with xavier
         for p in transformer.parameters():
             if p.dim() > 1:
-                nn.init.xavier_uniform_(p)
+                # nn.init.xavier_uniform_(p)
+                nn.init.kaiming_uniform_(p)
 
         return transformer.to(CM().get('device'))
 
@@ -380,10 +388,14 @@ class Transformer(BaseSequentialModel):
         return tgt
 
     def encode(self, src):
-        return self.model.encoder(src)
+        output = self.model.encoder(src)
+        # return torch.randn_like(output)
+        return output
 
     def decode(self, encoder_output, tgt, mask = None):
-        return self.model.decoder(tgt, encoder_output, mask)
+        thicknesses = self.model.thicknesses_decoder(tgt, encoder_output, mask)
+        materials = self.model.materials_decoder(tgt, encoder_output, mask)
+        return thicknesses, materials
 
     def output_thicknesses(self, decoder_output):
         return self.model.thickness_out(decoder_output)
