@@ -7,6 +7,5 @@ history.txt
 data/datasets/*
 wandb/*
 data/models/*
-data/data_files/*
 **/*.pt
 **/*.ipynb
