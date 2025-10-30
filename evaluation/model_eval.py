@@ -70,7 +70,7 @@ def evaluate_per_density(model: BaseModel, dataloader: DataLoader, save_visualis
         error += match(preds, pattern).item() / len(dataloader)
     return error
 
-def test_model(model: BaseModel):
+def test_model(model: BaseModel, test_data_path = 'data/datasets/test_data/test_data.pt'):
     """
     Evaluate model on test dataset.
 
@@ -78,8 +78,7 @@ def test_model(model: BaseModel):
         model: Prediction model to evaluate.
     """
     batch_size = 1
-    test_data_path = f"data/datasets/test_data/test_data.pt"
     dataloader = DynamicDataloader(batch_size, False)
     dataloader.load_test(test_data_path)
-    test_error = evaluate_per_density(model, dataloader, save_visualisation = True)
+    test_error = evaluate_per_density(model, dataloader, save_visualisation = False)
     return test_error

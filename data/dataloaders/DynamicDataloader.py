@@ -1,4 +1,4 @@
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, TensorDataset
 import torch
 from typing import Callable
 import os
@@ -8,6 +8,7 @@ sys.path.append(sys.path[0] + '/../..')
 from data.dataloaders.BaseDataloader import BaseDataloader
 from utils.ConfigManager import ConfigManager as CM
 from utils.data_utils import get_dataset_name
+from inverse_distance_weighting import idw
 
 class SegmentedDataset(Dataset):
     """
@@ -123,10 +124,10 @@ class DynamicDataloader(BaseDataloader):
         self.dataloader = DataLoader(self.dataset, batch_size = self.batch_size, shuffle = self.shuffle, drop_last = False)
 
     def load_test(self, test_data_path:str):
-        self.load_data(test_data_path, weights_only = False)
+        self.load_data(test_data_path, weights_only = False, adjust = True)
         self.dataloader = DataLoader(self.dataset, batch_size = self.batch_size, shuffle = self.shuffle, drop_last = False)
 
-    def load_data(self, filepath: str = None, weights_only: bool = False):
+    def load_data(self, filepath: str = None, weights_only: bool = False, adjust = False):
         """
         Load data from the specified dataset file.
 
@@ -145,6 +146,8 @@ class DynamicDataloader(BaseDataloader):
             if os.path.exists(filepath):
                 # filepath is a single file, dataset not segmented
                 self.dataset = torch.load(filepath, weights_only = weights_only, map_location = CM().get('device'))
+                if adjust:
+                    self.adjust_wavelengths()
             else:
                 # filepath is a prefix, dataset is segmented
                 segment_files = []
@@ -159,6 +162,26 @@ class DynamicDataloader(BaseDataloader):
             raise FileNotFoundError("Dataset in current configuration not found. Please run generate_dataset.py first.")
         except FileNotFoundError:
             raise FileNotFoundError("Dataset in current configuration not found. Please run generate_dataset.py first.")
+
+    def adjust_wavelengths(self):
+        measured_wavelengths = torch.linspace(0.3, 1.499, 1200, device = 'cpu')[:, None]
+        measured_reflectivities = [item[0] for item in self.dataset]
+        wavelengths = CM().get('wavelengths').to('cpu')[:, None]
+        feature_tensors = []
+        for measured_reflectivity in measured_reflectivities:
+            measured_reflectivity = measured_reflectivity.to('cpu')
+            measured_lower_bound, measured_upper_bound = measured_reflectivity.chunk(2, -1)
+            idw_tree = idw.tree(measured_wavelengths, measured_lower_bound[:, None])
+            lower_bound = torch.from_numpy(idw_tree(wavelengths))
+            idw_tree = idw.tree(measured_wavelengths, measured_upper_bound[:, None])
+            upper_bound = torch.from_numpy(idw_tree(wavelengths))
+            feature_tensors.append(torch.cat([lower_bound, upper_bound], dim = -1))
+
+        feature_tensors = torch.stack(feature_tensors).to(CM().get('device'))
+        # label_tensors = torch.zeros(feature_tensors.shape[0], 1).to(CM().get('device'))
+        self.dataset = TensorDataset(feature_tensors)
+        print('<3')
+
 
 
     def __iter__(self):
