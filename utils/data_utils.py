@@ -128,10 +128,16 @@ def load_config(config_id: int):
             "substrate": "DC_Substrate",
             "air": "DC_Air",
             "materials": ["H", "L", "A", "F", "M", "T", "Ag", "Au", "Ni"],
+        },
+        4: {
+            "num_layers": 20,
+            "substrate": "M_Glass_Substrate",
+            "air": "M_Air",
+            "materials": ['M_Ti_HZ', 'M_Al', 'M_ZnS', 'M_Cr_HZ', 'M_Si_HZ', 'M_MgO', 'M_Au', 'M_Al2O3_HZ', 'M_Si3N4', 'M_HfO2', 'M_AlN', 'M_Ta2O5', 'M_SiO2_HZ', 'M_SiO2', 'M_Al2O3', 'M_ZnO', 'M_Ag_HZ', 'M_ZnS_HZ', 'M_ZnSe_HZ', 'M_Ni_HZ', 'M_ZnO_HZ', 'M_Cr', 'M_ZnSe', 'M_Fe2O3_HZ', 'M_Al_HZ', 'M_TiO2_HZ', 'M_Ge_2', 'M_HfO2_HZ', 'M_MgF2_HZ', 'M_Si', 'M_TiN', 'M_Ge_1', 'M_MgF2', 'M_Ge', 'M_TiO2', 'M_ITO', 'M_Ge_HZ', 'M_Ag'],
         }
     }
 
-    assert config_id in [1, 2, 3], "Available config ids: 1, 2, 3"
+    assert config_id in [1, 2, 3, 4], "Available config ids: 1, 2, 3, 4"
     with open('config.yaml', 'r') as f:
         config_dict = yaml.safe_load(f)
     config_dict['layers']['max'] = configs[config_id]['num_layers']
