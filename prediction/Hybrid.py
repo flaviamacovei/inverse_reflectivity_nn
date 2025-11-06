@@ -44,9 +44,11 @@ class Hybrid(BaseTrainableModel):
     def scale_gradients(self):
         self.trainable.scale_gradients()
 
-    def predict(self, target: ReflectivityPattern):
-        trainable_prediction = self.trainable.predict_raw(target)
-        self.gradient.initialise(trainable_prediction.detach().cpu().numpy().flatten())
+    def model_predict(self, target: ReflectivityPattern):
+        trainable_prediction = self.trainable.model_predict_raw(target)
+        trainable_thicknesses, trainable_materials = trainable_prediction
+        gradient_input = torch.cat([trainable_thicknesses, trainable_materials], dim = -1)
+        self.gradient.initialise(gradient_input.detach().cpu().numpy().flatten())
         gradient_prediction = self.gradient.predict(target)
         return gradient_prediction
 

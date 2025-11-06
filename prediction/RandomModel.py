@@ -1,10 +1,11 @@
-from prediction.BaseModel import BaseModel
 import torch
+import torch.nn.functional as F
 import sys
 sys.path.append(sys.path[0] + '/..')
+from prediction.BaseModel import BaseModel
 from data.values.ReflectivityPattern import ReflectivityPattern
 from data.values.Coating import Coating
-from utils.ConfigManager import ConfigManager as CM
+
 from data.dataset_generation.CompletePatternGenerator import CompletePatternGenerator
 
 class RandomModel(BaseModel):
@@ -17,19 +18,26 @@ class RandomModel(BaseModel):
     def __init__(self):
         """Initialise a RandomModel instance."""
         super().__init__()
+        self.generator = CompletePatternGenerator()
 
-    def predict(self, target: ReflectivityPattern):
+    def get_random_thicknesses(self, materials_indices):
+        assert len(materials_indices.shape) == 2 or len(materials_indices.shape) == 3
+        if len(materials_indices.shape) == 3:
+            materials_indices = torch.argmax(materials_indices, dim = -1)
+        return self.generator.make_thicknesses(materials_indices)
+
+    def get_random_materials_hard(self, num_points):
+        return self.generator.make_materials_choice(num_points)
+
+    def get_random_materials_soft(self, num_points):
+        return torch.rand(size = (num_points, self.tgt_seq_len, self.tgt_vocab_size)) * self.tgt_vocab_size
+
+    def model_predict(self, target: ReflectivityPattern):
         num_points = target.get_batch_size()
-
-        # this isn't super pretty
-        generator = CompletePatternGenerator()
-
-        materials_indices = generator.make_materials_choice(num_points)
-        thicknesses = generator.make_thicknesses(materials_indices)
-        embedding = generator.get_materials_embeddings(materials_indices)
-        coating_encoding = torch.cat([thicknesses[:, :, None], embedding], dim=2).float()
+        materials = self.get_random_materials_hard(num_points)
+        thicknesses = self.get_random_thicknesses(materials)
+        coating_encoding = torch.cat([thicknesses[:, :, None], materials], dim = -1).float()
         coating = Coating(coating_encoding)
-
         return coating
 
     def get_architecture_name(self):

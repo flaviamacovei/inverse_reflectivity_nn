@@ -19,7 +19,7 @@ class GradientModel(BaseModel):
         self.encoding_length = 2
 
 
-    def predict(self, target: ReflectivityPattern):
+    def model_predict(self, target: ReflectivityPattern):
         """
         Predict a coating given a reflectivity pattern object.
 
@@ -27,11 +27,16 @@ class GradientModel(BaseModel):
             target: Reflectivity pattern for which to perform prediction.
         """
         batch_size = target.get_batch_size()
-        self.initialise(batch_size = batch_size)
-        bounds = Bounds(np.zeros_like(self.init_params), np.ones_like(self.init_params))
+        if self.init_params is None:
+            self.initialise(batch_size = batch_size)
+        thicknesses_upper_bound = np.ones((batch_size, self.tgt_seq_len, 1)) * CM().get('thicknesses_max')
+        materials_upper_bound = np.ones((batch_size, self.tgt_seq_len, self.tgt_vocab_size)) * (self.tgt_vocab_size - 1) # -1 because of 0-indexing
+        upper_bound = np.concatenate([thicknesses_upper_bound, materials_upper_bound], axis = -1).flatten()
+        lower_bound = np.zeros((batch_size, self.tgt_seq_len, 1 + self.tgt_vocab_size)).flatten()
+        bounds = Bounds(lower_bound, upper_bound)
 
         def np_loss_function(params: np.ndarray):
-            params = torch.tensor(params, dtype=torch.float32, requires_grad=True)
+            params = torch.tensor(params, dtype = torch.float32, requires_grad = True)
             loss, grads = self.loss_function(params, target)
             return loss.detach().cpu().numpy(), grads.detach().cpu().numpy()
 
@@ -61,9 +66,10 @@ class GradientModel(BaseModel):
 
     def initialise(self, init_params = None, batch_size: int = None):
         assert init_params is not None or batch_size is not None
-        if init_params is None:
-            init_params = np.random.randn(batch_size, self.out_dims['seq_len'], self.out_dims['thickness'] + self.out_dims['material']).flatten()
-        self.init_params = init_params
+        if init_params is None and self.init_params is None:
+            self.init_params = np.random.randn(batch_size, self.out_dims['seq_len'], self.out_dims['thickness'] + self.out_dims['material']).flatten()
+        elif init_params is not None:
+            self.init_params = init_params
 
 
     def loss_function(self, params: torch.Tensor, target: ReflectivityPattern):

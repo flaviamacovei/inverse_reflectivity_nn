@@ -493,7 +493,7 @@ class BaseTrainableModel(BaseModel, ABC):
         except FileNotFoundError:
             raise FileNotFoundError("Dataset in current configuration not found. Please run generate_dataset.py first.")
 
-    def predict(self, target: ReflectivityPattern):
+    def model_predict(self, target: ReflectivityPattern):
         """
         Predict a coating given a reflectivity pattern object.
 
@@ -510,7 +510,7 @@ class BaseTrainableModel(BaseModel, ABC):
         preds = torch.cat([thicknesses, materials], dim = -1)
         return Coating(preds)
 
-    def predict_raw(self, target):
+    def model_predict_raw(self, target):
         self.model.eval()
         model_input = torch.stack((target.get_lower_bound(), target.get_upper_bound()), dim = 2)
         thicknesses, logits = self.model_call(model_input)
