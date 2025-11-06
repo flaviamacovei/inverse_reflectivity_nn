@@ -6,8 +6,8 @@ layers:
   max: 5
 num_layers: 5
 wavelengths:
-  start: 0.3
-  end: 1.499
+  start: 0.5
+  end: 1.099
   steps: 1200
 polarisation: s
 thicknesses_max: 0.5
@@ -105,15 +105,9 @@ training:
   learning_rate:
     start: 1.0e-04
     stop: 0.3e-04
-  thicknesses_factor:
-    start: 0.1
-    stop: 0.9
-  constraint_factor:
-    start: 0.7
-    stop: 0.2
-  guided_factor:
-    start: 1.0
-    stop: 0.0
+  thickness_factor: 300
+  material_factor: 1
+  free_factor: 100
   early_stopping:
     threshold: 1
     patience: 3

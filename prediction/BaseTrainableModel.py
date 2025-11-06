@@ -9,6 +9,7 @@ from datetime import datetime
 import sys
 import yaml
 import math
+import itertools
 
 sys.path.append(sys.path[0] + '/..')
 from prediction.BaseModel import BaseModel
@@ -33,8 +34,8 @@ class ThicknessPostProcess(nn.Module):
         self.net = nn.BatchNorm1d(dims)
 
     def forward(self, x):
-        return torch.exp(self.net(x))
-        # return self.net(x)
+        # return torch.exp(self.net(x))
+        return self.net(x)
 
 class BaseTrainableModel(BaseModel, ABC):
     """
@@ -86,15 +87,22 @@ class BaseTrainableModel(BaseModel, ABC):
         self.optimiser = torch.optim.Adam(self.model.parameters(), learning_rate)
         lr_end_factor = min(max(0, CM().get('training.learning_rate.stop') / learning_rate), 1)
         self.scheduler = torch.optim.lr_scheduler.LinearLR(self.optimiser, start_factor = 1.0, end_factor = lr_end_factor, total_iters = self.num_epochs)
-        self.thicknesses_factor = CM().get('training.thicknesses_factor.start')
-        self.constraint_factor = CM().get('training.constraint_factor.start')
-        self.guided_factor = CM().get('training.guided_factor.start')
 
         self.early_stopping_counter = 0
 
         # normalisation values
         self.reflectivity_mean = self.reflectivity_std = self.thicknesses_mean = self.thicknesses_std = self.materials_mean = self.materials_std = None
         DynamicDataloader.register(self)
+
+    @abstractmethod
+    def get_shared_params(self):
+        pass
+    @abstractmethod
+    def get_thicknesses_params(self):
+        pass
+    @abstractmethod
+    def get_materials_params(self):
+        pass
 
     def handle_new_data(self, dataset):
         # TODO: these are all 0 if epochs == 0
@@ -164,9 +172,6 @@ class BaseTrainableModel(BaseModel, ABC):
         """
         # update loss weights
         self.epoch = epoch
-        self.thicknesses_factor = CM().get('training.thicknesses_factor.start') - (self.thicknesses_factor - CM().get('training.thicknesses_factor.stop')) / self.num_epochs * epoch
-        self.constraint_factor = CM().get('training.constraint_factor.start') - (self.constraint_factor - CM().get('training.constraint_factor.stop')) / self.num_epochs * epoch
-        self.guided_factor = CM().get('training.guided_factor.start') - (self.guided_factor - CM().get('training.guided_factor.stop')) / self.num_epochs * epoch
         # update leg
         epoch_leg = self.get_current_leg(epoch)
         if epoch_leg != self.current_leg:
@@ -176,6 +181,16 @@ class BaseTrainableModel(BaseModel, ABC):
             print(
                 f"{'-' * 50}\nCurrent leg: {self.density}")
             self.dataloader.load_leg(self.current_leg)
+
+    def add_scaled(self, grads, params, scale, weight = 1.0):
+        for p, g in zip(params, grads):
+            if g is None:
+                continue
+            g_scaled = g * (scale * weight)
+            if p.grad is None:
+                p.grad = g_scaled
+            else:
+                p.grad.add_(g_scaled)
 
     def train(self):
         """Train the model."""
@@ -190,38 +205,43 @@ class BaseTrainableModel(BaseModel, ABC):
             # training loop
             for i, batch in enumerate(self.dataloader):
                 self.optimiser.zero_grad()
+                # a batch consists of reflectivity and coating encodings
                 reflectivity, coating_encoding = batch
                 reflectivity = reflectivity.to(CM().get('device'))
                 reflectivity = torch.stack([reflectivity[:, :self.src_seq_len], reflectivity[:, self.src_seq_len:]], dim = 2)
-
                 coating_encoding = coating_encoding.to(CM().get('device'))
-                # a batch consists of reflectivity and coating encodings
-
                 output = self.model_call(reflectivity, coating_encoding)
 
-                if self.density == 'explicit':
-                    # no guided loss possible in explicit
-                    guided_loss = torch.zeros(1, device = CM().get('device'))
-                    self.guided_factor = 0
-                else:
-                    guided_loss = self.compute_loss_guided(output, coating_encoding)
                 free_loss = self.compute_loss_free(output, reflectivity)
 
-                loss = self.guided_factor * guided_loss + (1 - self.guided_factor) * free_loss
+                if self.density == 'explicit':
+                    losses = [{'val': free_loss, 'infl': ['shared', 'thicknesses', 'materials'], 'weight': CM().get('training.free_factor')}]
+                    # losses = [{'val': free_loss, 'infl': ['thicknesses'], 'weight': CM().get('training.free_factor')}]
+                else:
+                    thickness_loss, material_loss = self.compute_loss_guided(output, coating_encoding)
+                    losses = [
+                        {'val': material_loss, 'infl': ['materials'], 'weight': CM().get('training.material_factor')},
+                        {'val': thickness_loss, 'infl': ['thicknesses'], 'weight': CM().get('training.thickness_factor')},
+                        {'val': free_loss, 'infl': ['shared'], 'weight': CM().get('training.free_factor')},
+                    ]
+
+                self.compute_grads(losses)
+
+                loss = sum(l['val'] for l in losses)
                 epoch_loss += loss.item()
 
                 if CM().get('wandb.log') or CM().get('wandb.sweep'):
                     wandb.log({
                         "loss": loss.item(),
-                        "lr": self.scheduler.get_last_lr()[0],
                         "free_loss": free_loss.item(),
-                        "guided_loss": guided_loss.item(),
+                        "guided_loss": material_loss.item() + thickness_loss.item() if self.density != 'explicit' else 0,
                     })
 
-                loss.backward()
+                # loss.backward()
 
-                self.scale_gradients()
+                # self.scale_gradients()
                 self.optimiser.step()
+
             epoch_loss /= len(self.dataloader)
             self.scheduler.step()
             if epoch % max(1, self.num_epochs / 20) == 0:
@@ -230,7 +250,7 @@ class BaseTrainableModel(BaseModel, ABC):
                     self.update_checkpoint(epoch)
                 print(f"Loss in epoch {epoch + 1}: {epoch_loss.item()}")
                 self.evaluate_epoch(epoch)
-                if self.early_stopping(CM().get('training.early_stopping.threshold'), CM().get('early_stopping.patience')):
+                if self.early_stopping(CM().get('training.early_stopping.threshold'), CM().get('training.early_stopping.patience')):
                     print(f"Early stopping at epoch {self.epoch}")
                     break
         print("Training complete.")
@@ -239,6 +259,28 @@ class BaseTrainableModel(BaseModel, ABC):
             self.save_model()
         if self.checkpoint:
             os.remove(self.checkpoint)
+
+    def grad_list(self, loss, params):
+        return torch.autograd.grad(loss, params, retain_graph = True, create_graph = False, allow_unused = True)
+
+    def grad_norm(self, grads):
+        return torch.sqrt(sum((g.detach()**2).sum() for g in grads if g is not None) + 1e-12)
+
+    def compute_grads(self, losses: list[dict]):
+        params = {
+            'shared': [p for p in self.get_shared_params() if p.requires_grad],
+            'thicknesses': [p for p in self.get_thicknesses_params() if p.requires_grad],
+            'materials': [p for p in self.get_materials_params() if p.requires_grad],
+        }
+
+        for loss in losses:
+            grads = dict()
+            for influence in loss['infl']:
+                grads[influence] = self.grad_list(loss['val'], params[influence])
+            norm = self.grad_norm(list(itertools.chain.from_iterable(grads.values())))
+            scale = 1.0 / norm
+            for influence, grad in grads.items():
+                self.add_scaled(grad, params[influence], scale, loss['weight'])
 
     def get_count(self, material_logits):
         materials = self.logits_to_indices(material_logits)[:, :, 0]
@@ -475,7 +517,19 @@ class BaseTrainableModel(BaseModel, ABC):
         thicknesses, logits = self.model_call(model_input)
         return thicknesses, F.softmax(logits, dim = -1)
 
-    def compute_loss_guided(self, input: torch.Tensor, labels: torch.Tensor):
+    def compute_memorisation_score(self, input: Coating, labels: Coating):
+        input_materials = input.get_material_indices()
+        label_materials = labels.get_material_indices()
+        num_points = input_materials.shape[0] * input_materials.shape[1]
+        accuracy = input_materials.eq(label_materials).sum() / num_points
+
+        input_thicknesses = input.get_thicknesses()
+        label_thicknesses = labels.get_thicknesses()
+        r2 = 1 - torch.sum((label_thicknesses - input_thicknesses)**2) / torch.sum((label_thicknesses - label_thicknesses.mean())**2)
+
+        return accuracy, r2
+
+    def compute_loss_guided(self, input: tuple[torch.Tensor], labels: torch.Tensor):
         """
         Compute guided loss of a batch of data.
 
@@ -496,14 +550,14 @@ class BaseTrainableModel(BaseModel, ABC):
         material_loss = material_loss.mean() / (material_loss.norm(2) + 1.e-9)
         thickness_loss = F.mse_loss(input_thicknesses, label_thicknesses, reduction = 'none') / batch_size
         thickness_loss = thickness_loss.mean() / (thickness_loss.norm(2) + 1.e-9)
-        if CM().get('wandb.log'):
+        if CM().get('wandb.log') or CM().get('wandb.sweep'):
             wandb.log({
                 'material_loss': material_loss.item(),
                 'thickness_loss': thickness_loss.item(),
             })
-        return (1 - self.thicknesses_factor) * material_loss + self.thicknesses_factor * thickness_loss
+        return thickness_loss, material_loss
 
-    def compute_loss_free(self, input: torch.Tensor, labels: torch.Tensor):
+    def compute_loss_free(self, input: tuple[torch.Tensor], labels: torch.Tensor):
         """
         Compute free loss of a batch of data.
 
@@ -524,17 +578,17 @@ class BaseTrainableModel(BaseModel, ABC):
         free_loss = free_loss.mean() / (free_loss.norm(2) + 1.e-9)
         constraint_loss = self.compute_constraint_loss(coating, reduction = 'none')
         constraint_loss = constraint_loss.mean() / (constraint_loss.norm(2) + 1.e-9)
-        if CM().get('wandb.log'):
+        if CM().get('wandb.log') or CM().get('wandb.sweep'):
             wandb.log({
                 'free_only_loss': free_loss.item(),
                 'constraint_loss': constraint_loss.item(),
             })
-        return (1 - self.constraint_factor) * free_loss + self.constraint_factor * constraint_loss
+        return free_loss
 
     def compute_constraint_loss(self, coating: Coating, reduction: str = 'mean'):
         thicknesses = coating.get_thicknesses()
         batch_size, seq_len = thicknesses.shape
-        loss = (F.relu(thicknesses - 1) ** 2) / (batch_size * seq_len)
+        loss = (F.relu(thicknesses - CM().get('thicknesses_max')) ** 2) / (batch_size * seq_len)
         if reduction == 'none':
             return loss
         elif reduction == 'sum':
