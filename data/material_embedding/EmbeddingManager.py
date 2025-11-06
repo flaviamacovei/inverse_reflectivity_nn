@@ -10,6 +10,7 @@ from data.values.ConstantRIMaterial import ConstantRIMaterial
 from data.values.MeasuredMaterial import MeasuredMaterial
 from utils.ConfigManager import ConfigManager as CM
 from utils.os_utils import short_hash
+from utils.math_utils import OneHot
 
 class EmbeddingManager:
     """
@@ -134,14 +135,14 @@ class EmbeddingManager:
         # this needs to be differentiable
         # input of shape (batch, seq_len, 1)
         assert len(material_indices.shape) == 2
-        long_indices = material_indices.to(torch.long)
-        mask = F.one_hot(long_indices, len(self.refractive_indices)).to(torch.float)
+        # long_indices = material_indices.to(torch.long)
+        mask = OneHot.apply(material_indices, len(self.refractive_indices))
         return mask @ self.refractive_indices
 
     def indices_to_materials(self, material_indices: torch.Tensor):
         materials = []
         for sequence in material_indices:
-            seq_materials = [self.materials[i] for i in sequence]
+            seq_materials = [self.materials[i.int()] for i in sequence]
             materials.append(seq_materials)
         return materials
 

@@ -43,6 +43,9 @@ class ReflectivityValue(BaseReflectivity):
     def get_batch(self, i):
         return ReflectivityValue(self.value[i:i + 1])
 
+    def get_batch_size(self):
+        return self.value.shape[0]
+
     def __eq__(self, other):
         """
         Compare this ReflectivityValue object with other object.

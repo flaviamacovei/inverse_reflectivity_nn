@@ -39,7 +39,7 @@ class Coating():
         assert encoding.shape[2] == 2, f"Final dimension of encoding must be 2, found {encoding.shape[2]}"
         self.num_layers = encoding.shape[1]
         # do I have to make them float when I create them?
-        self.material_indices = encoding[:, :, 1].to(torch.int16)
+        self.material_indices = encoding[:, :, 1]
         self.thicknesses = encoding[:, :, 0]
 
     def get_encoding(self):

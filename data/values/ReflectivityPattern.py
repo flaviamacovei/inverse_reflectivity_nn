@@ -59,6 +59,9 @@ class ReflectivityPattern(BaseReflectivity):
         """Return device of ReflectivityPattern object."""
         return self.lower_bound.device
 
+    def get_batch_size(self):
+        return self.lower_bound.shape[0]
+
     def __eq__(self, other):
         """
         Compare this ReflectivityPattern object with other object.

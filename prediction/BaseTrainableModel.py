@@ -26,6 +26,7 @@ from ui.visualise import visualise
 from data.material_embedding.EmbeddingManager import EmbeddingManager as EM
 from utils.data_utils import get_saved_model_path
 from evaluation.model_eval import evaluate_model
+from utils.math_utils import ArgMax
 
 class ThicknessPostProcess(nn.Module):
     def __init__(self, dims: int):
@@ -338,11 +339,9 @@ class BaseTrainableModel(BaseModel, ABC):
         return F.one_hot(long_indices, len(self.vocab)).to(torch.float)
 
     def logits_to_indices(self, logits: torch.Tensor):
-        batch_size, seq_len, vocab_size = logits.shape
         softmax_probabilities = F.softmax(logits, dim = -1)
-        return torch.multinomial(softmax_probabilities.reshape(-1, vocab_size), num_samples = 1).reshape(batch_size, seq_len, 1)
-        # _, max_indices = softmax_probabilities.max(dim = -1, keepdim = True)
-        # return max_indices
+        max_indices = ArgMax.apply(softmax_probabilities, -1, True)
+        return max_indices
 
     def mask_logits(self, logits: torch.Tensor):
         seq_len = logits.shape[1]
