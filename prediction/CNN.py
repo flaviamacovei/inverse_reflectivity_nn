@@ -146,3 +146,20 @@ class CNN(BaseTrainableModel):
         """
         return "cnn"
 
+    def get_shared_params(self):
+        params = []
+        for param in self.model.convolutions.parameters():
+            params.append(param)
+        return params
+
+    def get_thicknesses_params(self):
+        params = []
+        for param in self.model.thickness_head.parameters():
+            params.append(param)
+        return params
+
+    def get_materials_params(self):
+        params = []
+        for param in self.model.material_head.parameters():
+            params.append(param)
+        return params

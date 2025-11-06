@@ -429,3 +429,35 @@ class Transformer(BaseSequentialModel):
         Return name of model architecture.
         """
         return "transformer"
+
+    def get_shared_params(self):
+        params = []
+        for param in self.model.src_pos.parameters():
+            params.append(param)
+        for param in self.model.encoder_projection.parameters():
+            params.append(param)
+        for param in self.model.encoder_downsize.parameters():
+            params.append(param)
+        for param in self.model.encoder.parameters():
+            params.append(param)
+        for param in self.model.tgt_pos.parameters():
+            params.append(param)
+        for param in self.model.decoder_projection.parameters():
+            params.append(param)
+        return params
+
+    def get_thicknesses_params(self):
+        params = []
+        for param in self.model.thicknesses_decoder.parameters():
+            params.append(param)
+        for param in self.model.thickness_out.parameters():
+            params.append(param)
+        return params
+
+    def get_materials_params(self):
+        params = []
+        for param in self.model.materials_decoder.parameters():
+            params.append(param)
+        for param in self.model.material_out.parameters():
+            params.append(param)
+        return params
