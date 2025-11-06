@@ -88,7 +88,7 @@ def visualise(preds: ReflectivityValue = None, refs: ReflectivityPattern = None,
 
     fig, axs = plt.subplots(n_rows, n_cols, figsize=(n_cols * 3, n_rows * 3))
     if num_plots == 1:
-        axs = [axs]
+        axs = [[axs]]
     for i, col in enumerate(axs):
         for j, ax in enumerate(col):
             index = i * n_cols + j

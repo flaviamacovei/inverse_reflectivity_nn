@@ -270,7 +270,7 @@ class ProjectionLayer(nn.Module):
         return self.proj(x)
 
 class TrainableTransformer(nn.Module):
-    def __init__(self, encoder: Encoder, thicknesses_decoder: Decoder, materials_decoder: Decoder, src_pos: PositionalEncoding, tgt_pos: PositionalEncoding, encoder_downsize: DownSize, encoder_projection: ProjectionLayer, decoder_projection: ProjectionLayer, thickness_out: nn.Module, material_out: ProjectionLayer):
+    def __init__(self, encoder: Encoder, thicknesses_decoder: Decoder, materials_decoder: Decoder, src_pos: PositionalEncoding, tgt_pos: PositionalEncoding, encoder_downsize: DownSize, encoder_projection: ProjectionLayer, decoder_thicknesses_projection: ProjectionLayer, decoder_materials_projection: ProjectionLayer, thickness_out: nn.Module, material_out: ProjectionLayer):
         super().__init__()
         self.encoder = encoder
         self.thicknesses_decoder = thicknesses_decoder
@@ -279,7 +279,8 @@ class TrainableTransformer(nn.Module):
         self.tgt_pos = tgt_pos
         self.encoder_downsize = encoder_downsize
         self.encoder_projection = encoder_projection
-        self.decoder_projection = decoder_projection
+        self.decoder_thicknesses_projection = decoder_thicknesses_projection
+        self.decoder_materials_projection = decoder_materials_projection
         self.thickness_out = thickness_out
         self.material_out = material_out
 
@@ -333,7 +334,8 @@ class Transformer(BaseSequentialModel):
             encoder_blocks.append(encoder_block)
 
         # target input projection
-        tgt_proj = ProjectionLayer(self.tgt_dim, self.d_model)
+        tgt_thicknesses_proj = ProjectionLayer(1, self.d_model)
+        tgt_materials_proj = ProjectionLayer(1, self.d_model)
 
         # decoder blocks
         thicknesses_decoder_blocks = []
@@ -365,7 +367,7 @@ class Transformer(BaseSequentialModel):
         material_out = ProjectionLayer(self.d_model, self.out_dims['material'])
 
         # transformer
-        transformer = TrainableTransformer(encoder, thicknesses_decoder, materials_decoder, src_pos, tgt_pos, src_downsize, src_proj, tgt_proj, thickness_out, material_out)
+        transformer = TrainableTransformer(encoder, thicknesses_decoder, materials_decoder, src_pos, tgt_pos, src_downsize, src_proj, tgt_thicknesses_proj, tgt_materials_proj, thickness_out, material_out)
 
         # initialise params with xavier
         for p in transformer.parameters():
@@ -384,17 +386,18 @@ class Transformer(BaseSequentialModel):
     def project_decoder(self, tgt):
         # tgt has shape (batch, |coating|, material_embed_dim + 1)
         tgt = self.model.tgt_pos(tgt)
-        tgt = self.model.decoder_projection(tgt)
-        return tgt
+        thicknesses, materials = tgt.chunk(2, -1)
+        tgt_thicknesses = self.model.decoder_thicknesses_projection(thicknesses)
+        tgt_materials = self.model.decoder_materials_projection(materials)
+        return tgt_thicknesses, tgt_materials
 
     def encode(self, src):
         output = self.model.encoder(src)
-        # return torch.randn_like(output)
         return output
 
-    def decode(self, encoder_output, tgt, mask = None):
-        thicknesses = self.model.thicknesses_decoder(tgt, encoder_output, mask)
-        materials = self.model.materials_decoder(tgt, encoder_output, mask)
+    def decode(self, encoder_output, tgt_thicknesses, tgt_materials, mask = None):
+        thicknesses = self.model.thicknesses_decoder(tgt_thicknesses, encoder_output, mask)
+        materials = self.model.materials_decoder(tgt_materials, encoder_output, mask)
         return thicknesses, materials
 
     def output_thicknesses(self, decoder_output):
@@ -442,12 +445,12 @@ class Transformer(BaseSequentialModel):
             params.append(param)
         for param in self.model.tgt_pos.parameters():
             params.append(param)
-        for param in self.model.decoder_projection.parameters():
-            params.append(param)
         return params
 
     def get_thicknesses_params(self):
         params = []
+        for param in self.model.decoder_thicknesses_projection.parameters():
+            params.append(param)
         for param in self.model.thicknesses_decoder.parameters():
             params.append(param)
         for param in self.model.thickness_out.parameters():
@@ -456,6 +459,8 @@ class Transformer(BaseSequentialModel):
 
     def get_materials_params(self):
         params = []
+        for param in self.model.decoder_materials_projection.parameters():
+            params.append(param)
         for param in self.model.materials_decoder.parameters():
             params.append(param)
         for param in self.model.material_out.parameters():

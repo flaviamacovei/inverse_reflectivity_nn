@@ -26,7 +26,7 @@ class BaseSequentialModel(BaseTrainableModel, ABC):
         pass
 
     @abstractmethod
-    def decode(self, encoder_output, tgt, mask = None):
+    def decode(self, encoder_output, tgt_thicknesses, tgt_materials, mask = None):
         """Run target through decoder"""
         pass
 
@@ -97,8 +97,8 @@ class BaseSequentialModel(BaseTrainableModel, ABC):
             # merge beam dimension with batch dimension
             tgt = candidates.reshape(batch_size * num_candidates, seq_len, embed_dim)
             mask = self.make_tgt_mask(tgt)
-            tgt = self.project_decoder(tgt)
-            decoded_thicknesses, decoded_materials = self.decode(encoder_output[:, None].repeat(1, num_candidates, 1, 1).reshape(batch_size * num_candidates, encoder_output.shape[1], encoder_output.shape[2]), tgt, mask)
+            tgt_thicknesses, tgt_materials = self.project_decoder(tgt)
+            decoded_thicknesses, decoded_materials = self.decode(encoder_output[:, None].repeat(1, num_candidates, 1, 1).reshape(batch_size * num_candidates, encoder_output.shape[1], encoder_output.shape[2]), tgt_thicknesses, tgt_materials, mask)
             decoded_thicknesses = decoded_thicknesses[:, -1:, :]
             decoded_materials = decoded_materials[:, -1:, :]
             out_thicknesses = self.output_thicknesses(decoded_thicknesses.repeat(1, self.tgt_seq_len - 1, 1))[:, :1, :]
@@ -143,8 +143,8 @@ class BaseSequentialModel(BaseTrainableModel, ABC):
             # in training mode, target is specified
             # in training mode explicit leg, target is dummy data (len(shape) == 1) and should be ignored -> move to inference block
             mask = self.make_tgt_mask(tgt[:, :-1, :])
-            tgt = self.project_decoder(tgt[:, :-1, :])
-            decoded_thicknesses, decoded_materials = self.decode(encoder_output, tgt, mask)
+            tgt_thicknesses, tgt_materials = self.project_decoder(tgt[:, :-1, :])
+            decoded_thicknesses, decoded_materials = self.decode(encoder_output, tgt_thicknesses, tgt_materials, mask)
             out_thicknesses = self.output_thicknesses(decoded_thicknesses)
             out_materials = self.output_materials(decoded_materials)
             out_thicknesses = torch.cat([bos_thickness, out_thicknesses], dim = 1)

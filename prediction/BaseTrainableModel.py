@@ -398,7 +398,7 @@ class BaseTrainableModel(BaseModel, ABC):
     def evaluate_epoch(self, epoch: int):
         # visualise first item of batch
         self.model.eval()
-        reflectivity, coating_encoding = self.dataloader[:1]
+        reflectivity, coating_encoding = self.dataloader[:6]
         reflectivity = reflectivity.to(CM().get('device'))
         if self.density == 'explicit':
             coating_encoding = None

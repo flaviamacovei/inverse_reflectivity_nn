@@ -82,7 +82,8 @@ class TrainableRNN(nn.Module):
         super().__init__()
         self.encoder_projection = nn.Linear(encoder_dims['in'], d_model)
         self.encoder = Encoder(d_model, encoder_dims['hidden'])
-        self.decoder_projection = nn.Linear(decoder_dims['in'], d_model)
+        self.thicknesses_decoder_projection = nn.Linear(decoder_dims['in'], d_model)
+        self.materials_decoder_projection = nn.Linear(decoder_dims['in'], d_model)
         self.thicknesses_decoder = Decoder(d_model, decoder_dims['hidden'])
         self.materials_decoder = Decoder(d_model, decoder_dims['hidden'])
         self.material_out = nn.Sequential(
@@ -112,7 +113,7 @@ class RNN(BaseSequentialModel):
             'hidden': CM().get('rnn.encoder_dims'),
         }
         decoder_dims = {
-            'in': self.tgt_dim,
+            'in': 1,
             'hidden': [d_model] + CM().get('rnn.decoder_dims'),
             'thickness_out': self.out_dims['thickness'],
             'material_out': self.out_dims['material'],
@@ -124,14 +125,17 @@ class RNN(BaseSequentialModel):
         return self.model.encoder_projection(src)
 
     def project_decoder(self, tgt):
-        return self.model.decoder_projection(tgt)
+        thicknesses, materials = tgt.chunk(2, -1)
+        projected_thicknesses = self.model.thicknesses_decoder_projection(thicknesses)
+        projected_materials = self.model.materials_decoder_projection(materials)
+        return projected_thicknesses, projected_materials
 
     def encode(self, src):
         return self.model.encoder(src)[:, -1:, :]
 
-    def decode(self, encoder_output, tgt, mask = None):
-        thicknesses = self.model.thicknesses_decoder(tgt, encoder_output)
-        materials = self.model.materials_decoder(tgt, encoder_output)
+    def decode(self, encoder_output, tgt_thicknesses, tgt_materials, mask = None):
+        thicknesses = self.model.thicknesses_decoder(tgt_thicknesses, encoder_output)
+        materials = self.model.materials_decoder(tgt_materials, encoder_output)
         return thicknesses, materials
 
     def output_thicknesses(self, decoder_output):
@@ -155,7 +159,9 @@ class RNN(BaseSequentialModel):
             params.append(param)
         for param in self.model.encoder.parameters():
             params.append(param)
-        for param in self.model.decoder_projection.parameters():
+        for param in self.model.thicknesses_decoder_projection.parameters():
+            params.append(param)
+        for param in self.model.materials_decoder_projection.parameters():
             params.append(param)
         return params
 
