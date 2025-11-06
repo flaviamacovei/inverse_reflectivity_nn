@@ -4,6 +4,7 @@ import sys
 sys.path.append(sys.path[0] + '/..')
 from prediction.BaseTrainableModel import BaseTrainableModel
 from utils.ConfigManager import ConfigManager as CM
+from utils.math_utils import make_arange
 
 class BaseSequentialModel(BaseTrainableModel, ABC):
     def __init__(self):
@@ -47,17 +48,10 @@ class BaseSequentialModel(BaseTrainableModel, ABC):
     def remove(self, x: torch.Tensor, idx: torch.Tensor):
         dim = torch.tensor(x.shape).ne(torch.tensor(idx.shape)).int().argmax() # dimension along which to remove is dimensions which differs between x and idx
         subtrahend = torch.zeros(x.shape, device=CM().get('device'))
-        arange = self.make_arange(x.shape, dim)
+        arange = make_arange(x.shape, dim).to(CM().get('device'))
         mask = arange.eq(idx)
         subtrahend[mask] = torch.inf
         return x - subtrahend
-
-    def make_arange(self, shape: torch.Size, dim: int = 1):
-        arange_shape = [1] * len(shape)
-        arange_shape[dim] = shape[dim]
-        arange = torch.arange(shape[dim], device = CM().get('device')).reshape(arange_shape)
-        arange = arange.expand(shape)
-        return arange
 
     def expand_sequences(self, sequences, out_thicknesses, out_logits, score, beam_size: int = 1):
         batch_size, num_candidates, seq_len, vocab_size = out_logits.shape
@@ -71,7 +65,7 @@ class BaseSequentialModel(BaseTrainableModel, ABC):
         material_idxs_norm = material_idxs % self.tgt_vocab_size # bring indices back to vocab range
 
         # calculate new score
-        arange = self.make_arange(out_logits.shape, 1)[:, None]
+        arange = make_arange(out_logits.shape, 1).to(CM().get('device'))[:, None]
         mask = arange.eq(material_idxs[:, :, None]).int()
         material_probs = out_logits[:, None].expand(-1, beam_size, -1, -1) * mask
         material_probs = material_probs.sum(dim = 2)
@@ -79,7 +73,7 @@ class BaseSequentialModel(BaseTrainableModel, ABC):
         # filter origin beam
         # dim 1: possible predecessors
         # dim 2: possible beams
-        arange = self.make_arange(sequences.shape, 1)[:, None].repeat(1, beam_size, 1, 1, 1)
+        arange = make_arange(sequences.shape, 1).to(CM().get('device'))[:, None].repeat(1, beam_size, 1, 1, 1)
         mask = arange.eq(predecessor_idxs[:, :, None, None]).int()
         predecessors = sequences[:, None].repeat(1, beam_size, 1, 1, 1) * mask
         predecessors = predecessors.sum(dim = 2)
@@ -104,16 +98,18 @@ class BaseSequentialModel(BaseTrainableModel, ABC):
             tgt = candidates.reshape(batch_size * num_candidates, seq_len, embed_dim)
             mask = self.make_tgt_mask(tgt)
             tgt = self.project_decoder(tgt)
-            decoder_output = self.decode(encoder_output[:, None].repeat(1, num_candidates, 1, 1).reshape(batch_size * num_candidates, encoder_output.shape[1], encoder_output.shape[2]), tgt, mask)[:, -1:, :]
-            out_thicknesses = self.output_thicknesses(decoder_output.repeat(1, self.tgt_seq_len - 1, 1))[:, :1, :]
+            decoded_thicknesses, decoded_materials = self.decode(encoder_output[:, None].repeat(1, num_candidates, 1, 1).reshape(batch_size * num_candidates, encoder_output.shape[1], encoder_output.shape[2]), tgt, mask)
+            decoded_thicknesses = decoded_thicknesses[:, -1:, :]
+            decoded_materials = decoded_materials[:, -1:, :]
+            out_thicknesses = self.output_thicknesses(decoded_thicknesses.repeat(1, self.tgt_seq_len - 1, 1))[:, :1, :]
             out_thicknesses = out_thicknesses.reshape(batch_size, num_candidates, 1, -1)
-            out_logits = self.output_materials(decoder_output)
+            out_logits = self.output_materials(decoded_materials)
             out_logits = out_logits.reshape(batch_size, num_candidates, 1, -1)
             candidates, candidate_scores = self.expand_sequences(candidates, out_thicknesses, out_logits, candidate_scores, beam_size) # reorder arguments
 
         _, idx = torch.sort(candidate_scores, dim = 1, descending = True)
         idx = idx[:, :1]
-        arange = self.make_arange(candidates.shape, dim = 1)
+        arange = make_arange(candidates.shape, dim = 1).to(CM().get('device'))
         mask = arange.eq(idx[:, :, None, None].expand(arange.shape)).int()
         best_sequences = candidates * mask
         best_sequences = best_sequences.sum(dim = 1)
@@ -148,9 +144,9 @@ class BaseSequentialModel(BaseTrainableModel, ABC):
             # in training mode explicit leg, target is dummy data (len(shape) == 1) and should be ignored -> move to inference block
             mask = self.make_tgt_mask(tgt[:, :-1, :])
             tgt = self.project_decoder(tgt[:, :-1, :])
-            decoder_output = self.decode(encoder_output, tgt, mask)
-            out_thicknesses = self.output_thicknesses(decoder_output)
-            out_materials = self.output_materials(decoder_output)
+            decoded_thicknesses, decoded_materials = self.decode(encoder_output, tgt, mask)
+            out_thicknesses = self.output_thicknesses(decoded_thicknesses)
+            out_materials = self.output_materials(decoded_materials)
             out_thicknesses = torch.cat([bos_thickness, out_thicknesses], dim = 1)
             out_materials = torch.cat([bos_probability, out_materials], dim = 1)
         else:
